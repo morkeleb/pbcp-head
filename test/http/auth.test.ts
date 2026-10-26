@@ -5,11 +5,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { devices, identities } from '../../db/schema';
 import { enrollmentToken } from '../../lib/auth/enroll';
 import { mintProducerToken } from '../../lib/auth/producer';
-import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_SESSION_SECRET } from '../env';
+import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT } from '../env';
 import { call, headUrl, OWNER, resetHead, testDb } from './helpers';
 import { SoftAuthenticator } from './soft-authenticator';
-
-process.env.SESSION_SECRET = TEST_SESSION_SECRET;
 
 beforeEach(() => resetHead());
 

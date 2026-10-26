@@ -59,3 +59,12 @@ export async function readObject(req: Request): Promise<Record<string, unknown>>
   }
   throw new HttpError(400, 'invalid_request', 'the body must be a JSON object');
 }
+
+/** A protocol request body (§7.3): JSON, or 400 malformed_json. Shape is the core's to judge. */
+export async function readJson(req: Request): Promise<unknown> {
+  try {
+    return JSON.parse(await req.text());
+  } catch {
+    throw new PbcpError('malformed_json', 'the body is not JSON');
+  }
+}

@@ -1,8 +1,12 @@
 import { sql } from 'drizzle-orm';
 import { inject } from 'vitest';
 import { openDb } from '../../db/client';
+import { startSession } from '../../lib/auth/session';
 import { ensureHead } from '../../lib/heads';
-import { TEST_DATABASE_URL } from '../env';
+import { TEST_DATABASE_URL, TEST_SESSION_SECRET } from '../env';
+
+// Sessions are signed here with the secret the head under test was started with.
+process.env.SESSION_SECRET = TEST_SESSION_SECRET;
 
 export const OWNER = 'morten';
 
@@ -41,4 +45,10 @@ export async function call(method: string, path: string, opts: { auth?: string; 
     // keep the text
   }
   return { status: res.status, body: parsed as any, headers: res.headers };
+}
+
+/** A signed-in device for the owner, as a sign-in would create, without the passkey ceremony. */
+export async function ownerSession(owner = OWNER, name = 'test device'): Promise<{ auth: string; deviceId: string }> {
+  const t = await startSession(testDb(), { headId: owner, identityId: null, platform: 'web', name });
+  return { auth: `Session ${t.access_token}`, deviceId: t.device_id };
 }
