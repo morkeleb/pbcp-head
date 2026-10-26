@@ -8,6 +8,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Ubuntu 24's AppArmor forbids Chromium's user-namespace sandbox on runners; the renderer and the UI
+      # tests run the headless browser without it here only.
+      PBCP_CHROMIUM_NO_SANDBOX: '1'
     steps:
       - uses: actions/checkout@v4
         with:

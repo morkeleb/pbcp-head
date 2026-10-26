@@ -22,7 +22,11 @@ export interface Outcome {
 
 const URGENCY_ORDER: readonly Urgency[] = ['log', 'brief', 'immediate'];
 
-/** §9: the card's urgency clamped to the producer's ceiling. The stored producer document keeps the original (§4.1). */
+/**
+ * §9: the card's urgency clamped to the producer's ceiling. The stored producer document keeps the original (§4.1).
+ * TODO(pbcp-0.4): 0.4 names the result the head-owned `delivery` field; if @pbcp/core then clamps inside
+ * submit(), this function and the urgency argument to persist() below go, and cards.urgency is renamed.
+ */
 export function clampUrgency(requested: Urgency | undefined, ceiling: Urgency): Urgency {
   const r = requested ?? 'brief';
   return URGENCY_ORDER.indexOf(r) > URGENCY_ORDER.indexOf(ceiling) ? ceiling : r;
