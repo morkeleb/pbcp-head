@@ -80,6 +80,21 @@ describe('caching by sha256 of the sanitised fence', () => {
   });
 });
 
+describe('drawing failures that are not the diagram’s fault', () => {
+  it('are not cached: the card is retried on the next read instead of showing a permanent fallback', async () => {
+    await closeBrowser();
+    process.env.PBCP_CHROMIUM_PATH = '/nonexistent/chromium';
+    try {
+      await expect(renderBody(db, fence('pie title Infra\n "a" : 1'))).rejects.toThrow();
+    } finally {
+      delete process.env.PBCP_CHROMIUM_PATH;
+      await closeBrowser().catch(() => undefined);
+    }
+    expect(await db.select().from(diagrams)).toEqual([]);
+    expect((await renderBody(db, fence('pie title Infra\n "a" : 1'))).result.fences[0]!.class).toBe('render');
+  });
+});
+
 describe('fallback images, raw HTML, links and visuals', () => {
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPQqr/yHwAE0QJ9PWShagAAAABJRU5ErkJggg==';
 

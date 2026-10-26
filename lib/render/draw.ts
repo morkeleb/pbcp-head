@@ -74,12 +74,7 @@ const MERMAID_CONFIG = {
   theme: 'default',
 } as const;
 
-/** Mermaid's own refusals (parse errors, unknown syntax) as opposed to the browser failing. */
-function mermaidMessage(e: unknown): string | null {
-  const msg = e instanceof Error ? e.message : String(e);
-  if (/TimeoutError|Target closed|Protocol error|Session closed|browser has disconnected|Navigating frame was detached/i.test(msg)) return null;
-  return msg.replace(/^Error:\s*/, '').replace(/^Evaluation failed:\s*(Error:\s*)?/, '').split('\n    at ')[0]!.trim();
-}
+const isTimeout = (e: unknown) => e instanceof Error && e.message.startsWith('TimeoutError');
 
 /**
  * A page holding mermaid's standalone bundle, loaded from the local file, for `mermaid.parse`. Mermaid 12
@@ -100,9 +95,10 @@ function parser(): Promise<Page> {
   return g.__pbcpParser;
 }
 
-async function parseError(source: string): Promise<string> {
+/** Mermaid's parse error for `source`, or null when it parses. */
+async function parseError(source: string): Promise<string | null> {
   const page = await parser();
-  const message = await page.evaluate(async (src) => {
+  return page.evaluate(async (src) => {
     try {
       await (window as unknown as { mermaid: { parse(s: string): Promise<unknown> } }).mermaid.parse(src);
       return null;
@@ -110,12 +106,12 @@ async function parseError(source: string): Promise<string> {
       return e instanceof Error ? e.message : String(e);
     }
   }, source);
-  return message ?? 'mermaid could not draw this diagram';
 }
 
 /**
- * Draws `source` (already sanitised) to SVG text. A DiagramError means mermaid refused the source; any
- * other error is the drawing infrastructure, which callers must not cache.
+ * Draws `source` (already sanitised) to SVG text. A DiagramError means mermaid refused the source, which is
+ * established by mermaid itself (its error graphic, or a failing parse), never by guessing from an error
+ * message; any other error is the drawing infrastructure, which callers must not cache.
  */
 export async function drawSvg(source: string, svgId: string): Promise<string> {
   return slot(async () => {
@@ -129,12 +125,12 @@ export async function drawSvg(source: string, svgId: string): Promise<string> {
         }),
       ]);
       const svg = new TextDecoder().decode(drawn.data);
-      if (/^<svg[^>]*aria-roledescription="error"/.test(svg)) throw new DiagramError(await parseError(source));
+      if (/^<svg[^>]*aria-roledescription="error"/.test(svg)) throw new DiagramError((await parseError(source)) ?? 'mermaid could not draw this diagram');
       return svg;
     } catch (e) {
-      if (e instanceof DiagramError) throw e;
-      const message = mermaidMessage(e);
-      if (message !== null) throw new DiagramError(message || 'the diagram could not be parsed');
+      if (e instanceof DiagramError || isTimeout(e)) throw e;
+      const message = await parseError(source).catch(() => null);
+      if (message !== null) throw new DiagramError(message);
       throw e;
     } finally {
       clearTimeout(timer);

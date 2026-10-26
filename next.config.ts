@@ -1,8 +1,9 @@
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
-  // Producer markdown is never rendered in a browser (RFC §3.1); nothing here needs client bundling of @pbcp/*.
-  serverExternalPackages: ['postgres'],
+  // Loaded from node_modules at runtime, not bundled. mermaid-cli in particular serialises functions into
+  // the headless page; a bundler rewriting their dynamic import() breaks drawing.
+  serverExternalPackages: ['postgres', '@mermaid-js/mermaid-cli', 'puppeteer', 'mermaid', 'jsdom', 'dompurify'],
 };
 
 export default config;

@@ -23,7 +23,7 @@ export const headUrl = (): string => inject('headUrl');
 /** An empty head owned by `owner`: every table truncated, the head and its counter recreated. */
 export async function resetHead(owner = OWNER): Promise<void> {
   await testDb().execute(
-    sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads restart identity`,
+    sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads, diagrams restart identity`,
   );
   await ensureHead(testDb(), owner);
 }
