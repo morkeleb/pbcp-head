@@ -1,0 +1,21 @@
+# Postgres for local work and CI. Published on 5433 so it does not collide with a local Postgres on 5432.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: pbcp
+      POSTGRES_PASSWORD: pbcp
+      POSTGRES_DB: pbcp
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pbcp -d pbcp"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
