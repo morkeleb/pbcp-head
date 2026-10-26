@@ -1,7 +1,7 @@
 import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
-import { migrateDatabase } from '../db/migrate';
-import { TEST_DATABASE_URL } from './env';
+import { migrateDatabase } from '../../db/migrate';
+import { TEST_DATABASE_URL } from '../env';
 
 const client = postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} });
 afterAll(() => client.end());

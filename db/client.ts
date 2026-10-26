@@ -1,17 +1,21 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-// One pool per process. Next.js may evaluate this module more than once in dev, so the pool hangs off globalThis.
-const g = globalThis as unknown as { __pbcpSql?: postgres.Sql };
+// One pool per process. Next.js may evaluate this module more than once, so the pool hangs off globalThis.
+const g = globalThis as unknown as { __pbcpDb?: ReturnType<typeof openDb> };
 
-export function sql(): postgres.Sql {
-  if (!g.__pbcpSql) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error('DATABASE_URL is not set');
-    g.__pbcpSql = postgres(url, { max: 10, onnotice: () => {} });
-  }
-  return g.__pbcpSql;
+/** A Drizzle database over its own pool; the app uses `db()`, scripts and tests open their own. */
+export function openDb(url: string, max = 10) {
+  return drizzle(postgres(url, { max, onnotice: () => {} }));
 }
 
-export const db = () => drizzle(sql());
+export function db() {
+  if (!g.__pbcpDb) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error('DATABASE_URL is not set');
+    g.__pbcpDb = openDb(url);
+  }
+  return g.__pbcpDb;
+}
+
 export type Db = ReturnType<typeof db>;

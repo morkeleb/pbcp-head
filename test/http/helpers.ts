@@ -1,0 +1,44 @@
+import { sql } from 'drizzle-orm';
+import { inject } from 'vitest';
+import { openDb } from '../../db/client';
+import { ensureHead } from '../../lib/heads';
+import { TEST_DATABASE_URL } from '../env';
+
+export const OWNER = 'morten';
+
+const g = globalThis as unknown as { __testDb?: ReturnType<typeof openDb> };
+
+/** The database the head under test uses, for arranging state and reading it back. */
+export function testDb() {
+  g.__testDb ??= openDb(TEST_DATABASE_URL, 2);
+  return g.__testDb;
+}
+
+export const headUrl = (): string => inject('headUrl');
+
+/** An empty head owned by `owner`: every table truncated, the head and its counter recreated. */
+export async function resetHead(owner = OWNER): Promise<void> {
+  await testDb().execute(
+    sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads restart identity`,
+  );
+  await ensureHead(testDb(), owner);
+}
+
+export async function call(method: string, path: string, opts: { auth?: string; body?: unknown; type?: string } = {}) {
+  const headers: Record<string, string> = {};
+  if (opts.auth) headers.authorization = opts.auth;
+  let body: string | undefined;
+  if (opts.body !== undefined) {
+    body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
+    headers['content-type'] = opts.type ?? (typeof opts.body === 'string' ? 'text/markdown' : 'application/json');
+  }
+  const res = await fetch(`${headUrl()}${path}`, { method, headers, body, redirect: 'follow' });
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text === '' ? null : JSON.parse(text);
+  } catch {
+    // keep the text
+  }
+  return { status: res.status, body: parsed as any, headers: res.headers };
+}
