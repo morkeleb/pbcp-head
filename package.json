@@ -1,0 +1,45 @@
+{
+  "name": "pbcp-head",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prepare": "pnpm run build:pbcp",
+    "build:pbcp": "tsc -p vendor/pbcp/packages/core/tsconfig.build.json && tsc -p vendor/pbcp/packages/client/tsconfig.build.json",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "next build && vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "test:unit": "vitest run --project unit",
+    "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts",
+    "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts"
+  },
+  "dependencies": {
+    "@pbcp/client": "workspace:*",
+    "@pbcp/core": "workspace:*",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
+    "drizzle-orm": "0.45.4",
+    "jose": "6.2.13",
+    "next": "16.4.3",
+    "postgres": "3.4.9",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}
