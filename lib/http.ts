@@ -46,3 +46,16 @@ export function decodeId(raw: string): string {
     throw new PbcpError('invalid_id', 'the id in the URL is not valid percent-encoding');
   }
 }
+
+/** A JSON object body for the auth routes; an empty body is `{}`. */
+export async function readObject(req: Request): Promise<Record<string, unknown>> {
+  const text = await req.text();
+  if (text.trim() === '') return {};
+  try {
+    const v: unknown = JSON.parse(text);
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) return v as Record<string, unknown>;
+  } catch {
+    // fall through
+  }
+  throw new HttpError(400, 'invalid_request', 'the body must be a JSON object');
+}

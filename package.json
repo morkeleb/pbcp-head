@@ -17,12 +17,16 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test:unit": "vitest run --project unit",
-    "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts"
+    "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts",
+    "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts"
   },
   "dependencies": {
     "@pbcp/client": "workspace:*",
     "@pbcp/core": "workspace:*",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
     "drizzle-orm": "0.45.4",
+    "jose": "6.2.13",
     "next": "16.4.3",
     "postgres": "3.4.9",
     "react": "19.3.1",
