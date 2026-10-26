@@ -7,6 +7,7 @@
 
 import { renderMermaid } from '@mermaid-js/mermaid-cli';
 import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 
 /** A fence mermaid could not draw: deterministic, so it is cached and shown as the §3.1 fallback with this message. */
@@ -76,6 +77,12 @@ const MERMAID_CONFIG = {
 
 const isTimeout = (e: unknown) => e instanceof Error && e.message.startsWith('TimeoutError');
 
+/** The file path of mermaid's standalone bundle, resolved by Node at runtime (a bundler must not touch it). */
+function mermaidBundle(): string {
+  const spec = ['mermaid', 'dist', 'mermaid.min.js'].join('/');
+  return createRequire(join(process.cwd(), 'package.json')).resolve(spec);
+}
+
 /**
  * A page holding mermaid's standalone bundle, loaded from the local file, for `mermaid.parse`. Mermaid 12
  * answers a parse error in `render` by drawing an error graphic without the message; §3.1 wants the
@@ -85,7 +92,7 @@ function parser(): Promise<Page> {
   g.__pbcpParser ??= (async () => {
     const page = await (await browser()).newPage();
     await page.setContent('<!doctype html><html><body></body></html>');
-    await page.addScriptTag({ path: createRequire(import.meta.url).resolve('mermaid/dist/mermaid.min.js') });
+    await page.addScriptTag({ path: mermaidBundle() });
     await page.evaluate((config) => (window as unknown as { mermaid: { initialize(c: unknown): void } }).mermaid.initialize(config), MERMAID_CONFIG);
     return page;
   })().catch((e) => {

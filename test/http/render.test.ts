@@ -46,6 +46,14 @@ describe('render on receipt', () => {
     expect((await renderedRow('hermes:gmail:2')).renderedHtml).toBe('<p>Second.</p>');
   });
 
+  it('a fence mermaid refuses falls back with the parser message, inside the running head too', async () => {
+    const body = '```mermaid\npie title Broken\n  "A" : lots\n```';
+    await call('PUT', cardPath('hermes:gmail:3'), { auth: hermes, body: card('hermes:gmail:3', { body }) });
+    const row = await renderedRow('hermes:gmail:3');
+    expect(row.renderedHtml).toContain('diagram could not be drawn');
+    expect(row.renderedHtml).toMatch(/class="diagram-message">[^<]*(Expecting|Parse|Lexer)/);
+  });
+
   it('GET / reports the tiers it draws', async () => {
     expect((await call('GET', '/')).body.render).toEqual({ mermaid: ['core', 'extended'] });
   });

@@ -17,13 +17,16 @@ export async function visit(db: Db, headId: string, seq: unknown) {
   if (seq !== undefined && seq !== null && !(Number.isSafeInteger(seq) && (seq as number) >= 0)) {
     throw new HttpError(400, 'invalid_request', 'seq must be a change_seq');
   }
-  const [{ seq: current }] = (await db.select({ seq: changeCounter.seq }).from(changeCounter).where(eq(changeCounter.headId, headId))) as [{ seq: number }];
+  const [counter] = await db.select({ seq: changeCounter.seq }).from(changeCounter).where(eq(changeCounter.headId, headId));
+  if (!counter) throw new HttpError(404, 'not_found', 'no such head');
+  const current = counter.seq;
   const target = seq === undefined || seq === null ? current : Math.min(seq as number, current);
   const [row] = await db
     .update(heads)
     .set({ lastVisitSeq: sql`greatest(${heads.lastVisitSeq}, ${target})`, lastVisitAt: new Date(now()) })
     .where(eq(heads.id, headId))
     .returning({ seq: heads.lastVisitSeq, at: heads.lastVisitAt });
+  if (!row) throw new HttpError(404, 'not_found', 'no such head');
   return { seq: row!.seq, at: iso(row!.at!) };
 }
 

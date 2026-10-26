@@ -263,7 +263,9 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
     const c = toCard(r);
     return { id: c.id, title: c.title, kind: c.kind, state: c.state, received_at: c.received_at, ...(c.decision ? { decision: c.decision } : {}) };
   };
+  const head = await headSettings(db, headId);
   return {
+    timezone: head.timezone,
     card: (await presentCards(db, [row]))[0]!,
     predecessors: await presentCards(db, predecessors),
     successors: successors.map(summary),
