@@ -30,14 +30,16 @@ export class HttpError extends Error {
   }
 }
 
+/** The raw (still percent-encoded) path segment at `index`, e.g. 3 for the `{id}` of `/api/cards/{id}`. */
+export function rawSegment(req: Request, index: number): string {
+  return new URL(req.url).pathname.split('/')[index] ?? '';
+}
+
 /**
- * The `{id}` path segment exactly as the client sent it, percent-decoded once (§7.1). Read from the raw
- * URL rather than the router's params so that an id such as `mail:acme:%3Ca%40b%3E` is never decoded twice
- * or normalised (§5).
+ * A card id from the URL, percent-decoded exactly once (§7.1). Routes read it from the raw URL rather than
+ * the router's params so that an id such as `mail:acme:%3Ca%40b%3E` is never decoded twice or normalised (§5).
  */
-export function pathSegment(req: Request, index: number): string {
-  const raw = new URL(req.url).pathname.split('/')[index];
-  if (raw === undefined) throw new PbcpError('invalid_id', 'missing id in the URL');
+export function decodeId(raw: string): string {
   try {
     return decodeURIComponent(raw);
   } catch {
