@@ -3,9 +3,10 @@
 // `idSegment` is where `{id}` sits in the route's path.
 
 import { db } from '../db/client';
-import { authenticateSession } from './auth/session';
-import { decodeId, handle, json, rawSegment, readJson } from './http';
-import { acknowledgeCard, decideCard, markCardSeen, type OwnerContext, type Outcome } from './protocol';
+import { authenticateSession, type Session } from './auth/session';
+import { decodeId, handle, json, rawSegment, readJson, readObject } from './http';
+import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, type OwnerContext, type Outcome } from './protocol';
+import { snoozeUntil } from './settings-me';
 
 function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req: Request) => Promise<Outcome>) {
   return (req: Request): Promise<Response> =>
@@ -22,3 +23,13 @@ export const decisionHandler = (idSegment: number) =>
 export const seenHandler = (idSegment: number) => ownerAction(idSegment, (ctx, id) => markCardSeen(db(), ctx, id));
 
 export const acknowledgeHandler = (idSegment: number) => ownerAction(idSegment, (ctx, id) => acknowledgeCard(db(), ctx, id));
+
+/** Any other /api/me route: a session, then `fn` with it. */
+export function meHandler(fn: (session: Session, req: Request) => Promise<Response>) {
+  return (req: Request): Promise<Response> =>
+    handle(async () => fn(await authenticateSession(db(), req), req));
+}
+
+/** POST /api/me/cards/{id}/snooze { until } | { preset }. */
+export const snoozeHandler = (idSegment: number) =>
+  ownerAction(idSegment, async (ctx, id, req) => snoozeCard(db(), ctx, id, await snoozeUntil(db(), ctx.headId, await readObject(req))));

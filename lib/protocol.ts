@@ -171,3 +171,20 @@ async function ownerUpdate(db: Db, ctx: OwnerContext, id: string, op: (c: Card) 
     return { status: r.status, card };
   });
 }
+
+/**
+ * The owner hides an open card until `until` (§4.2 `snoozed_until`; §6: "Snooze is not a state"), or shows
+ * it again with null. Like seen and ack it is a change to a head-owned field, so the card takes a fresh
+ * change_seq and producers see it through sync (§4.2). @pbcp/core 0.3 has no snooze transition; this mirrors
+ * markSeen: a decided or superseded card is not snoozed and comes back as 409 with the stored card.
+ */
+export async function snoozeCard(db: Db, ctx: OwnerContext, id: string, until: string | null): Promise<Outcome> {
+  return writeTx(db, ctx.headId, async (tx) => {
+    const stored = await loadOrThrow(tx, ctx.headId, id);
+    if (stored.card.state !== 'open') return { status: 409, card: stored.card };
+    const { snoozed_until: current, ...rest } = stored.card;
+    if ((current ?? null) === until) return { status: 200, card: stored.card };
+    const changed: Card = { ...rest, ...(until !== null ? { snoozed_until: until } : {}), changed_at: now() } as Card;
+    return { status: 200, card: await persist(tx, ctx.headId, changed) };
+  });
+}
