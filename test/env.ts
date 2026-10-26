@@ -8,3 +8,5 @@ export const TEST_HEAD_PORT = Number(process.env.TEST_HEAD_PORT ?? 3107);
 /** Stands in for appleid.apple.com's key set in test/http/auth.test.ts. */
 export const TEST_APPLE_PORT = Number(process.env.TEST_APPLE_PORT ?? 3108);
 export const TEST_APPLE_CLIENT_ID = 'test.head.client';
+
+export const TEST_CRON_SECRET = 'test-cron-secret';

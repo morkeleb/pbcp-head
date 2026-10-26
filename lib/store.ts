@@ -105,7 +105,11 @@ function headColumns(c: Card) {
   };
 }
 
-/** The protocol representation: producer fields as accepted, then the head-owned fields that are set. Unset fields are absent, never null. */
+/**
+ * The protocol representation: producer fields as accepted, then the head-owned fields that are set. Unset fields are absent, never null.
+ * TODO(pbcp-0.4): emit `delivery` (from cards.urgency) here once it is a head-owned field in @pbcp/core;
+ * headColumns() then reads it back from the card instead of from PersistOptions.urgency.
+ */
 export function toCard(row: Row): Card {
   const out: Record<string, unknown> = {
     ...(row.producerDoc as ProducerCard),

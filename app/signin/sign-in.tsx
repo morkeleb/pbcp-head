@@ -2,6 +2,7 @@
 
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { useEffect, useState } from 'react';
+import { loadTokens, saveTokens } from '../(ui)/client';
 
 interface Tokens {
   access_token: string;
@@ -10,7 +11,6 @@ interface Tokens {
   head: string;
 }
 
-const KEY = 'pbcp.session';
 
 async function post(path: string, body: unknown, access?: string): Promise<any> {
   const res = await fetch(path, {
@@ -30,21 +30,17 @@ export function SignIn({ enroll, apple }: { enroll: string | null; apple: boolea
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(KEY);
-      if (saved) setSession(JSON.parse(saved) as Tokens);
-    } catch {
-      // storage unavailable: stay signed out
-    }
+    setSession(loadTokens());
   }, []);
 
   const keep = (t: Tokens | null) => {
     setSession(t);
-    try {
-      if (t) sessionStorage.setItem(KEY, JSON.stringify(t));
-      else sessionStorage.removeItem(KEY);
-    } catch {
-      // storage unavailable
+    saveTokens(t);
+    // Signed in: on to where the owner was going, or the brief.
+    if (t) {
+      const next = new URLSearchParams(location.search).get('next') ?? '';
+      // Same-origin paths only: `//host` would leave the head.
+      location.href = /^\/(?![/\\])/.test(next) ? next : '/brief';
     }
   };
 
@@ -83,6 +79,7 @@ export function SignIn({ enroll, apple }: { enroll: string | null; apple: boolea
         <p data-testid="signed-in">
           Signed in to <strong>{session.head}</strong> on device <code>{session.device_id.slice(0, 8)}</code>.
         </p>
+        <a className="button" href="/brief">Open the brief</a>{' '}
         <button onClick={registerPasskey} disabled={busy}>Add another passkey</button>{' '}
         <button onClick={signOut} disabled={busy}>Sign out</button>
         {error && <p role="alert" style={{ color: '#b00' }}>{error}</p>}
