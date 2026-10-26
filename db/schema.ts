@@ -15,6 +15,11 @@ const tstz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date
 export const heads = pgTable('heads', {
   id: text('id').primaryKey(), // the owner's person id, e.g. 'morten'; also what GET / reports as `owner`
   createdAt: tstz('created_at').notNull().defaultNow(),
+  timezone: text('timezone').notNull().default('UTC'), // IANA zone: the owner's day, for the brief, day view and nightly card
+  // The global "since last visit" cursor (RFC §14 open question; global, per head): the change_seq the
+  // owner had seen when they last left the brief.
+  lastVisitSeq: bigint('last_visit_seq', { mode: 'number' }).notNull().default(0),
+  lastVisitAt: tstz('last_visit_at'),
 });
 
 export const producerTokens = pgTable('producer_tokens', {
@@ -50,6 +55,11 @@ export const cards = pgTable(
     decidedAt: tstz('decided_at'),
     delegatedTo: text('delegated_to'),
     decidedDoc: jsonb('decided_doc'), // producer_doc frozen at decision time (§4.4: the head MUST retain that version)
+    // Rendered on receipt, server-side (§3.1). Not protocol fields: never synced, never bump change_seq.
+    renderedHtml: text('rendered_html'), // the body as safe HTML
+    renderedActions: jsonb('rendered_actions'), // { [action id]: html } for choice options with a markdown body (§4.4)
+    renderedMeta: jsonb('rendered_meta'), // { firstVisual, fences: [{ type, class }] }
+    renderedFrom: text('rendered_from'), // hash of what was rendered (pipeline version, body, option bodies); stale when it differs
     // Orders extension (A.1), milestone H3. Present so the columns exist when it lands; nothing writes them yet.
     toProducer: text('to_producer'),
     execState: text('exec_state'),
@@ -126,3 +136,13 @@ export const devices = pgTable(
   },
   (t) => [uniqueIndex('devices_refresh').on(t.refreshTokenHash), index('devices_head').on(t.headId)],
 );
+
+// Drawn diagrams by sha256 of the sanitised fence (§3.1 Determinism): identical fences across cards and
+// re-PUTs are drawn once. A fence mermaid refused is cached with its message, so it is not retried either.
+export const diagrams = pgTable('diagrams', {
+  hash: text('hash').primaryKey(),
+  type: text('type').notNull(),
+  svg: text('svg'),
+  error: text('error'),
+  createdAt: tstz('created_at').notNull().defaultNow(),
+});

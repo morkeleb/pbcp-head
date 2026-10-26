@@ -2,15 +2,16 @@
 // this head on local Postgres. C01–C15, C21, C22 at MUST and C24 at SHOULD, as shipped (page cap 200) and
 // again with a page cap of 2 so §7.2 paging is exercised on every fixture.
 //
-// R01–R08 run against the reference classifier from @pbcp/core's conformance/in-process, which the package
-// does not export (nor build); it is imported from the vendored source. The head's own rendering pipeline is
-// milestone H2 and will replace it here.
+// R01–R08 run against the head's own rendering pipeline (lib/render): markdown, sanitising, mermaid drawn
+// in headless Chromium, the Postgres diagram cache. Rendering conformance is tested from bodies, not over
+// HTTP (RFC §14).
 
 import { conformanceSuite } from '@pbcp/core/conformance/vitest';
-import { describe, inject } from 'vitest';
-import { referenceRenderer } from '../../vendor/pbcp/packages/core/conformance/in-process/render';
+import { afterAll, describe, inject } from 'vitest';
+import { closeBrowser } from '../../lib/render/draw';
 import { testDb } from '../http/helpers';
 import { httpHead } from './http-head';
+import { pipelineRenderer } from './render-head';
 
 const head = (pageSize?: number) => () => httpHead({ baseUrl: inject('headUrl'), db: testDb(), ...(pageSize ? { pageSize } : {}) });
 
@@ -22,6 +23,7 @@ describe('HTTP head, page cap 2', () => {
   conformanceSuite({ head: head(2) });
 });
 
-describe('reference classifier (in-process, until the H2 rendering pipeline)', () => {
-  conformanceSuite({ render: () => referenceRenderer() });
+describe('rendering pipeline', () => {
+  conformanceSuite({ render: () => pipelineRenderer(testDb()) });
+  afterAll(() => closeBrowser());
 });
