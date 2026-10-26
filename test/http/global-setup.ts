@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { TestProject } from 'vitest/node';
 import { migrateDatabase } from '../../db/migrate';
-import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_DATABASE_URL, TEST_HEAD_PORT, TEST_SESSION_SECRET } from '../env';
+import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_CRON_SECRET, TEST_DATABASE_URL, TEST_HEAD_PORT, TEST_SESSION_SECRET } from '../env';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -30,6 +30,7 @@ export async function setup(project: TestProject): Promise<void> {
         WEBAUTHN_RP_ID: 'localhost',
         WEBAUTHN_ORIGIN: url,
         PBCP_HEAD: '',
+        CRON_SECRET: TEST_CRON_SECRET,
         APPLE_CLIENT_ID: TEST_APPLE_CLIENT_ID,
         APPLE_JWKS_URL: `http://localhost:${TEST_APPLE_PORT}/auth/keys`,
       },
