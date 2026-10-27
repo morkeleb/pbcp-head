@@ -7,9 +7,10 @@
 //   2  the daily paragraph of leads, each linked; no summary
 //   3  snoozed decisions left out of the paragraph and counted apart ("4 decisions, 1 snoozed")
 //   4  each paragraph entry is the card's title, linked, then " — " and its lead
+//   5  no snoozed card in the entries either (RFC 0.6 §8 correction); a thread shows its newest unsnoozed card
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 4;
+export const FOLD_VERSION = 5;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

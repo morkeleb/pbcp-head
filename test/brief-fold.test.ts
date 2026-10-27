@@ -67,10 +67,12 @@ describe('the nightly fold', () => {
     );
   });
 
-  it('then lists every open decision as "title — lead", linked: a summary as text, a body lead as inline markdown', () => {
-    const lines = entries(fold().body);
+  it('then lists every open decision that is not snoozed as "title — lead", linked: a summary as text, a body lead as inline markdown', () => {
+    const decisionsPart = fold().body.split('**Yesterday**')[0]!;
+    const lines = entries(decisionsPart);
     expect(lines[0]).toBe('- [Reply to Anna re \\[invoice\\]\\(https://evil\\.example\\)](<https://head.example/card/hermes%3Agmail%3A1>) — Anna asks whether the invoice can wait until the **20th**.');
-    expect(lines[1]).toBe('- [Title goalpath:item:9](<https://head.example/card/goalpath%3Aitem%3A9>) (snoozed) — GP\\-9 is finished; accept it?');
+    expect(lines).toHaveLength(1); // goalpath:item:9 is snoozed: counted, not listed (§8)
+    expect(decisionsPart).not.toContain('GP\\-9');
     const many = Array.from({ length: 70 }, (_, i) => stored(`hermes:gmail:m${i}`, { kind: 'decision' }));
     expect(entries(fold({ ...input, openDecisions: many }).body).filter((l) => l.startsWith('- [Title hermes:gmail:m'))).toHaveLength(70); // every one
   });
@@ -109,7 +111,7 @@ describe('the nightly fold', () => {
     expect(links.every((u) => u.startsWith('https://head.example/card/'))).toBe(true);
   });
 
-  it('counts a snoozed decision apart and leaves it out of the paragraph, but not out of the entries', () => {
+  it('counts a snoozed decision apart and lists it nowhere, neither in the paragraph nor in the entries', () => {
     const decisions = [
       ...Array.from({ length: 4 }, (_, i) => stored(`mail:d:${i}`, { kind: 'decision', summary: `Open ${i}` } as Partial<Card>)),
       stored('mail:d:z', { kind: 'decision', summary: 'Asleep', snoozed_until: '2026-10-09T08:00:00Z' } as Partial<Card>),
@@ -118,13 +120,34 @@ describe('the nightly fold', () => {
     const [paragraph] = card.body.split('\n');
     expect(paragraph).toMatch(/^4 decisions, 1 snoozed: \[Title mail:d:0\]\(<[^>]+>\) — Open 0; /);
     expect(paragraph).not.toContain('Asleep');
-    expect(entries(card.body).find((l) => l.includes('mail%3Ad%3Az'))).toContain('(snoozed) — Asleep'); // §8: every open decision
-    expect(card.references).toContain('mail:d:z');
+    expect(card.body).not.toContain('Asleep'); // §8: no snoozed card or its lead until snoozed_until has passed
+    expect(card.body).not.toContain('mail%3Ad%3Az');
+    expect(card.body).not.toContain('(snoozed)');
+    expect(card.body.trimEnd().split('\n').at(-1)).toMatch(/^4 open decisions, 1 snoozed · /);
     // No snoozed decision: no snoozed count.
     expect(fold({ ...input, openDecisions: decisions.slice(0, 4), yesterday: [] }).body.split('\n')[0]).toMatch(/^4 decisions: /);
     // All of them snoozed: the count, and no list.
     const asleep = dailyLines({ openDecisions: decisions.slice(4), yesterday: [], at: input.emittedAt });
     expect(dailyParagraph(asleep, input.cardUrl)).toBe('0 decisions, 1 snoozed.');
+  });
+
+  it('shows each of yesterday’s threads by its newest card that is not snoozed, and leaves out a thread snoozed throughout', () => {
+    const later = '2026-10-09T08:00:00Z';
+    const yesterday = [
+      stored('mail:t:1', { thread: 'mail:a', summary: 'First in A' } as Partial<Card>),
+      stored('mail:t:2', { thread: 'mail:a', summary: 'Second in A', snoozed_until: later } as Partial<Card>),
+      stored('mail:t:3', { thread: 'mail:b', summary: 'Only in B', snoozed_until: later } as Partial<Card>),
+      stored('mail:t:4', { thread: 'mail:c', summary: 'Only in C' } as Partial<Card>),
+    ];
+    const card = fold({ ...input, openDecisions: [], yesterday });
+    const [paragraph] = card.body.split('\n');
+    expect(paragraph).toBe('Yesterday: [Title mail:t:4](<https://head.example/card/mail%3At%3A4>) — Only in C; [Title mail:t:1](<https://head.example/card/mail%3At%3A1>) — First in A.');
+    const listed = entries(card.body.split('**Yesterday**')[1]!);
+    expect(listed).toEqual([
+      '- [Title mail:t:4](<https://head.example/card/mail%3At%3A4>) — Only in C',
+      '- [Title mail:t:1](<https://head.example/card/mail%3At%3A1>) (2 in thread) — First in A',
+    ]);
+    expect(card.body).not.toMatch(/Second in A|Only in B|mail%3At%3A[23]/);
   });
 
   it('treats a snooze that has run out as no snooze', () => {

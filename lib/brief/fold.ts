@@ -2,8 +2,8 @@
 // Pure: the cron gathers the cards, this writes the card. RFC 0.6 §8 "What a brief contains": every open decision's
 // title and lead, then the title and lead of the newest card of each of the previous day's threads, each linked to
 // its card. The body opens with the daily paragraph, prose made of those titles and leads and nothing else
-// ("2 decisions: <title> — <lead>; …. Yesterday: …."; snoozed decisions are counted apart, not listed, and stay in
-// the entries below), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
+// ("2 decisions: <title> — <lead>; …. Yesterday: …."; snoozed decisions are counted, never listed: §8, §4.2), which
+// is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
 // A day with nothing open and nothing new has no paragraph and no card.
 
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
@@ -35,8 +35,9 @@ export interface FoldLine {
 }
 
 export interface FoldLines {
-  /** Every open decision, snoozed ones included (marked). */
+  /** Every open decision, snoozed ones included (marked), for the count; only the unsnoozed are listed. */
   decisions: FoldLine[];
+  /** The previous day's threads, each by its newest card that is not snoozed; a thread snoozed throughout is left out. */
   threads: FoldLine[];
   /** "2 open decisions, 1 snoozed · 14 cards yesterday from 5 producers" */
   counts: string;
@@ -88,14 +89,21 @@ const line = (c: Card, at: string, count = 1): FoldLine => ({
   snoozed: !!c.snoozed_until && Date.parse(c.snoozed_until) > Date.parse(at),
 });
 
-/** Yesterday's cards collapsed by producer thread, newest thread first; each line is its newest card. */
+/**
+ * Yesterday's cards collapsed by producer thread, newest thread first. Each line is the thread's newest card that is
+ * not snoozed, and a thread whose cards are all snoozed is left out (§8: no snoozed card or its lead in a brief).
+ */
 export function foldThreads(cards: Card[], at: string): FoldLine[] {
   const threads = new Map<string, Card[]>();
   for (const c of [...cards].sort((a, b) => a.change_seq - b.change_seq)) {
     const key = `${c.producer}\u0000${c.thread ?? `\u0001${c.id}`}`;
     threads.set(key, [...(threads.get(key) ?? []), c]);
   }
-  return [...threads.values()].sort((a, b) => b.at(-1)!.change_seq - a.at(-1)!.change_seq).map((cs) => line(cs.at(-1)!, at, cs.length));
+  return [...threads.values()]
+    .map((cs) => ({ shown: cs.map((c) => line(c, at, cs.length)).filter((l) => !l.snoozed).at(-1), last: cs.at(-1)!.change_seq }))
+    .filter((t): t is { shown: FoldLine; last: number } => t.shown !== undefined)
+    .sort((a, b) => b.last - a.last)
+    .map((t) => t.shown);
 }
 
 /** `at` is now: a decision whose `snoozed_until` is later is snoozed. */
@@ -119,8 +127,7 @@ function decisionCount(decisions: FoldLine[], noun: string): string {
 /** "title — lead", the title linked to the card (§8). */
 function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
   const more = l.count > 1 ? ` (${l.count} in thread)` : '';
-  const snoozed = l.snoozed ? ' (snoozed)' : '';
-  return `- [${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${more}${snoozed}${l.lead ? ` — ${l.lead}` : ''}`;
+  return `- [${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${more}${l.lead ? ` — ${l.lead}` : ''}`;
 }
 
 /**
@@ -147,9 +154,10 @@ export function foldDaily(input: FoldInput): ProducerCard | null {
   if (!paragraph) return null;
   const lines: string[] = [paragraph, ''];
 
-  // Every open decision (§8 MUST): no cap.
-  if (decisions.length === 0) lines.push('Nothing is waiting for you.');
-  for (const l of decisions) lines.push(markdownLine(l, input.cardUrl));
+  // Every open decision that is not snoozed (§8 MUST): no cap. A snoozed one is only counted (§8, §4.2).
+  const awake = decisions.filter((l) => !l.snoozed);
+  if (awake.length === 0) lines.push('Nothing is waiting for you.');
+  for (const l of awake) lines.push(markdownLine(l, input.cardUrl));
   lines.push('');
 
   lines.push('**Yesterday**', '');
