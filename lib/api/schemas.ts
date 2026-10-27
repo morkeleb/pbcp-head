@@ -120,7 +120,7 @@ export const Brief = z.object({
   daily: MeCard.nullable().describe('The latest `head:daily` card'),
   daily_paragraph: z
     .object({
-      html: z.string().describe('Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)'),
+      html: z.string().describe('Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)'),
       so_far: z.boolean().describe('True until today’s `head:daily` card exists: the same fold, made now'),
     })
     .nullable()

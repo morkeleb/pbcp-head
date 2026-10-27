@@ -2404,7 +2404,7 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph`.
             public struct DailyParagraphPayload: Codable, Hashable, Sendable {
-                /// Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)
+                /// Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)
                 ///
                 /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph/html`.
                 public var html: Swift.String
@@ -2415,7 +2415,7 @@ extension Components {
                 /// Creates a new `DailyParagraphPayload`.
                 ///
                 /// - Parameters:
-                ///   - html: Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)
+                ///   - html: Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)
                 ///   - soFar: True until today’s `head:daily` card exists: the same fold, made now
                 public init(
                     html: Swift.String,

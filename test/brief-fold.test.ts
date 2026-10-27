@@ -44,16 +44,27 @@ describe('the nightly fold', () => {
     expect(card).not.toHaveProperty('summary'); // its lead is its opening paragraph
   });
 
-  it('opens with the daily paragraph: the decisions’ leads, then one sentence of yesterday’s, each linked, nothing else', () => {
+  it('opens with the daily paragraph: each decision as its linked title — lead, then one sentence of yesterday’s the same way, nothing else', () => {
     const [paragraph] = fold().body.split('\n');
     expect(paragraph).toMatch(
-      /^1 decision, 1 snoozed: \[Anna asks whether the invoice can wait until the \*\*20th\*\*\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\)\. Yesterday: \[/,
+      /^1 decision, 1 snoozed: \[Reply to Anna re \\\[invoice\\\]\\\(https:\/\/evil\\\.example\\\)\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\) — Anna asks whether the invoice can wait until the \*\*20th\*\*\. Yesterday: \[/,
     );
     expect(paragraph).toMatch(/\.$/);
-    expect(paragraph).toContain('[The reply went out at 09:12](<https://head.example/card/hermes%3Agmail%3Ab>)');
-    // A lead's own links are unwrapped inside the paragraph, where the lead is already a link.
+    expect(paragraph).toContain('[Sent](<https://head.example/card/hermes%3Agmail%3Ab>) — The reply went out at 09:12');
+    // A lead's own links are unwrapped in the paragraph, whose links are to cards.
     const withLink = fold({ ...input, yesterday: [stored('cal:x:1', { body: 'Moved to [Room 3](https://rooms.example/3) at 10.' })] });
-    expect(withLink.body.split('\n')[0]).toContain('Yesterday: [Moved to Room 3 at 10](<https://head.example/card/cal%3Ax%3A1>).');
+    expect(withLink.body.split('\n')[0]).toContain('Yesterday: [Title cal:x:1](<https://head.example/card/cal%3Ax%3A1>) — Moved to Room 3 at 10.');
+  });
+
+  it('names a card with a weak lead by its title, and writes the title alone when the lead is empty or repeats it', () => {
+    const weak = stored('mail:inbox:1', { kind: 'decision', title: 'Re: Offsite on the 14th', body: '- **From:** Jonas Holm\n- **Date:** Monday\n\nAre you in for both days?' });
+    const same = stored('mail:inbox:2', { kind: 'decision', title: 'Invoice reminder', summary: 'Invoice reminder.' } as Partial<Card>);
+    const empty = stored('mail:inbox:3', { kind: 'decision', title: 'Call Lena', body: '' });
+    const [paragraph] = fold({ ...input, openDecisions: [weak, same, empty], yesterday: [] }).body.split('\n');
+    expect(paragraph).toBe(
+      '3 decisions: [Re: Offsite on the 14th](<https://head.example/card/mail%3Ainbox%3A1>) — **From:** Jonas Holm; ' +
+        '[Invoice reminder](<https://head.example/card/mail%3Ainbox%3A2>); [Call Lena](<https://head.example/card/mail%3Ainbox%3A3>).',
+    );
   });
 
   it('then lists every open decision as "title — lead", linked: a summary as text, a body lead as inline markdown', () => {
@@ -105,7 +116,7 @@ describe('the nightly fold', () => {
     ];
     const card = fold({ ...input, openDecisions: decisions, yesterday: [] });
     const [paragraph] = card.body.split('\n');
-    expect(paragraph).toMatch(/^4 decisions, 1 snoozed: \[Open 0\]/);
+    expect(paragraph).toMatch(/^4 decisions, 1 snoozed: \[Title mail:d:0\]\(<[^>]+>\) — Open 0; /);
     expect(paragraph).not.toContain('Asleep');
     expect(entries(card.body).find((l) => l.includes('mail%3Ad%3Az'))).toContain('(snoozed) — Asleep'); // §8: every open decision
     expect(card.references).toContain('mail:d:z');
@@ -118,7 +129,7 @@ describe('the nightly fold', () => {
 
   it('treats a snooze that has run out as no snooze', () => {
     const woke = stored('mail:d:w', { kind: 'decision', summary: 'Awake again', snoozed_until: '2026-10-07T03:00:00Z' } as Partial<Card>);
-    expect(fold({ ...input, openDecisions: [woke], yesterday: [] }).body.split('\n')[0]).toBe('1 decision: [Awake again](<https://head.example/card/mail%3Ad%3Aw>).');
+    expect(fold({ ...input, openDecisions: [woke], yesterday: [] }).body.split('\n')[0]).toBe('1 decision: [Title mail:d:w](<https://head.example/card/mail%3Ad%3Aw>) — Awake again.');
   });
 
   it('mints nothing on a day with nothing open and nothing new; says only what there is otherwise', () => {

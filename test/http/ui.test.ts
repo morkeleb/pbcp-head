@@ -240,7 +240,7 @@ describe('the brief: lead, proposal, More', () => {
     await until(async () => (await row('goalpath:report:1')).acknowledgedAt !== null);
   });
 
-  it('opens today with the daily paragraph so far, made of the leads, each linked to its card', async () => {
+  it('opens today with the daily paragraph so far: each card’s title, linked to it, then its lead', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const brief = (await page.$('section[aria-label="Today’s brief"]'))!;
     expect(await brief.$eval('h2', (e) => e.textContent)).toBe('Today’s brief· so far today');
@@ -250,6 +250,8 @@ describe('the brief: lead, proposal, More', () => {
     const links = await brief.$$eval('.daily-paragraph a', (as) => as.map((a) => a.getAttribute('href')));
     expect(links).toContain(`/card/${encodeURIComponent('hermes:gmail:anna:reply')}`);
     expect(links.every((h) => h!.startsWith('/card/'))).toBe(true);
+    expect(paragraph).toContain('Reply to Anna re invoice timing — Anna asks whether the September invoice can be paid on the 20th');
+    expect(await brief.$eval(`.daily-paragraph a[href="/card/${encodeURIComponent('hermes:gmail:anna:reply')}"]`, (a) => a.textContent)).toBe('Reply to Anna re invoice timing');
   });
 
   it('commits a swipe after a 4 s undo window: right the default, Undo cancels before anything is sent, left dismisses', async () => {

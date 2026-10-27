@@ -37,7 +37,7 @@ describe('GET /api/cron/brief', () => {
     expect(brief.daily.rendered_html).toContain(`href="/card/${encodeURIComponent('hermes:gmail:1')}"`);
     expect(brief.daily.rendered_html).not.toContain('/api/me/svg/'); // no chart: §8, counts are additions
     // Its lead is its opening paragraph: the leads of what is open and of yesterday's threads, each linked.
-    expect(brief.daily.lead).toMatch(/^1 decision: \[.+\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\)\. Yesterday: /);
+    expect(brief.daily.lead).toMatch(/^1 decision: \[Card hermes:gmail:1\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\) — .+\. Yesterday: \[/);
     expect(brief.daily.lead_source).toBe('body');
     expect(brief.threads).toEqual([]); // the head's own card is the brief, not one of its folds
   });
@@ -101,14 +101,14 @@ describe('GET /api/cron/brief', () => {
     let b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
     expect(b.daily.id).toBe('head:daily:2026-10-07');
     expect(b.daily_paragraph.so_far).toBe(true);
-    expect(b.daily_paragraph.html).toMatch(/^1 decision: <a href="\/card\/hermes%3Agmail%3A1">Anna asks about the invoice<\/a>\.$/);
+    expect(b.daily_paragraph.html).toMatch(/^1 decision: <a href="\/card\/hermes%3Agmail%3A1">Card hermes:gmail:1<\/a> — Anna asks about the invoice\.$/);
     expect(b.daily_paragraph.html).not.toContain('open decision ·');
 
     // Folded again by the current fold (stamped), the card's own lead opens the day.
     await testDb().delete(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, old.id)));
     expect((await cron()).body.minted).toEqual([{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }]);
     b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
-    expect(b.daily['x-pbcp-fold']).toBe(3);
+    expect(b.daily['x-pbcp-fold']).toBe(4);
     expect(b.daily_paragraph).toMatchObject({ so_far: false, html: b.daily.rendered_lead });
   });
 
