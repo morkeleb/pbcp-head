@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
+import { announce, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
 import { clock, type Density } from './DecisionCard';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
@@ -41,9 +41,11 @@ export interface UpdateRowProps {
   onAcknowledged?: (ids: string[], at: string | null) => void;
   focused?: boolean;
   handle?: Ref<UpdateRowHandle>;
+  /** The card page: the whole body, rendered, in place of the lead and the first visual; the thread is the page's. */
+  expanded?: boolean;
 }
 
-export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, handle }: UpdateRowProps) {
+export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, handle, expanded = false }: UpdateRowProps) {
   const c = thread.latest;
   const cards = [c, ...thread.earlier];
   const ids = cards.map((x) => x.id);
@@ -113,7 +115,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
           <h4 className={cn('mt-0.5 font-serif font-semibold tracking-editorial', ledger ? 'text-body' : 'text-title')}>
             <Link href={cardHref(c.id)} className="hover:underline">{c.title}</Link>
           </h4>
-          {!ledger && c.rendered_lead && <p className="lead mt-0.5 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: c.rendered_lead }} />}
+          {!expanded && !ledger && c.rendered_lead && <p className="lead mt-0.5 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: c.rendered_lead }} />}
         </div>
         <div className="flex-none pt-3">
           {acked ? (
@@ -123,7 +125,8 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
           )}
         </div>
       </div>
-      {!ledger && !acked && c.first_visual && (
+      {expanded && <Rendered className="mt-2 text-body" html={c.rendered_html} />}
+      {!expanded && !ledger && !acked && c.first_visual && (
         // §3.1: in a fold, at most the first visual, fitted to the width, never cropped, captioned.
         <figure className="mt-2">
           <button className="block w-full cursor-zoom-in" onClick={() => setViewing(true)} aria-label={`Open ${c.first_visual.caption || 'the visual'} full-screen`}>
@@ -140,7 +143,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
           {viewing && <Viewer visual={{ src: c.first_visual.src, caption: c.first_visual.caption }} onClose={() => setViewing(false)} />}
         </figure>
       )}
-      {thread.earlier.length > 0 && (
+      {!expanded && thread.earlier.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className="group mt-1 flex items-center gap-1 text-lead text-muted-foreground">
             {thread.earlier.length} earlier in this thread <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />

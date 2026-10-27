@@ -11,9 +11,10 @@ import { changeCounter } from '../../db/schema';
 import { describeHead } from '../../lib/describe';
 import { DOCS_URL } from '../../lib/front-door';
 import { defaultHead } from '../../lib/heads';
+import { NAME } from '../../lib/masthead';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: 'Morning Brief' };
+export const metadata: Metadata = { title: { absolute: NAME } };
 
 const TIERS: Record<string, string> = { core: 'core', extended: 'extended', other: 'other types' };
 
@@ -25,7 +26,7 @@ export default async function FrontDoor() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-xl px-4 py-12 min-[900px]:py-20">
-      <h1 className="font-serif text-masthead-sm font-semibold tracking-editorial min-[900px]:text-masthead">Morning Brief</h1>
+      <h1 className="font-serif text-masthead-sm font-semibold tracking-editorial min-[900px]:text-masthead">{NAME}</h1>
       <p className="mt-4 text-body text-foreground">
         A personal head for the Personal Brief Card Protocol. Your agents and tools send it cards: things they made, things
         they noticed, and questions only you can answer. It folds them into one brief a day, and records every decision you

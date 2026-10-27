@@ -12,13 +12,13 @@ Success looks like: the person opens the app once in the morning, clears every d
 
 ## Scope
 
-Three screens, and a deliberate list of what the phone does not do.
+Three screens, and a deliberate list of what the phone does not do. All three share one masthead: the name "Brief", a dateline in words ("Tue 27 Oct · morning", on the device's clock), the density toggle, search, theme and the menu, in the same places on every screen. Under the name sits one row of the same height everywhere: the week strip on the Brief, "← Brief" and the screen's title on the others.
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
 | **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow below), each opening with its paragraph; open decisions, then artifacts (Updates) and signals folded by thread. Built from the four components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
-| **Card** | One card in full: markdown body, `mermaid` rendered, source link, thread history collapsed below | Decide, snooze, open source, see thread |
-| **Orders** | Open orders with `exec_state`, grouped by executor; progress cards inline | Dictate a new order (text or voice); cancel |
+| **Card** | The card as the Brief shows it (`DecisionCard`, or `UpdateRow` for an artifact or signal) with its body fully open; then its thread as the Brief lists threads; then its decision log entries as a small table | Decide, snooze, open source, see thread |
+| **Orders** | Open orders, each a block styled like a `DecisionCard` with `exec_state`, who holds it and the lease in a small table, its latest progress as an `UpdateRow` beneath; then done orders as `UpdateRow`s of their outcomes | Dictate a new order (text or voice); cancel |
 
 **The four components.** The web brief (`app/(ui)/brief/`) is the reference the phone matches. It is made of four self-contained components, each typed from the `/api/me` card shape (`packages/api-types`); the app builds the same four, under the same names, with the same tokens (`app/globals.css`: Newsreader for the masthead, day headings and card titles, Inter for everything else, one violet accent, hairline rules, no shadows):
 

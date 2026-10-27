@@ -5,7 +5,7 @@
 import type { Card } from '@pbcp/core';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { cards, changeCounter, devices, heads, producerTokens } from '../db/schema';
+import { cards, changeCounter, decisionLog, devices, heads, producerTokens } from '../db/schema';
 import { iso, now } from './clock';
 import { HttpError } from './http';
 import { expireDueOrders } from './orders';
@@ -397,6 +397,14 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
       ...(r.outcome ? { order_outcome: r.outcome } : {}),
     };
   };
+  // The decision log for this card (§4.4, §11.3: every decision, and the card it was made on), oldest first, with the
+  // device that recorded it by name.
+  const log = await db
+    .select({ seq: decisionLog.seq, decision: decisionLog.decision, decidedAt: decisionLog.decidedAt, editedProposal: decisionLog.editedProposal, comment: decisionLog.comment, delegatedTo: decisionLog.delegatedTo, actor: decisionLog.actor, device: devices.name, platform: devices.platform })
+    .from(decisionLog)
+    .leftJoin(devices, eq(devices.id, decisionLog.actor))
+    .where(and(eq(decisionLog.headId, headId), eq(decisionLog.cardId, row.id)))
+    .orderBy(asc(decisionLog.seq));
   const head = await headSettings(db, headId);
   return {
     timezone: head.timezone,
@@ -405,6 +413,14 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
     successors: successors.map(summary),
     references: await Promise.all(refs.map(async (ref) => ({ id: ref, card: referenced.has(ref) ? summary(referenced.get(ref)!) : null }))),
     thread: threadRows.map(summary),
+    decisions: log.map((l) => ({
+      decision: l.decision,
+      decided_at: iso(l.decidedAt),
+      ...(l.editedProposal !== null ? { edited_proposal: l.editedProposal } : {}),
+      ...(l.comment !== null ? { comment: l.comment } : {}),
+      ...(l.delegatedTo !== null ? { delegated_to: l.delegatedTo } : {}),
+      by: l.device ?? (l.platform ? `a ${l.platform} device` : l.actor),
+    })),
   };
 }
 

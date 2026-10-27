@@ -1,10 +1,8 @@
 'use client';
 
 import { ArrowUpRight } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { api, loadTokens, OFFLINE_REASON, OfflineError, saveTokens, useOnline, when } from './client';
+import { api, OfflineError, when } from './client';
 
 // --- types: the /api/me card shape ----------------------------------------------------
 
@@ -64,12 +62,6 @@ export function AsOf({ at, timezone }: { at?: string | null; timezone?: string }
   );
 }
 
-/** Why the controls below it are disabled. Renders nothing while online. */
-export function OfflineNote() {
-  const online = useOnline();
-  if (online) return null;
-  return <p className="muted offline" role="status">{OFFLINE_REASON}</p>;
-}
 
 /** Why a card's controls are disabled offline, in one line (the controls themselves say the rest). */
 export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection, and nothing is saved to send later.';
@@ -77,26 +69,6 @@ export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection, and n
 /** What a write that was not sent says: nothing is queued. */
 export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send later; do it again when you’re back online.';
 
-// --- navigation ----------------------------------------------------------------------
-
-export function Nav() {
-  // The brief has its own masthead (app/(ui)/brief/masthead.tsx), which leads to the other pages.
-  const path = usePathname();
-  const signOut = async () => {
-    if (loadTokens()) await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    saveTokens(null);
-    location.href = '/signin';
-  };
-  if (path === '/brief') return null;
-  return (
-    <nav className="top">
-      <Link href="/brief">Brief</Link>
-      <Link href="/orders">Orders</Link>
-      <span className="spacer" />
-      <button onClick={signOut} style={{ minHeight: 32, padding: '4px 10px', fontSize: 14 }}>Sign out</button>
-    </nav>
-  );
-}
 
 // --- the page theme, and diagrams drawn for it -------------------------------------------
 
@@ -214,18 +186,6 @@ export function Rendered({ html, className }: { html: string; className?: string
   );
 }
 
-/** The first visual of a card as a thumbnail, fitted to the width and never cropped. */
-export function Thumb({ visual }: { visual: NonNullable<MeCard['first_visual']> }) {
-  const [open, setOpen] = useState(false);
-  const dark = useDark();
-  return (
-    <figure className="thumb">
-      <img src={themedSrc(visual.src, dark)} alt={visual.caption} loading="lazy" onClick={() => setOpen(true)} />
-      {visual.caption && <figcaption>{visual.caption}</figcaption>}
-      {open && <Viewer visual={visual} onClose={() => setOpen(false)} />}
-    </figure>
-  );
-}
 
 /** Full-screen, native size first, pinch or wheel to zoom, drag to pan; the fence source behind a disclosure. */
 export function Viewer({ visual: given, onClose }: { visual: Visual; onClose: () => void }) {
@@ -309,7 +269,7 @@ export function Viewer({ visual: given, onClose }: { visual: Visual; onClose: ()
         <button onClick={() => zoomAt(1.4, centre().cx, centre().cy)} aria-label="Zoom in">+</button>
         <button onClick={() => setView((v) => ({ ...v, scale: 1 }))}>1:1</button>
         <button onClick={fit}>Fit</button>
-        <span style={{ flex: 1 }} />
+        <span className="flex-1" />
         <button onClick={share}>Share</button>
       </div>
       <div className="stage" ref={stage} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={wheel}>
@@ -395,38 +355,7 @@ export function splitBody(html: string, leadFromBody: boolean): BodyParts {
   };
 }
 
-/** The lead, never behind a gesture (§3.1): the head's rendered lead, inline. */
-export function Lead({ card }: { card: MeCard }) {
-  if (!card.rendered_lead) return null;
-  return <p className="lead" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />;
-}
 
-/**
- * A card's body on the brief (§4.5 "Enough to decide"): the lead and the proposal are visible; the rest is behind
- * one "More". Expanding it is what presents the card (§4.2 seen_at); the lead alone is not.
- */
-export function CardBody({ card }: { card: MeCard }) {
-  const [parts, setParts] = useState<BodyParts | null>(null);
-  const [opened, setOpened] = useState(false);
-  useEffect(() => setParts(splitBody(card.rendered_html, card.lead_source === 'body')), [card.rendered_html, card.lead_source]);
-  const toggle = (e: React.SyntheticEvent<HTMLDetailsElement>) => {
-    if (!e.currentTarget.open || opened) return;
-    setOpened(true);
-    if (!card.seen_at) api(`/api/me/cards/${encodeURIComponent(card.id)}/seen`, { method: 'POST' }).catch(() => undefined);
-  };
-  return (
-    <>
-      <Lead card={card} />
-      {parts?.proposal && <Rendered className="proposal" html={parts.proposal} />}
-      {parts?.rest.trim() && (
-        <details className="more" onToggle={toggle}>
-          <summary>More</summary>
-          <Rendered html={parts.rest} />
-        </details>
-      )}
-    </>
-  );
-}
 
 // --- swipes: deferred, with undo (docs/mobile-prd.md gesture table) --------------------------
 
@@ -466,9 +395,9 @@ export function useDeferred() {
     announce('Undone');
   };
   const toast = pending && (
-    <div className="toast" role="status">
-      <span>{pending.label}</span>
-      <button onClick={undo}>Undo</button>
+    <div className="toast fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-[560px] items-center gap-3 rounded-md bg-foreground px-3 py-2.5 text-lead text-background" role="status">
+      <span className="min-w-0 flex-1">{pending.label}</span>
+      <button className="rounded-md border border-current px-2.5 py-1 text-control" onClick={undo}>Undo</button>
     </div>
   );
   return { schedule, toast, pending: !!pending };
@@ -570,10 +499,6 @@ export function swipeChoice(card: MeCard, direction: 'left' | 'right'): { decisi
   return byDefault ? { decision: byDefault.id, label: byDefault.label } : null;
 }
 
-/** Lets a swipe on the card commit through the controls' own path (their comment included). */
-export interface DecisionHandle {
-  decide(d: { decision: string }): void;
-}
 
 /** What a recorded decision reads as: the option's label, or the protocol decision's name (§4.3). */
 export function decisionLabel(card: MeCard): string {
@@ -618,102 +543,4 @@ export function decidedLine(card: MeCard): string {
   return past[card.decision ?? ''] ?? decisionLabel(card);
 }
 
-/**
- * The card's actions, on the card (§4.4, §4.5): a row of buttons in the producer's order, filled primary only
- * for the default (with no default, all of equal weight); or, for options with a `body`, a vertical group with
- * each body under its label and the default pre-selected. `Dismiss` is always there, quietly; "Edit…" only when
- * `actions` offers `edit`. A comment is behind "Add a comment". A tap commits at once: the card updates and the
- * decision is posted; a failure puts the controls back with the error. Only a swipe waits, behind an undo.
- */
-export function DecisionControls({ card, onChange, showDecided = false, handle }: { card: MeCard; onChange: (c: MeCard) => void; showDecided?: boolean; handle?: React.RefObject<DecisionHandle | null> }) {
-  const { list, edit, byDefault } = options(card);
-  const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
-  const online = useOnline();
-  const [selected, setSelected] = useState<string | null>(list.find((o) => o.isDefault)?.id ?? null);
-  const [editing, setEditing] = useState(false);
-  const [edited, setEdited] = useState('');
-  const [comment, setComment] = useState('');
-  const { decide: post, error } = useDecide(card, onChange);
-  const decide = (d: DecisionBody) => post(comment.trim() ? { ...d, comment: comment.trim() } : d);
 
-  useEffect(() => {
-    if (!handle) return;
-    handle.current = { decide: (d) => void decide(d) };
-    return () => {
-      handle.current = null;
-    };
-  });
-
-  if (card.kind !== 'decision') return null;
-  if (card.state === 'decided') {
-    if (!showDecided) return null;
-    return (
-      <p className="decided-line">
-        Decided: <strong>{decisionLabel(card)}</strong>
-        {card.decided_at && <> · {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(card.decided_at))}</>}
-      </p>
-    );
-  }
-  if (card.state !== 'open') return null;
-  const off = !online;
-  const chosen = list.find((o) => o.id === selected);
-  return (
-    <div className="decide-controls">
-      {grouped ? (
-        <fieldset className="choices" disabled={off}>
-          <legend className="sr-only">Options</legend>
-          {list.map((o) => (
-            <label key={o.id} className={`option ${selected === o.id ? 'selected' : ''}`}>
-              <input type="radio" name={`option-${card.id}`} checked={selected === o.id} onChange={() => setSelected(o.id)} />
-              <span className="label">{o.label}</span>
-              {o.isDefault && <span className="default">default</span>}
-              {card.rendered_actions?.[o.id] && <Rendered className="option-body" html={card.rendered_actions[o.id]!} />}
-            </label>
-          ))}
-        </fieldset>
-      ) : null}
-      {editing ? (
-        <div className="edit">
-          <label className="muted" htmlFor={`edit-${card.id}`}>What you want instead</label>
-          <textarea id={`edit-${card.id}`} rows={4} value={edited} onChange={(e) => setEdited(e.target.value)} autoFocus />
-        </div>
-      ) : null}
-      <div className="row decide">
-        {editing ? (
-          <>
-            <button className="primary" disabled={off || edited.trim() === ''} onClick={() => decide({ decision: 'edited', edited_proposal: edited.trim() })}>Send edit</button>
-            <button onClick={() => setEditing(false)}>Back</button>
-          </>
-        ) : grouped ? (
-          // Filled only when the card has a default (§4.5): without one, nothing is pushed forward.
-          <button className={byDefault ? 'primary' : undefined} disabled={off || !chosen} onClick={() => chosen && decide({ decision: chosen.id })}>{chosen ? chosen.label : 'Pick an option'}</button>
-        ) : (
-          list.map((o) => (
-            <button key={o.id} className={o === byDefault ? 'primary' : undefined} disabled={off} onClick={() => decide({ decision: o.id })}>{o.label}</button>
-          ))
-        )}
-        {!editing && edit && <button disabled={off} onClick={() => setEditing(true)}>Edit…</button>}
-        {!editing && <button className="quiet" disabled={off} onClick={() => decide({ decision: 'dismissed' })}>Dismiss</button>}
-      </div>
-      <details className="comment">
-        <summary>Add a comment</summary>
-        <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={off} />
-      </details>
-      <OfflineNote />
-      {error && <p className="error" role="alert">{error}</p>}
-    </div>
-  );
-}
-
-export function DecisionSummary({ card, timezone }: { card: MeCard; timezone?: string }) {
-  if (!card.decision) return null;
-  return (
-    <div className="card" style={{ borderColor: 'var(--ok)' }}>
-      <strong>{card.decision}</strong>
-      {card.decided_at && <span className="muted"> · {when(card.decided_at, timezone)}</span>}
-      {card.edited_proposal && <p style={{ whiteSpace: 'pre-wrap' }}>{card.edited_proposal}</p>}
-      {card.delegated_to && <p>Delegated to {card.delegated_to}</p>}
-      {card.comment && <p className="muted">“{card.comment}”</p>}
-    </div>
-  );
-}

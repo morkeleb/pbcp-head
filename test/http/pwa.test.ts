@@ -87,7 +87,7 @@ describe('installable app', () => {
     const res = await fetch(`${headUrl()}/manifest.webmanifest`);
     expect(res.headers.get('content-type')).toMatch(/^application\/manifest\+json/);
     const m = await res.json();
-    expect(m).toMatchObject({ name: 'PBCP head', short_name: 'Brief', start_url: '/brief', scope: '/', display: 'standalone', theme_color: '#7047f5' });
+    expect(m).toMatchObject({ name: 'Brief', short_name: 'Brief', start_url: '/brief', scope: '/', display: 'standalone', theme_color: '#7047f5' });
     for (const icon of m.icons) {
       const [w, h] = icon.sizes.split('x').map(Number);
       expect(await fetchPng(icon.src), icon.src).toMatchObject({ width: w, height: h });

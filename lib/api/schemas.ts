@@ -86,6 +86,18 @@ export const CardDetail = z.object({
   successors: z.array(CardSummary).describe('The cards that supersede it, in order'),
   references: z.array(z.object({ id: z.string(), card: CardSummary.nullable().describe('Null when this head holds no such card') })),
   thread: z.array(CardSummary).describe('Every card of its thread, newest last; for an order, the order first'),
+  decisions: z
+    .array(
+      z.object({
+        decision: z.string(),
+        decided_at: Timestamp,
+        edited_proposal: z.string().optional(),
+        comment: z.string().optional(),
+        delegated_to: z.string().optional(),
+        by: z.string().describe('The device that recorded it, by name'),
+      }),
+    )
+    .describe('The decision log entries for this card, oldest first (§4.4)'),
 }).register(responses, { id: 'CardDetail' });
 
 export const CardList = z.object({

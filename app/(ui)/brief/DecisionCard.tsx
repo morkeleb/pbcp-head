@@ -3,7 +3,7 @@
 // DecisionCard: one open (or just decided) decision card, as the reference UI presents it (RFC 0.6 §4.5). The iOS app
 // mirrors this component; it is self-contained: a card in, changes out.
 //
-//   producer · time · source ↗   (an accent dot while unseen)               ⋮ snooze, open card, delegate
+//   producer · time · source ↗   (an accent dot while unseen)               ⋮ snooze or unsnooze, open card, delegate
 //   Title, in the serif
 //   lead (rendered_lead: the summary as text, else the first paragraph)
 //   ┌ Proposal (the first heading beginning "Proposal"/"Proposed", any level) ┐
@@ -50,6 +50,8 @@ export interface DecisionCardProps {
   focused?: boolean;
   /** The time in the header; off on the timeline, whose rail carries it. */
   showTime?: boolean;
+  /** The card page: the whole body open (lead, proposal and the rest), decided or not; no "More". */
+  expanded?: boolean;
   handle?: Ref<DecisionCardHandle>;
 }
 
@@ -62,7 +64,7 @@ const SNOOZES = [
 /** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
 export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
 
-export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true }: DecisionCardProps) {
+export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true, expanded = false }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);
   const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
@@ -72,7 +74,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
   const [edited, setEdited] = useState('');
   const [comment, setComment] = useState('');
   const [more, setMore] = useState(false);
-  const [open, setOpen] = useState(density === 'comfortable');
+  const [open, setOpen] = useState(expanded || density === 'comfortable');
   const [snoozeError, setSnoozeError] = useState<string | null>(null);
   const { decide: post, error } = useDecide(card, onChange);
   const decide = (decision: string, extra: { edited_proposal?: string } = {}) =>
@@ -82,7 +84,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
     const choice = decided || !online || deferred.pending ? null : swipeChoice(card, direction);
     if (choice) deferred.schedule(`${choice.label}: ${card.title}`, () => void decide(choice.decision));
   });
-  useEffect(() => setOpen(density === 'comfortable'), [density]);
+  useEffect(() => setOpen(expanded || density === 'comfortable'), [density, expanded]);
 
   // The proposal and the rest, from the body the head rendered (the lead is the head's: rendered_lead).
   const [parts, setParts] = useState<{ proposal: string; rest: string } | null>(null);
@@ -107,13 +109,14 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
     expand: () => (open ? expandMore(!more) : setOpen(true)),
   }));
 
-  const snooze = async (preset: string, label: string) => {
+  // `preset` null: unsnooze.
+  const snooze = async (preset: string | null, label: string) => {
     setSnoozeError(null);
     try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/snooze`, { method: 'POST', body: { preset } });
+      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/${preset ? 'snooze' : 'unsnooze'}`, { method: 'POST', ...(preset ? { body: { preset } } : {}) });
       if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
       onChange({ ...card, ...r.body });
-      announce(`Snoozed until ${label.toLowerCase()}: ${card.title}`);
+      announce(preset ? `Snoozed until ${label.toLowerCase()}: ${card.title}` : `Unsnoozed: ${card.title}`);
     } catch (e) {
       setSnoozeError(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
     }
@@ -147,6 +150,9 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
         {SNOOZES.map((s) => (
           <DropdownMenuItem key={s.preset} disabled={!online || decided} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
         ))}
+        {card.snoozed_until && card.snoozed_until > new Date().toISOString() && (
+          <DropdownMenuItem disabled={!online || decided} onSelect={() => void snooze(null, 'Unsnooze')}>Unsnooze</DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href={cardHref(card.id)}>Open card</Link>
@@ -230,8 +236,9 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
   const body = (
     <>
       {card.rendered_lead && <p className="lead mt-1 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
-      {!decided && parts?.proposal && <Rendered className="proposal mt-3 rounded-md bg-inset px-3 py-2 text-body" html={parts.proposal} />}
-      {!decided && parts?.rest.trim() && (
+      {(expanded || !decided) && parts?.proposal && <Rendered className="proposal mt-3 rounded-md bg-inset px-3 py-2 text-body" html={parts.proposal} />}
+      {expanded && parts?.rest.trim() && <Rendered className="more-body mt-3 text-body" html={parts.rest} />}
+      {!expanded && !decided && parts?.rest.trim() && (
         <Collapsible open={more} onOpenChange={expandMore}>
           <CollapsibleTrigger className="more-trigger group mt-2 flex items-center gap-1 text-lead text-muted-foreground">
             More <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
@@ -254,7 +261,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
       className={cn(
         'decision-card relative touch-pan-y rounded-lg border bg-card text-card-foreground outline-none transition-[opacity,transform] duration-150',
         density === 'ledger' ? 'px-3 py-2' : 'p-4 max-[899px]:p-3',
-        decided && 'opacity-72',
+        decided && !expanded && 'opacity-72',
         focused && 'ring-2 ring-ring',
       )}
       style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
@@ -295,7 +302,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
             <Link href={cardHref(card.id)} className="hover:underline">{card.title}</Link>
           </h3>
           {body}
-          {density === 'ledger' && (
+          {density === 'ledger' && !expanded && (
             <button className="mt-2 text-lead text-muted-foreground" onClick={() => setOpen(false)}>Fold</button>
           )}
         </>

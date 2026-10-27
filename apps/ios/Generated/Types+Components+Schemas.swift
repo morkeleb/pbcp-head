@@ -2054,6 +2054,100 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/CardDetail/thread`.
             public var thread: [Components.Schemas.CardSummary]
+            /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload`.
+            public struct DecisionsPayloadPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/decision`.
+                public var decision: Swift.String
+                /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+                ///
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/decided_at`.
+                public var decidedAt: Swift.String
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/edited_proposal`.
+                public var editedProposal: Swift.String?
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/comment`.
+                public var comment: Swift.String?
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/delegated_to`.
+                public var delegatedTo: Swift.String?
+                /// The device that recorded it, by name
+                ///
+                /// - Remark: Generated from `#/components/schemas/CardDetail/DecisionsPayload/by`.
+                public var by: Swift.String
+                /// Creates a new `DecisionsPayloadPayload`.
+                ///
+                /// - Parameters:
+                ///   - decision:
+                ///   - decidedAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+                ///   - editedProposal:
+                ///   - comment:
+                ///   - delegatedTo:
+                ///   - by: The device that recorded it, by name
+                public init(
+                    decision: Swift.String,
+                    decidedAt: Swift.String,
+                    editedProposal: Swift.String? = nil,
+                    comment: Swift.String? = nil,
+                    delegatedTo: Swift.String? = nil,
+                    by: Swift.String
+                ) {
+                    self.decision = decision
+                    self.decidedAt = decidedAt
+                    self.editedProposal = editedProposal
+                    self.comment = comment
+                    self.delegatedTo = delegatedTo
+                    self.by = by
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case decision
+                    case decidedAt = "decided_at"
+                    case editedProposal = "edited_proposal"
+                    case comment
+                    case delegatedTo = "delegated_to"
+                    case by
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.decision = try container.decode(
+                        Swift.String.self,
+                        forKey: .decision
+                    )
+                    self.decidedAt = try container.decode(
+                        Swift.String.self,
+                        forKey: .decidedAt
+                    )
+                    self.editedProposal = try container.decodeIfPresent(
+                        Swift.String.self,
+                        forKey: .editedProposal
+                    )
+                    self.comment = try container.decodeIfPresent(
+                        Swift.String.self,
+                        forKey: .comment
+                    )
+                    self.delegatedTo = try container.decodeIfPresent(
+                        Swift.String.self,
+                        forKey: .delegatedTo
+                    )
+                    self.by = try container.decode(
+                        Swift.String.self,
+                        forKey: .by
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "decision",
+                        "decided_at",
+                        "edited_proposal",
+                        "comment",
+                        "delegated_to",
+                        "by"
+                    ])
+                }
+            }
+            /// The decision log entries for this card, oldest first (§4.4)
+            ///
+            /// - Remark: Generated from `#/components/schemas/CardDetail/decisions`.
+            public typealias DecisionsPayload = [Components.Schemas.CardDetail.DecisionsPayloadPayload]
+            /// The decision log entries for this card, oldest first (§4.4)
+            ///
+            /// - Remark: Generated from `#/components/schemas/CardDetail/decisions`.
+            public var decisions: Components.Schemas.CardDetail.DecisionsPayload
             /// Creates a new `CardDetail`.
             ///
             /// - Parameters:
@@ -2063,13 +2157,15 @@ extension Components {
             ///   - successors: The cards that supersede it, in order
             ///   - references:
             ///   - thread: Every card of its thread, newest last; for an order, the order first
+            ///   - decisions: The decision log entries for this card, oldest first (§4.4)
             public init(
                 timezone: Swift.String,
                 card: Components.Schemas.MeCard,
                 predecessors: [Components.Schemas.MeCard],
                 successors: [Components.Schemas.CardSummary],
                 references: Components.Schemas.CardDetail.ReferencesPayload,
-                thread: [Components.Schemas.CardSummary]
+                thread: [Components.Schemas.CardSummary],
+                decisions: Components.Schemas.CardDetail.DecisionsPayload
             ) {
                 self.timezone = timezone
                 self.card = card
@@ -2077,6 +2173,7 @@ extension Components {
                 self.successors = successors
                 self.references = references
                 self.thread = thread
+                self.decisions = decisions
             }
             public enum CodingKeys: String, CodingKey {
                 case timezone
@@ -2085,6 +2182,7 @@ extension Components {
                 case successors
                 case references
                 case thread
+                case decisions
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -2112,13 +2210,18 @@ extension Components {
                     [Components.Schemas.CardSummary].self,
                     forKey: .thread
                 )
+                self.decisions = try container.decode(
+                    Components.Schemas.CardDetail.DecisionsPayload.self,
+                    forKey: .decisions
+                )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "timezone",
                     "card",
                     "predecessors",
                     "successors",
                     "references",
-                    "thread"
+                    "thread",
+                    "decisions"
                 ])
             }
         }

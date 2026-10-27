@@ -13,32 +13,19 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { MastheadRow, useChrome, useChromeCards } from '../chrome';
 import type { MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
 import { clock, DecisionCard, type DecisionCardHandle, type Density } from './DecisionCard';
-import { Masthead, useDensity } from './masthead';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
 import { addDays, useBrief, type Day } from './use-brief';
 import { WeekStrip, type WeekDay } from './WeekStrip';
 
-const WIDE = '(min-width: 900px)';
 /** Updates are folded after this many, behind "More updates (N)". */
 const FOLD_AT = 6;
 const HINT_KEY = 'pbcp.swipe-hint';
 /** How long the swipe hint stays up, unless the person scrolls first. */
 const HINT_MS = 8000;
-
-function useWide(): boolean | null {
-  const [wide, setWide] = useState<boolean | null>(null);
-  useEffect(() => {
-    const m = matchMedia(WIDE);
-    const set = () => setWide(m.matches);
-    set();
-    m.addEventListener('change', set);
-    return () => m.removeEventListener('change', set);
-  }, []);
-  return wide;
-}
 
 const dayName = (d: Day, today: string): string => {
   const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d.date}T00:00:00Z`));
@@ -55,8 +42,8 @@ const weekOf = (date: string): string[] => {
 };
 
 export function BriefView() {
-  const wide = useWide();
-  const [density, setDensity] = useDensity();
+  // The masthead is the layout's (app/(ui)/chrome.tsx): density and the layout come from it, the week strip goes into it.
+  const { wide, density } = useChrome();
   const { brief, days, cachedAt, error, loadEarlier, loadedFrom, atStart, loadedBack, change } = useBrief();
   const [selected, setSelected] = useState<string | null>(null);
   const [todayOut, setTodayOut] = useState<'above' | 'below' | null>(null);
@@ -67,17 +54,6 @@ export function BriefView() {
   const anchor = useRef<{ el: Element; docTop: number } | null>(null);
   const jumpTo = useRef<string | null>(null);
   const today = brief?.date ?? '';
-
-  // The masthead's height, for the sticky day headers and the "Back to today" chip.
-  useEffect(() => {
-    const m = document.querySelector<HTMLElement>('[data-masthead]');
-    if (!m) return;
-    const set = () => document.documentElement.style.setProperty('--masthead-h', `${m.offsetHeight}px`);
-    set();
-    const ro = new ResizeObserver(set);
-    ro.observe(m);
-    return () => ro.disconnect();
-  }, [brief !== null, wide]);
 
   // Earlier days load above the view. The first day on screen is pinned where it was, so nothing the person is looking
   // at moves (done by hand: Safari has no CSS scroll anchoring). On load that keeps today under the masthead.
@@ -215,6 +191,9 @@ export function BriefView() {
     return () => removeEventListener('keydown', key);
   }, [wide, focus]);
 
+  const allCards: MeCard[] = days.flatMap((d) => [...d.decisions, ...d.updates.map((t) => t.latest), ...d.signals.map((t) => t.latest)]);
+  useChromeCards(allCards, { at: cachedAt, timezone: brief?.timezone });
+
   if (error) return <main className="mx-auto max-w-xl p-4 text-destructive">{error}</main>;
   if (!brief || wide === null) return <main className="mx-auto max-w-xl p-4 text-muted-foreground">Loading…</main>;
 
@@ -225,7 +204,6 @@ export function BriefView() {
   const lastDay = addDays(today, 1);
   const week: WeekDay[] = weekOf(shownDay).map((date) => ({ date, open: openOn.has(date), reachable: date >= firstDay && date <= lastDay }));
   const strip = <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />;
-  const allCards: MeCard[] = days.flatMap((d) => [...d.decisions, ...d.updates.map((t) => t.latest), ...d.signals.map((t) => t.latest)]);
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
 
   const decision = (c: MeCard) => (
@@ -237,7 +215,7 @@ export function BriefView() {
 
   return (
     <div className="min-h-dvh pb-24">
-      <Masthead today={today} timezone={tz} density={density} onDensity={setDensity} cards={allCards} cachedAt={cachedAt} strip={strip} wide={wide} />
+      <MastheadRow>{strip}</MastheadRow>
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
         {days

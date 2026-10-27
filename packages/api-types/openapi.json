@@ -1943,6 +1943,41 @@
               "$ref": "#/components/schemas/CardSummary"
             },
             "description": "Every card of its thread, newest last; for an order, the order first"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "decided_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                },
+                "edited_proposal": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "delegated_to": {
+                  "type": "string"
+                },
+                "by": {
+                  "type": "string",
+                  "description": "The device that recorded it, by name"
+                }
+              },
+              "required": [
+                "decision",
+                "decided_at",
+                "by"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The decision log entries for this card, oldest first (§4.4)"
           }
         },
         "required": [
@@ -1951,7 +1986,8 @@
           "predecessors",
           "successors",
           "references",
-          "thread"
+          "thread",
+          "decisions"
         ],
         "additionalProperties": false
       },
