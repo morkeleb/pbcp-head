@@ -6,19 +6,18 @@ Oct 26, 2026 · @Morten Nielsen
 
 The head is a morning-on-the-phone product. The brief is read in bed, in the car, between meetings; a decision is a swipe, not a session. A web app in a mobile browser will not build that habit, so a native app is the thing that turns the protocol into a product people keep.
 
-The app adds nothing to the protocol. It is one more human-facing client of the head, and the protocol was designed so that this is true: decision cards with a default map onto a swipe, choice lists onto controls on the card, snooze onto a long-press, the day view onto a scroll. The one thing that is mobile-only is a push notification on `urgency: immediate`, and that is a hosted-head feature, not a protocol one.
+The app adds nothing to the protocol. It is one more human-facing client of the head, and the protocol was designed so that this is true: decision cards with a default map onto a swipe, choice lists onto controls on the card, snooze onto a long-press, earlier days onto scrolling up the timeline. The one thing that is mobile-only is a push notification on `urgency: immediate`, and that is a hosted-head feature, not a protocol one.
 
 Success looks like: the person opens the app once in the morning, clears every decision in under two minutes, and does not open a mail client until lunch.
 
 ## Scope
 
-Four screens, and a deliberate list of what the phone does not do.
+Three screens, and a deliberate list of what the phone does not do.
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
 | **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow below), each opening with its paragraph; open decisions, then artifacts (Updates) and signals folded by thread. Built from the four components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
 | **Card** | One card in full: markdown body, `mermaid` rendered, source link, thread history collapsed below | Decide, snooze, open source, see thread |
-| **Day** | Any date: every card received that day with its decision, in order — the decision log as a timeline | Scroll, jump to date, open a card |
 | **Orders** | Open orders with `exec_state`, grouped by executor; progress cards inline | Dictate a new order (text or voice); cancel |
 
 **The four components.** The web brief (`app/(ui)/brief/`) is the reference the phone matches. It is made of four self-contained components, each typed from the `/api/me` card shape (`packages/api-types`); the app builds the same four, under the same names, with the same tokens (`app/globals.css`: Newsreader for the masthead, day headings and card titles, Inter for everything else, one violet accent, hairline rules, no shadows):
@@ -120,13 +119,13 @@ The head needs one addition for this: an outbox row written in the same transact
 - [ ] Passkey registration and sign-in on the web head
 - [ ] `/api/me/` endpoints, with the web UI moved onto them so the phone shares one data path
 - [ ] OpenAPI generated from the Zod schemas, so the Swift client is generated rather than hand-written
-- [ ] Brief and Day views working on the web for a few weeks — the phone copies what proved useful there
+- [ ] The brief (its timeline of days) working on the web for a few weeks — the phone copies what proved useful there
 - [ ] APNs outbox and sender (hosted tier), behind a config flag
 
 **App milestones.**
 
 1. Sign in, Brief, Card, actions on the card with choice lists, swipe-to-default with undo. Usable for the morning in the first build.
-2. Day view, snooze, acknowledgement, settings (devices, producers).
+2. Earlier days in the timeline, snooze, acknowledgement, settings (devices, producers).
 3. Orders: dictation with voice, open-orders list, cancel.
 4. Push on `immediate`; quiet hours.
 5. Android, same API, after the iOS gesture set has been stable for a month.

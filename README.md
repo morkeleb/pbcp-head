@@ -38,7 +38,7 @@ pnpm dev                         # then open /signin from the enroll link, and /
 | `GET /api/me/svg/{hash}`, `GET /api/me/img?u=&s=` | content hash / signed URL | §3.1 |
 | `GET /api/cron/brief` | `CRON_SECRET` | nightly `head:daily` card |
 | `POST /api/render/draw` | key derived from `SESSION_SECRET` | internal: draws one mermaid fence (the only route with Chromium) |
-| `/brief`, `/day/{date}`, `/card/{id}`, `/orders`, `/signin` | web pages over `/api/me` | |
+| `/brief`, `/card/{id}`, `/orders`, `/signin` | web pages over `/api/me` | |
 | `/manifest.webmanifest`, `/sw.js` | none | the web app, installable (below) |
 
 The human API's contract is `packages/api-types/openapi.json`, generated from `lib/api/schemas.ts` (`pnpm api:generate`). The phone's Swift client in `apps/ios/Generated/` is generated from it; see `packages/api-types/README.md`. Every `/api/me` request may send `X-Timezone`, and the head follows the owner's active device unless `/api/me/settings` pins a zone.

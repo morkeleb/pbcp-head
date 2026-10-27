@@ -6,7 +6,7 @@
 //   data          GET /api/me/brief, /api/me/cards, /api/me/cards/{id}: stale-while-revalidate. A cached response
 //                 is answered first, marked `x-pbcp-from-cache` with the time it was fetched (the page shows
 //                 "as of <time>"), and the network answer is posted to the page when it arrives
-//   pages         /brief, /day/{date}, /card/{id} (documents and Next.js's RSC requests): stale-while-revalidate;
+//   pages         /brief, /card/{id} (documents and Next.js's RSC requests): stale-while-revalidate;
 //                 a page never opened on this device answers an offline notice
 //   media         /api/me/svg/{hash}, /api/me/img?u=&s=: cache-first by URL (content-addressed or signed)
 //   everything else, and every request that is not a GET, goes to the network untouched. Nothing is queued:
@@ -20,7 +20,7 @@ const SHELL = 'pbcp-shell-' + BUILD;
 const PAGES = 'pbcp-pages';
 const DATA = 'pbcp-data';
 const MEDIA = 'pbcp-media';
-const SHELL_PAGES = ['/brief', '/orders', '/day/2000-01-01', '/card/_'];
+const SHELL_PAGES = ['/brief', '/orders', '/card/_'];
 const SHELL_FILES = ['/manifest.webmanifest', '/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
@@ -59,7 +59,7 @@ self.addEventListener('fetch', (event) => {
   if (path.startsWith('/_next/static/')) return event.respondWith(cacheFirst(SHELL, req));
   if (path.startsWith('/api/me/svg/') || path === '/api/me/img') return event.respondWith(cacheFirst(MEDIA, req));
   if (path === '/api/me/brief' || path === '/api/me/cards' || path.startsWith('/api/me/cards/')) return event.respondWith(swr(DATA, req, event, true));
-  if (path === '/brief' || path.startsWith('/day/') || path.startsWith('/card/')) return event.respondWith(swr(PAGES, req, event, false));
+  if (path === '/brief' || path.startsWith('/card/')) return event.respondWith(swr(PAGES, req, event, false));
 });
 
 /** A network response as stored: with the time it was fetched. */

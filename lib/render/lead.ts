@@ -17,18 +17,17 @@ export function cutSummary(s: string, max = SUMMARY_DISPLAY_MAX): string {
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": '#39' }[c]};`);
 
 /**
- * A body lead's markdown as one inline line: its lines joined by a space, and a leading block marker (a list
- * item (a marker followed by a space, so `**bold**` stays bold), a quotation, a table row: §3.1 lets the lead's
- * first line be one) escaped, so it renders as text in a
- * line, not as a list or a quotation.
+ * A body lead's markdown as one inline line: its lines joined by a space. §3.1 lets the lead's first line be a list
+ * item or a quotation; its marker (`- `, `* `, `+ `, `1. `, `1) `, `> `) is stripped, so the lead reads as the text it
+ * marks, not as "- From: …". A marker needs its space, so `**bold**` stays bold. A table row's `|` is escaped.
  */
 export function inlineLead(text: string): string {
   return text
     .split('\n')
     .join(' ')
-    .replace(/^(\s*)([-*+])(?=[ \t])/, '$1\\$2')
-    .replace(/^(\s*)([>|])/, '$1\\$2')
-    .replace(/^(\s*\d{1,9})([.)])(?=[ \t])/, '$1\\$2');
+    .replace(/^\s*(?:[-*+]|\d{1,9}[.)])[ \t]+/, '')
+    .replace(/^\s*(?:>[ \t]?)+/, '')
+    .replace(/^(\s*)\|/, '$1\\|');
 }
 
 export interface PresentedLead extends Lead {

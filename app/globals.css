@@ -220,8 +220,11 @@
     width: 100%;
     height: auto;
     cursor: zoom-in;
-    background: #fff;
     border-radius: 4px;
+  }
+  /* A light drawing on white; one drawn for a dark page carries its own ground. */
+  .rendered figure img:not([src*="theme=dark"]) {
+    background: #fff;
   }
   .rendered figcaption {
     font-size: var(--text-meta);
@@ -251,7 +254,8 @@
   .viewer .bar { display: flex; gap: 8px; padding: 10px; align-items: center; }
   .viewer .bar button { background: transparent; color: inherit; border: 1px solid #3a4452; border-radius: 6px; min-width: 40px; min-height: 36px; padding: 0 10px; font-size: var(--text-control); }
   .viewer .stage { flex: 1; overflow: hidden; touch-action: none; position: relative; cursor: grab; }
-  .viewer .stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; background: #fff; user-select: none; -webkit-user-drag: none; }
+  .viewer .stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; user-select: none; -webkit-user-drag: none; }
+  .viewer .stage img:not([src*="theme=dark"]) { background: #fff; }
   .viewer .caption { padding: 6px 12px; font-size: var(--text-lead); }
   .viewer details { padding: 0 12px 12px; max-height: 30vh; overflow: auto; }
   .viewer pre { white-space: pre-wrap; font-size: 12px; color: #c9d1dc; }

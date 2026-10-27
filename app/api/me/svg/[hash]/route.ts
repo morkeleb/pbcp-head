@@ -26,15 +26,33 @@ function withIntrinsicSize(svg: string): string {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: Request, { params }: { params: Promise<{ hash: string }> }): Promise<Response> {
+/** A light drawing shown on a dark page: on its own white ground, so it stays readable there. */
+function onWhite(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (root) =>
+    /\sstyle="/.test(root)
+      ? root.replace(/\sstyle="([^"]*)"/, (_m, style: string) => ` style="${style.replace(/;?\s*$/, ';')}background-color:#fff"`)
+      : root.replace(/^<svg/, '<svg style="background-color:#fff"'),
+  );
+}
+
+/**
+ * `?theme=dark` (the page is dark): the fence as drawn for a dark page; if that drawing does not exist (it failed, or
+ * the card has not been rendered since dark drawings began), the light one on white, cached only briefly so the dark
+ * one is served once it exists.
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ hash: string }> }): Promise<Response> {
   const { hash } = await params;
   if (!/^[0-9a-f]{64}$/.test(hash)) return notFound();
-  const [row] = await db().select({ svg: diagrams.svg }).from(diagrams).where(eq(diagrams.hash, hash));
+  const dark = new URL(req.url).searchParams.get('theme') === 'dark';
+  const [row] = await db().select({ svg: diagrams.svg, svgDark: diagrams.svgDark }).from(diagrams).where(eq(diagrams.hash, hash));
   if (!row?.svg) return notFound();
-  return new Response(withIntrinsicSize(row.svg), {
+  const fallback = dark && !row.svgDark;
+  const svg = dark ? (row.svgDark ?? onWhite(row.svg)) : row.svg;
+  return new Response(withIntrinsicSize(svg), {
     headers: {
       'content-type': 'image/svg+xml; charset=utf-8',
-      'cache-control': 'public, max-age=31536000, immutable',
+      'cache-control': fallback ? 'public, max-age=60' : 'public, max-age=31536000, immutable',
+      ...(fallback ? { 'x-pbcp-theme': 'light' } : {}),
       'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'",
       'x-content-type-options': 'nosniff',
     },

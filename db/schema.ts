@@ -155,6 +155,9 @@ export const diagrams = pgTable('diagrams', {
   type: text('type').notNull(),
   svg: text('svg'),
   error: text('error'),
+  // The same fence drawn in mermaid's dark theme, for a dark page (null until drawn; a refusal is kept like `error`).
+  svgDark: text('svg_dark'),
+  errorDark: text('error_dark'),
   createdAt: tstz('created_at').notNull().defaultNow(),
 });
 

@@ -12,7 +12,7 @@ const json = (schema: z.ZodType, registry = S.responses) => ({ content: { 'appli
 const TIMEZONE_DESCRIPTION =
   'The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. ' +
   'It is stored on the calling device, and the head follows the zone of the device most recently seen with it ' +
-  '(for the brief, the day view, snooze presets and the nightly card) unless the owner set an override in ' +
+  '(for the brief and its days, snooze presets and the nightly card) unless the owner set an override in ' +
   '/api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.';
 
 const errors = (...statuses: number[]) =>

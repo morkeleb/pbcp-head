@@ -17,7 +17,7 @@ import { proxiedImageSrc } from './proxy';
 import { sanitiseSvg } from './svg';
 
 /** Bump when the pipeline's output changes, so stored renders are redone on next read. */
-export const RENDER_VERSION = 'h2.3'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body; h2.3: `**bold**` leads stay bold
+export const RENDER_VERSION = 'h2.4'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body; h2.3: `**bold**` leads stay bold; h2.4: a list or quote lead loses its marker
 
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -26,12 +26,31 @@ const g = globalThis as unknown as { __pbcpDraws?: number };
 export const drawCount = (): number => g.__pbcpDraws ?? 0;
 export const resetDrawCount = (): void => void (g.__pbcpDraws = 0);
 
-/** The diagram dependency of the markdown renderer: cached, drawn on a miss. */
+/**
+ * The fence drawn for a dark page too, stored beside the light drawing. A refusal is kept (the light one is served
+ * instead); an infrastructure failure is not, so the next render of a card with this fence tries again. Not counted
+ * in drawCount, which is the pipeline's one drawing per fence (R07).
+ */
+async function drawDark(db: Db, hash: string, source: string): Promise<void> {
+  try {
+    const svgDark = sanitiseSvg(await drawSvg(source, `d${hash.slice(0, 12)}`, 'dark'), { allowStyle: true });
+    await db.update(diagrams).set({ svgDark }).where(eq(diagrams.hash, hash));
+  } catch (e) {
+    if (e instanceof DiagramError) await db.update(diagrams).set({ errorDark: e.message }).where(eq(diagrams.hash, hash));
+    else console.error(`drawing ${hash} for a dark page failed; it is retried on the next render`, e);
+  }
+}
+
+/** The diagram dependency of the markdown renderer: cached, drawn on a miss, in both page themes. */
 export function cachedDiagrams(db: Db) {
   return async (source: string): Promise<DiagramOutcome> => {
     const hash = sha256(source);
     const [hit] = await db.select().from(diagrams).where(eq(diagrams.hash, hash));
-    if (hit) return hit.svg !== null ? { status: 'render', hash } : { status: 'fallback', message: hit.error ?? 'diagram could not be drawn' };
+    if (hit) {
+      // Drawn before dark drawings existed, or a dark drawing that failed for want of a browser: draw it now.
+      if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(db, hash, source);
+      return hit.svg !== null ? { status: 'render', hash } : { status: 'fallback', message: hit.error ?? 'diagram could not be drawn' };
+    }
     g.__pbcpDraws = drawCount() + 1;
     let row: typeof diagrams.$inferInsert;
     try {
@@ -43,6 +62,7 @@ export function cachedDiagrams(db: Db) {
       row = { hash, type: diagramType(source), error: e.message };
     }
     await db.insert(diagrams).values(row).onConflictDoNothing();
+    if (row.svg) await drawDark(db, hash, source);
     return row.svg ? { status: 'render', hash } : { status: 'fallback', message: row.error! };
   };
 }

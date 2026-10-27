@@ -15,12 +15,12 @@ export const maxDuration = 60;
 export function POST(req: Request): Promise<Response> {
   return handle(async () => {
     if (!verifyDrawKey(req.headers.get('x-pbcp-draw-key'))) throw new HttpError(401, 'unauthorized', 'internal route');
-    const { source, svgId } = await readObject(req);
-    if (typeof source !== 'string' || typeof svgId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(svgId) || Buffer.byteLength(source) > MAX_FENCE_BYTES) {
-      throw new HttpError(400, 'invalid_request', 'expected { source, svgId }');
+    const { source, svgId, theme } = await readObject(req);
+    if (typeof source !== 'string' || typeof svgId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(svgId) || Buffer.byteLength(source) > MAX_FENCE_BYTES || (theme !== undefined && theme !== 'light' && theme !== 'dark')) {
+      throw new HttpError(400, 'invalid_request', 'expected { source, svgId, theme? }');
     }
     try {
-      return json({ svg: await drawSvg(source, svgId) } satisfies DrawResponse);
+      return json({ svg: await drawSvg(source, svgId, theme ?? 'light') } satisfies DrawResponse);
     } catch (e) {
       if (e instanceof DiagramError) return json({ error: 'diagram', message: e.message } satisfies DrawResponse, 422);
       throw e;

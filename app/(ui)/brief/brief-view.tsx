@@ -24,6 +24,8 @@ const WIDE = '(min-width: 900px)';
 /** Updates are folded after this many, behind "More updates (N)". */
 const FOLD_AT = 6;
 const HINT_KEY = 'pbcp.swipe-hint';
+/** How long the swipe hint stays up, unless the person scrolls first. */
+const HINT_MS = 8000;
 
 function useWide(): boolean | null {
   const [wide, setWide] = useState<boolean | null>(null);
@@ -158,16 +160,31 @@ export function BriefView() {
     if (jumpTo.current && scrollToDay(jumpTo.current)) jumpTo.current = null;
   }, [loadedBack, scrollToDay]);
 
-  // The swipe hint: shown on the first visit, then never again.
+  // The swipe hint: shown once per device, then never again. Once shown it also leaves the screen (after a few
+  // seconds, or when the person first scrolls): a home-screen app on iOS is resumed rather than reloaded, so a hint that only
+  // went away on the next load stayed up on every launch.
   useEffect(() => {
+    let shown = false;
     try {
       if (!localStorage.getItem(HINT_KEY)) {
-        setHint(true);
         localStorage.setItem(HINT_KEY, 'shown');
+        shown = true;
       }
     } catch {
       // no storage: no hint
     }
+    if (!shown) return;
+    setHint(true);
+    const hide = () => setHint(false);
+    const timer = setTimeout(hide, HINT_MS);
+    // The person's own scrolling, not the brief's (it scrolls itself to keep today in place as earlier days load).
+    addEventListener('wheel', hide, { once: true, passive: true });
+    addEventListener('touchmove', hide, { once: true, passive: true });
+    return () => {
+      clearTimeout(timer);
+      removeEventListener('wheel', hide);
+      removeEventListener('touchmove', hide);
+    };
   }, []);
 
   // Broadsheet keys: j/k move between cards, enter opens, d dismisses a decision (after the undo window).
@@ -211,7 +228,7 @@ export function BriefView() {
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
 
   const decision = (c: MeCard) => (
-    <DecisionCard key={c.id} card={c} timezone={tz} density={density} onChange={change} focused={focus === c.id} handle={register(c.id)} />
+    <DecisionCard key={c.id} card={c} timezone={tz} density={density} onChange={change} focused={focus === c.id} handle={register(c.id)} showTime={wide} />
   );
   const update = (t: UpdateThread) => (
     <UpdateRow key={t.latest.id} thread={t} timezone={tz} density={density} focused={focus === t.latest.id} handle={register(t.latest.id)} />
@@ -222,7 +239,7 @@ export function BriefView() {
       <Masthead today={today} timezone={tz} density={density} onDensity={setDensity} cards={allCards} cachedAt={cachedAt} strip={strip} wide={wide} />
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
-        {first && first <= reachableFrom && <p className="py-4 text-center text-lead text-muted-foreground">The brief goes back {MAX_DAYS_BACK} days; the day view has the rest.</p>}
+        {first && first <= reachableFrom && <p className="py-4 text-center text-lead text-muted-foreground">The brief goes back {MAX_DAYS_BACK} days.</p>}
         {days
           // An earlier day with nothing on it is not shown: no header for an empty day.
           .filter((d) => d.kind !== 'past' || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)

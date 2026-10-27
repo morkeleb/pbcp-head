@@ -7,6 +7,7 @@
 
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
 import { cutSummary, inlineLead } from '../render/lead';
+import { FOLD_FIELD, FOLD_VERSION } from './fold-version';
 
 export interface FoldInput {
   owner: string;
@@ -138,6 +139,7 @@ export function foldDaily(input: FoldInput): ProducerCard | null {
     urgency: 'brief',
     title: `Brief for ${longDate(input.date)}`,
     references: input.openDecisions.map((c) => c.id),
+    [FOLD_FIELD]: FOLD_VERSION,
     emitted_at: input.emittedAt,
     body: lines.join('\n').trimEnd() + '\n',
   };

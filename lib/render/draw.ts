@@ -77,6 +77,23 @@ const MERMAID_CONFIG = {
   theme: 'default',
 } as const;
 
+/** The page theme a diagram is drawn for. */
+export type DiagramTheme = 'light' | 'dark';
+
+/**
+ * A dark drawing carries its own background, the dark card colour (app/globals.css `.dark --card`), so it sits on a
+ * dark page as part of the card rather than as a white box. A light one stays transparent on the light card.
+ */
+const DARK_BACKGROUND = '#111c27';
+const themed = (theme: DiagramTheme) =>
+  theme === 'dark'
+    ? {
+        // Charts paint their own plot area (#333 in mermaid's dark theme); it gets the same ground as the rest.
+        mermaidConfig: { ...MERMAID_CONFIG, theme: 'dark', themeVariables: { background: DARK_BACKGROUND, xyChart: { backgroundColor: DARK_BACKGROUND } } },
+        backgroundColor: DARK_BACKGROUND,
+      }
+    : { mermaidConfig: MERMAID_CONFIG, backgroundColor: 'transparent' };
+
 const isTimeout = (e: unknown) => e instanceof Error && e.message.startsWith('TimeoutError');
 
 /** The file path of mermaid's standalone bundle, resolved by Node at runtime (a bundler must not touch it). */
@@ -122,13 +139,14 @@ async function parseError(source: string): Promise<string | null> {
  * established by mermaid itself (its error graphic, or a failing parse), never by guessing from an error
  * message; any other error is the drawing infrastructure, which callers must not cache.
  */
-export async function drawSvg(source: string, svgId: string): Promise<string> {
+export async function drawSvg(source: string, svgId: string, theme: DiagramTheme = 'light'): Promise<string> {
   return slot(async () => {
     const b = await browser();
     let timer: NodeJS.Timeout | undefined;
     try {
+      const { mermaidConfig, backgroundColor } = themed(theme);
       const drawn = await Promise.race([
-        renderMermaid(b, source, 'svg', { mermaidConfig: MERMAID_CONFIG as never, backgroundColor: 'transparent', fontEmbed: false, svgId }),
+        renderMermaid(b, source, 'svg', { mermaidConfig: mermaidConfig as never, backgroundColor, fontEmbed: false, svgId }),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('TimeoutError: drawing took too long')), TIMEOUT_MS);
         }),

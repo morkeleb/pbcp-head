@@ -68,7 +68,7 @@ describe('the nightly fold', () => {
     const { body } = fold();
     expect(body).toContain('**Yesterday**');
     expect(body).toContain('- [Sent](<https://head.example/card/hermes%3Agmail%3Ab>) (2 in thread) — The reply went out at 09:12.');
-    expect(body).toContain('— \\- **From:** Jonas'); // a list-item lead stays inline
+    expect(body).toMatch(/— \*\*From:\*\* Jonas\n/); // a list-item lead (its first line, §3.1), inline, without its marker
     const cut = entries(body).find((l) => l.includes('mail%3Ainbox%3A7'))!.split(' — ')[1]!;
     expect(cut.length).toBeLessThanOrEqual(280 + 10);
     expect(cut).toMatch(/…$/);

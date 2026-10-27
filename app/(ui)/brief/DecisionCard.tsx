@@ -48,6 +48,8 @@ export interface DecisionCardProps {
   onChange: (card: MeCard) => void;
   /** Shown as the keyboard's current card (broadsheet). */
   focused?: boolean;
+  /** The time in the header; off on the timeline, whose rail carries it. */
+  showTime?: boolean;
   handle?: Ref<DecisionCardHandle>;
 }
 
@@ -60,7 +62,7 @@ const SNOOZES = [
 /** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
 export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
 
-export function DecisionCard({ card, timezone, density, onChange, focused, handle }: DecisionCardProps) {
+export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);
   const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
@@ -120,9 +122,9 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
   const meta = (
     <div className="flex min-w-0 items-center gap-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
       <span className="truncate">{card.producer}</span>
-      <span aria-hidden>·</span>
+      {showTime && <span aria-hidden>·</span>}
       {!card.seen_at && !decided && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
-      <time dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>
+      {showTime && <time dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>}
     </div>
   );
 
@@ -256,22 +258,26 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
         focused && 'ring-2 ring-ring',
       )}
       style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
-      {...swipe.handlers}
+      ref={swipe.ref}
     >
       {density === 'ledger' && !open ? (
-        // Ledger: one line; tapping the line opens the card, the buttons act in place.
-        <div className="flex items-center gap-3">
-          <button className="flex min-w-0 flex-1 items-baseline gap-2 text-left" onClick={() => setOpen(true)} aria-expanded={false}>
-            <span className="flex-none text-meta font-medium uppercase tracking-meta text-muted-foreground">{card.producer}</span>
-            <span className="truncate font-serif text-body font-semibold">{card.title}</span>
-            {card.rendered_lead && <span className="hidden truncate text-lead text-muted-foreground min-[600px]:inline">— <span dangerouslySetInnerHTML={{ __html: card.rendered_lead }} /></span>}
+        // Ledger: the title (never cut short) and the actions. On a phone the title has its own line and the actions the
+        // next; on the broadsheet they share one. Every option is a control in place, choice lists included (§4.5): no
+        // "Choose…" in front of them. Tapping the title opens the card.
+        <div className="ledger-line flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <button className="ledger-title min-w-0 basis-full text-left min-[900px]:flex-1 min-[900px]:basis-0" onClick={() => setOpen(true)} aria-expanded={false}>
+            <span className="mr-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">{card.producer}</span>
+            <span className="font-serif text-body font-semibold break-words">{card.title}</span>
+            {card.rendered_lead && (
+              <span className="hidden text-lead text-muted-foreground min-[900px]:inline">
+                {' '}— <span dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />
+              </span>
+            )}
           </button>
           {decided ? (
-            <span className="flex-none text-lead text-muted-foreground">{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone)}</>}</span>
-          ) : grouped ? (
-            <Button size="xs" variant="outline" onClick={() => setOpen(true)}>Choose…</Button>
+            <span className="text-lead text-muted-foreground">{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone)}</>}</span>
           ) : (
-            <div className="flex flex-none items-center gap-1">
+            <div className="decide-row flex flex-wrap items-center gap-1">
               {list.map((o) => (
                 <Button key={o.id} size="xs" variant={o === byDefault ? 'default' : 'outline'} disabled={!online} onClick={() => void decide(o.id)}>{o.label}</Button>
               ))}

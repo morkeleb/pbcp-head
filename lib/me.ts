@@ -9,6 +9,7 @@ import { cards, changeCounter, devices, heads, producerTokens } from '../db/sche
 import { iso, now } from './clock';
 import { HttpError } from './http';
 import { expireDueOrders } from './orders';
+import { currentFold } from './brief/fold-version';
 import { dailyParagraphNow } from './brief/nightly';
 import { renderBody, renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
@@ -124,7 +125,7 @@ export interface Fold {
  *
  * - Open decisions are listed whatever their urgency (§9: a decision stays reachable until decided).
  * - Artifacts and signals are today's (the effective timezone), open, delivered at `brief` or `immediate` after the
- *   ceiling; `log` cards are for the day view only (§9). Immediate threads come first.
+ *   ceiling; `log` cards are only in a day's cards (GET /api/me/cards, the timeline's earlier days; §9). Immediate threads come first.
  * - Snoozed cards are left out until their time; `snoozed` counts them.
  * - `new` lists the ids changed since the last visit; `seq` is the head's counter now, which the client
  *   posts to /api/me/visit when the owner leaves.
@@ -237,9 +238,10 @@ export async function brief(db: Db, headId: string) {
   // fold now, "so far today". None on a day with nothing open and nothing new.
   const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
   let paragraph: { html: string; so_far: boolean } | null = null;
-  if (presentedDaily && presentedDaily.id === `head:daily:${today}`) {
+  if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily)) {
     if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false };
   } else {
+    // No card for today yet, or one folded by an older fold (its lead is not the paragraph): fold now.
     const md = await dailyParagraphNow(db, headId, head.timezone, today);
     if (md) paragraph = { html: (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'), so_far: true };
   }

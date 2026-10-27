@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
+import { currentFold } from '../../../lib/brief/fold-version';
 import type { UpdateThread } from './UpdateRow';
 
 export interface BriefResponse {
@@ -71,7 +72,8 @@ function todayOf(b: BriefResponse): Day {
 
 /** An earlier day: what was decided that day (open decisions are under today), its updates, and its own paragraph. */
 function pastOf(date: string, cards: MeCard[]): Day {
-  const daily = cards.find((c) => c.id === `head:daily:${date}`);
+  // Only a card folded by the current fold opens the day; an older one's lead is not the paragraph.
+  const daily = cards.find((c) => c.id === `head:daily:${date}` && currentFold(c));
   return {
     date,
     kind: 'past',
