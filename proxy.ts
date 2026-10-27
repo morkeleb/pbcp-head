@@ -6,6 +6,7 @@
 // declared oversized body before reading any of it (lib/http.ts readBody), in §7.1's order.
 
 import { NextResponse, type NextRequest } from 'next/server';
+import { prefersHtml } from './lib/accept';
 import { COMMON_HEADERS, pageCsp } from './lib/security';
 
 export function proxy(req: NextRequest): NextResponse {
@@ -14,7 +15,14 @@ export function proxy(req: NextRequest): NextResponse {
   const headers = new Headers(req.headers);
   headers.set('x-nonce', nonce);
   headers.set('content-security-policy', csp);
-  const res = NextResponse.next({ request: { headers } });
+  // GET / is the describe JSON (RFC §7.5, app/route.ts) for producers and anything that does not ask otherwise; a
+  // browser, preferring text/html over application/json, gets the head's front door (app/about) instead.
+  const root = req.nextUrl.pathname === '/';
+  const res =
+    root && prefersHtml(req.headers.get('accept'))
+      ? NextResponse.rewrite(new URL('/about', req.url), { request: { headers } })
+      : NextResponse.next({ request: { headers } });
+  if (root) res.headers.set('vary', 'Accept');
   res.headers.set('content-security-policy', csp);
   for (const [k, v] of Object.entries(COMMON_HEADERS)) res.headers.set(k, v);
   return res;
