@@ -9,7 +9,7 @@ See `CLAUDE.md` for scope and rules, `docs/head-skeleton.md` for the design, and
 ```sh
 git submodule update --init      # @pbcp/core and @pbcp/client, pinned in vendor/pbcp
 pnpm install                     # also builds the vendored packages
-docker compose up -d --wait      # Postgres on localhost:5433
+docker compose up -d --wait postgres   # Postgres on localhost:5433
 cp .env.example .env
 pnpm db:migrate
 pnpm mint-token morten hermes    # creates head `morten`, prints a producer token for root `hermes`
@@ -17,7 +17,11 @@ pnpm enroll morten               # prints a /signin link to register the owner's
 pnpm dev                         # then open /signin from the enroll link, and /brief
 ```
 
-`pnpm test` builds the head and runs everything: unit tests, the HTTP tests, and the conformance suite from `@pbcp/core/conformance` over HTTP against a head started in test mode on the `pbcp_test` database.
+`pnpm test` builds the head and runs everything: unit tests, the HTTP tests, and the conformance suite from `@pbcp/core/conformance` over HTTP against a head started in test mode on the `pbcp_test` database. CI runs the same suites inside the Docker image (`docker compose run --rm head pnpm test:gate`).
+
+## Deploying
+
+[`docs/deploy.md`](docs/deploy.md): Vercel with Neon Postgres, or self-hosted with `docker compose up -d`. The environment is documented in [`.env.example`](.env.example).
 
 ## What is implemented (milestones H1 and H2)
 
@@ -33,8 +37,9 @@ pnpm dev                         # then open /signin from the enroll link, and /
 | `GET/PATCH /api/me`, `GET /api/me/producers`, `PATCH /api/me/producers/{root}`, `GET /api/me/devices`, `DELETE /api/me/devices/{id}` | `Session` | §9, §12 |
 | `GET /api/me/svg/{hash}`, `GET /api/me/img?u=&s=` | content hash / signed URL | §3.1 |
 | `GET /api/cron/brief` | `CRON_SECRET` | nightly `head:daily` card |
+| `POST /api/render/draw` | key derived from `SESSION_SECRET` | internal: draws one mermaid fence (the only route with Chromium) |
 | `/brief`, `/day/{date}`, `/card/{id}`, `/signin` | web pages over `/api/me` | |
 
-Card bodies are rendered once, on receipt, on the server (§3.1): markdown with raw HTML stripped, `mermaid` fences drawn to SVG with the mermaid CLI in headless Chromium with no network, cached by `sha256(fence)`.
+Card bodies are rendered once, on receipt, on the server (§3.1): markdown with raw HTML stripped, `mermaid` fences drawn to SVG with the mermaid CLI in headless Chromium with no network (by the draw route, its own function on Vercel), cached by `sha256(fence)`.
 
 Licensed under the Sustainable Use License (see `LICENSE`).
