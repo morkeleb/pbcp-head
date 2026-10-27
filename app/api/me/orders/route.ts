@@ -4,7 +4,8 @@
 
 import { after } from 'next/server';
 import { db } from '../../../../db/client';
-import { HttpError, json, readObject } from '../../../../lib/http';
+import { OrderRequest, parseRequest } from '../../../../lib/api/schemas';
+import { json, readObject } from '../../../../lib/http';
 import { headSettings, orderProgress, presentCards, rowsFor } from '../../../../lib/me';
 import { giveOrder, ordersFor } from '../../../../lib/orders';
 import { meHandler } from '../../../../lib/owner';
@@ -19,16 +20,8 @@ export const GET = meHandler(async (s) => {
 });
 
 export const POST = meHandler(async (s, req) => {
-  const b = await readObject(req);
-  if (typeof b.to_producer !== 'string' || typeof b.title !== 'string' || (b.body !== undefined && typeof b.body !== 'string')) {
-    throw new HttpError(400, 'invalid_request', 'give to_producer (a producer or *), title and body');
-  }
-  const order = await giveOrder(db(), s.headId, {
-    to_producer: b.to_producer,
-    title: b.title.trim(),
-    body: (b.body as string | undefined) ?? '',
-    ...(b.urgency === 'immediate' || b.urgency === 'brief' || b.urgency === 'log' ? { urgency: b.urgency } : {}),
-  });
+  const b = parseRequest(OrderRequest, await readObject(req));
+  const order = await giveOrder(db(), s.headId, { to_producer: b.to_producer, title: b.title.trim(), body: b.body ?? '', ...(b.urgency ? { urgency: b.urgency } : {}) });
   after(() => renderAfterCommit(db(), s.headId, order));
   const [shown] = await presentCards(db(), await rowsFor(db(), s.headId, [order.id]));
   return json(shown, 201);

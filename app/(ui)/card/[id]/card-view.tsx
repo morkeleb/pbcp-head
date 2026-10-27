@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { api, cardHref, when } from '../../client';
-import { DecisionControls, DecisionSummary, Rendered, type MeCard } from '../../components';
+import { useCallback, useEffect, useState } from 'react';
+import { api, cardHref, OfflineError, useFresh, useOnline, when } from '../../client';
+import { AsOf, DecisionControls, DecisionSummary, NOT_SENT, OfflineNote, Rendered, type MeCard } from '../../components';
 import { CancelOrder, ExecBadge } from '../../orders/orders-view';
 
 interface Summary {
@@ -44,23 +44,40 @@ const host = (url: string) => {
 export function CardView() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [notSent, setNotSent] = useState(false);
+  const online = useOnline();
+  const [path] = useState(() => (typeof location === 'undefined' ? null : `/api/me/cards/${encodeURIComponent(idFromPath())}`));
 
-  const load = async () => {
-    const r = await api<Detail>(`/api/me/cards/${encodeURIComponent(idFromPath())}`);
-    if (r.status !== 200) return setStatus(r.status === 404 ? 'No such card.' : `Could not load the card (${r.status}).`);
-    setDetail(r.body);
-    // Opening the card presents it to its owner (§4.2 seen_at).
-    if (!r.body.card.seen_at) void api(`/api/me/cards/${encodeURIComponent(r.body.card.id)}/seen`, { method: 'POST' });
-  };
-  useEffect(() => void load(), []);
+  const show = useCallback((d: Detail, at: string | null) => {
+    setDetail(d);
+    setCachedAt(at);
+    // Opening the card presents it to its owner (§4.2 seen_at). Offline it is not sent, and not kept for later.
+    if (!d.card.seen_at) api(`/api/me/cards/${encodeURIComponent(d.card.id)}/seen`, { method: 'POST' }).catch(() => undefined);
+  }, []);
+  const load = useCallback(async (network = false) => {
+    const r = await api<Detail>(path!, { network });
+    if (r.status !== 200) return setStatus(r.status === 404 ? 'No such card.' : r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of this card yet.' : `Could not load the card (${r.status}).`);
+    show(r.body, r.cachedAt ?? null);
+  }, [path, show]);
+  useEffect(() => void load(), [load]);
+  const fresh = useCallback((d: Detail) => show(d, null), [show]);
+  const stale = useCallback(() => void load(true), [load]);
+  useFresh(path, fresh, stale);
 
   if (status) return <main><p className="error">{status}</p></main>;
   if (!detail) return <main><p className="muted">Loading…</p></main>;
   const { card, timezone } = detail;
   const update = (c: Partial<MeCard>) => setDetail((d) => d && { ...d, card: { ...d.card, ...c } });
-  const post = async (path: string, body?: unknown) => {
-    const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(card.id)}/${path}`, { method: 'POST', body });
-    if (r.status === 200) update(r.body);
+  const post = async (action: string, body?: unknown) => {
+    setNotSent(false);
+    try {
+      const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(card.id)}/${action}`, { method: 'POST', body });
+      if (r.status === 200) update(r.body);
+    } catch (e) {
+      if (!(e instanceof OfflineError)) throw e;
+      setNotSent(true);
+    }
   };
 
   return (
@@ -69,6 +86,7 @@ export function CardView() {
         <span>{card.producer}</span>·<span>{card.kind}</span>·<span>{when(card.received_at, timezone)}</span>
         <span className="badge">{card.state}</span>
         {card.snoozed_until && <span className="badge">snoozed until {when(card.snoozed_until, timezone)}</span>}
+        <AsOf at={cachedAt} timezone={timezone} />
       </div>
       <h1>{card.title}</h1>
       {card.source && (
@@ -100,18 +118,20 @@ export function CardView() {
 
       {card.state === 'open' && card.kind !== 'decision' && card.kind !== 'order' && (
         <div className="row">
-          <button onClick={() => post('ack')} disabled={!!card.acknowledged_at}>{card.acknowledged_at ? 'Acknowledged' : 'Acknowledge'}</button>
+          <button onClick={() => post('ack')} disabled={!!card.acknowledged_at || !online}>{card.acknowledged_at ? 'Acknowledged' : 'Acknowledge'}</button>
         </div>
       )}
       {card.state === 'open' && card.kind !== 'order' && (
         <div className="row">
           <span className="muted" style={{ alignSelf: 'center' }}>Snooze:</span>
-          <button onClick={() => post('snooze', { preset: 'tonight' })}>Tonight</button>
-          <button onClick={() => post('snooze', { preset: 'tomorrow' })}>Tomorrow’s brief</button>
-          <button onClick={() => post('snooze', { preset: 'next-week' })}>Next week</button>
-          {card.snoozed_until && <button onClick={() => post('unsnooze')}>Unsnooze</button>}
+          <button disabled={!online} onClick={() => post('snooze', { preset: 'tonight' })}>Tonight</button>
+          <button disabled={!online} onClick={() => post('snooze', { preset: 'tomorrow' })}>Tomorrow’s brief</button>
+          <button disabled={!online} onClick={() => post('snooze', { preset: 'next-week' })}>Next week</button>
+          {card.snoozed_until && <button disabled={!online} onClick={() => post('unsnooze')}>Unsnooze</button>}
         </div>
       )}
+      {card.state === 'open' && card.kind !== 'decision' && <OfflineNote />}
+      {notSent && <p className="error">{NOT_SENT}</p>}
 
       {detail.successors.length > 0 && (
         <>

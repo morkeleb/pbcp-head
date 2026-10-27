@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { api, cardHref } from '../../client';
-import type { MeCard } from '../../components';
+import { useCallback, useEffect, useState } from 'react';
+import { api, cardHref, useFresh } from '../../client';
+import { AsOf, type MeCard } from '../../components';
 
 interface Page {
   cards: MeCard[];
@@ -25,15 +25,28 @@ export function DayView({ date }: { date: string }) {
   const [next, setNext] = useState<number | null>(null);
   const [tz, setTz] = useState<string | undefined>();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const first = `/api/me/cards?date=${date}&limit=100`;
 
-  const fetchPage = async (after: number | null) => {
-    const r = await api<Page>(`/api/me/cards?date=${date}&limit=100${after ? `&after=${after}` : ''}`);
+  const showFirst = useCallback((p: Page, at: string | null) => {
+    setCards(p.cards);
+    setNext(p.next);
+    setTz(p.timezone);
+    setCachedAt(at);
+    setState('ready');
+  }, []);
+  const fetchPage = async (after: number | null, network = false) => {
+    const r = await api<Page>(after ? `${first}&after=${after}` : first, { network });
     if (r.status !== 200) return setState('error');
-    setCards((cs) => (after ? [...cs, ...r.body.cards] : r.body.cards));
+    if (!after) return showFirst(r.body, r.cachedAt ?? null);
+    setCards((cs) => [...cs, ...r.body.cards]);
     setNext(r.body.next);
-    setTz(r.body.timezone);
     setState('ready');
   };
+  const fresh = useCallback((p: Page) => showFirst(p, null), [showFirst]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stale = useCallback(() => void fetchPage(null, true), [first]);
+  useFresh(first, fresh, stale);
   useEffect(() => {
     setState('loading');
     void fetchPage(null);
@@ -47,6 +60,7 @@ export function DayView({ date }: { date: string }) {
         <button onClick={() => router.push(`/day/${shift(date, -1)}`)} aria-label="Previous day">‹</button>
         <input type="date" value={date} onChange={(e) => e.target.value && router.push(`/day/${e.target.value}`)} style={{ font: 'inherit', padding: 6 }} />
         <button onClick={() => router.push(`/day/${shift(date, 1)}`)} aria-label="Next day">›</button>
+        <AsOf at={cachedAt} timezone={tz} />
       </div>
       {state === 'error' && <p className="error">Could not load this day.</p>}
       {state === 'loading' && <p className="muted">Loading…</p>}

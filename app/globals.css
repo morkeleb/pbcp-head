@@ -25,6 +25,8 @@ nav.top .spacer { flex: 1; }
 .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .badge.new { border-color: var(--new); color: var(--new); }
 .badge.decided { color: var(--ok); border-color: var(--ok); }
+.badge.as-of { border-style: dashed; }
+.offline { font-size: 14px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 button, .button { font: inherit; font-size: 15px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; min-height: 40px; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }

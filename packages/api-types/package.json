@@ -1,0 +1,11 @@
+{
+  "name": "@pbcp-head/api-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The head's human API (/api/me/ and GET /) as an OpenAPI 3.1 document: the contract the phone builds against. Generated; do not edit.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "exports": {
+    "./openapi.json": "./openapi.json"
+  },
+  "files": ["openapi.json"]
+}

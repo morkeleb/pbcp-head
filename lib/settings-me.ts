@@ -1,5 +1,5 @@
 // The human API's writes that are not card operations: the last-visit cursor, producer settings
-// (ceilings, revoke), devices, and the head's timezone.
+// (ceilings, revoke), devices, and the head's settings (display name, timezone override).
 
 import { URGENCIES, type Urgency } from '@pbcp/core';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -7,7 +7,9 @@ import type { Db } from '../db/client';
 import { changeCounter, devices, heads, producerTokens } from '../db/schema';
 import { iso, now } from './clock';
 import { HttpError } from './http';
-import { addDays, isTimeZone, localDate, localMinutes, zonedInstant } from './time';
+import { addDays, localDate, localMinutes, zonedInstant } from './time';
+import { SNOOZE_PRESETS } from './api/schemas';
+import { canonicalZone, effectiveTimezone } from './timezone';
 
 /**
  * POST /api/me/visit: the owner left the brief having seen everything up to `seq` (default: now). The
@@ -30,15 +32,12 @@ export async function visit(db: Db, headId: string, seq: unknown) {
   return { seq: row!.seq, at: iso(row!.at!) };
 }
 
-/** Snooze presets, in the head's timezone (mobile PRD gesture model: tonight, tomorrow's brief, next week). */
-export const SNOOZE_PRESETS = ['tonight', 'tomorrow', 'next-week'] as const;
 const BRIEF_TIME = '05:30';
 const EVENING = '18:00';
 
 export async function snoozeUntil(db: Db, headId: string, body: { until?: unknown; preset?: unknown }): Promise<string | null> {
   if (body.preset !== undefined) {
-    const [head] = await db.select({ tz: heads.timezone }).from(heads).where(eq(heads.id, headId));
-    const tz = head!.tz;
+    const { timezone: tz } = await effectiveTimezone(db, headId);
     const at = new Date(now());
     const today = localDate(at, tz);
     switch (body.preset) {
@@ -88,10 +87,42 @@ export async function deleteDevice(db: Db, headId: string, id: string): Promise<
   if (r.length === 0) throw new HttpError(404, 'not_found', `no signed-in device ${id}`);
 }
 
-/** PATCH /api/me { timezone }: the owner's IANA timezone, which sets the day for the brief, day view and nightly card. */
-export async function updateHead(db: Db, headId: string, body: { timezone?: unknown }) {
-  if (body.timezone !== undefined) {
-    if (typeof body.timezone !== 'string' || !isTimeZone(body.timezone)) throw new HttpError(400, 'invalid_request', 'timezone must be an IANA zone, e.g. Europe/Copenhagen');
-    await db.update(heads).set({ timezone: body.timezone }).where(eq(heads.id, headId));
+export const DISPLAY_NAME_MAX = 100;
+
+/**
+ * GET /api/me/settings: the head's settings. `head` is the stable id producers address (`to_person`);
+ * `display_name` is only for showing. `timezone` is the effective zone, `timezone_override` the owner's explicit
+ * one (null: follow the devices), `timezone_source` which of the two (or the UTC default) is in force, and
+ * `device_timezone` the most recent zone a device sent.
+ */
+export async function settings(db: Db, headId: string) {
+  const [head] = await db.select().from(heads).where(eq(heads.id, headId));
+  if (!head) throw new HttpError(404, 'not_found', 'no such head');
+  const zone = await effectiveTimezone(db, headId, head.timezone);
+  return {
+    head: head.id,
+    display_name: head.displayName,
+    timezone: zone.timezone,
+    timezone_source: zone.source,
+    timezone_override: zone.override,
+    device_timezone: zone.device ? { device_id: zone.device.id, timezone: zone.device.timezone, seen_at: iso(zone.device.seen_at) } : null,
+  };
+}
+
+/**
+ * PATCH /api/me/settings { timezone?: zone | null, display_name?: string | null }. A zone sets the override,
+ * which wins over the devices; null clears it, and the head follows the device most recently seen again.
+ */
+export async function updateSettings(db: Db, headId: string, body: { timezone?: unknown; display_name?: unknown }) {
+  const set: { timezone?: string | null; displayName?: string | null } = {};
+  if (body.timezone !== undefined) set.timezone = body.timezone === null ? null : canonicalZone(body.timezone, 'timezone');
+  if (body.display_name !== undefined) {
+    const name = body.display_name;
+    if (name !== null && (typeof name !== 'string' || name.trim() === '' || name.length > DISPLAY_NAME_MAX || /[\r\n]/.test(name))) {
+      throw new HttpError(400, 'invalid_request', `display_name must be one line of 1 to ${DISPLAY_NAME_MAX} characters, or null`);
+    }
+    set.displayName = name === null ? null : name.trim();
   }
+  if (Object.keys(set).length > 0) await db.update(heads).set(set).where(eq(heads.id, headId));
+  return settings(db, headId);
 }

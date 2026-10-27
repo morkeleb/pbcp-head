@@ -1,6 +1,8 @@
 // The nightly `head:daily:YYYY-MM-DD` card (docs/head-skeleton.md: Vercel Cron, 05:30 in the head's
-// timezone). The cron calls this every half hour; each head whose local time is past 05:30 and that has no
-// card for its local date gets one. A missed run is caught up by the next; a second run mints nothing.
+// effective timezone, lib/timezone.ts). The cron calls this every hour; each head whose local time is 05:30
+// or later and that has no card for its local date gets one. The card's id is the date, so a run after the
+// owner's zone changed mints nothing for a date that already has its card, and a missed run is caught up by
+// the next: a day is neither doubled nor, once its 05:30 is reached in the zone the owner is in, skipped.
 // The card goes through the same submit path as any producer's (A.1: the head owns the `head:` root).
 
 import { and, desc, eq, gte, lt, ne, sql } from 'drizzle-orm';
@@ -11,6 +13,7 @@ import { submitCard } from '../protocol';
 import { renderAfterCommit } from '../render';
 import { load, toCard } from '../store';
 import { addDays, dayRange, localDate, localMinutes } from '../time';
+import { effectiveTimezone } from '../timezone';
 import { foldDaily } from './fold';
 
 export const BRIEF_AT_MINUTES = 5 * 60 + 30;
@@ -36,11 +39,12 @@ export async function runNightly(db: Db): Promise<Array<{ head: string; id: stri
   const at = new Date(now());
   const minted: Array<{ head: string; id: string; status: number }> = [];
   for (const head of await db.select().from(heads)) {
-    if (localMinutes(at, head.timezone) < BRIEF_AT_MINUTES) continue;
-    const date = localDate(at, head.timezone);
+    const { timezone } = await effectiveTimezone(db, head.id, head.timezone);
+    if (localMinutes(at, timezone) < BRIEF_AT_MINUTES) continue;
+    const date = localDate(at, timezone);
     const id = `head:daily:${date}`;
     if (await load(db, head.id, id)) continue;
-    const r = await mintDailyCard(db, head.id, head.timezone, date);
+    const r = await mintDailyCard(db, head.id, timezone, date);
     minted.push({ head: head.id, id, status: r.status });
   }
   return minted;

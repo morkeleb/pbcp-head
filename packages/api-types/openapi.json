@@ -1,0 +1,2891 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PBCP head: the human API",
+    "version": "0.1.0",
+    "description": "What the owner’s devices call: the brief, cards, decisions, orders, settings. Producers use the PBCP protocol routes instead (RFC §7), which this document does not cover; sign-in (/api/auth/*) is not in it either. Every /api/me request needs `Authorization: Session <access token>` and may carry `X-Timezone`."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "session": []
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "describeHead",
+        "summary": "Describe the head (RFC §7.5)",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadDescription"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Who is signed in",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings": {
+      "get": {
+        "operationId": "getSettings",
+        "summary": "The head’s settings: id, display name, timezone",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateSettings",
+        "summary": "Set or clear the display name and the timezone override",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/brief": {
+      "get": {
+        "operationId": "getBrief",
+        "summary": "Everything the Brief screen shows, in one call",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brief"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/visit": {
+      "post": {
+        "operationId": "postVisit",
+        "summary": "The owner left the brief: advance the last-visit cursor",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LastVisit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards": {
+      "get": {
+        "operationId": "listCards",
+        "summary": "Cards received in a local day or between two instants",
+        "description": "Ordered by `change_seq`, paginated with `after` and `next`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "description": "A local day, YYYY-MM-DD, in the effective timezone",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Received at or after, RFC 3339",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Received before, RFC 3339",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "decided",
+                "superseded"
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "The `next` of the previous page",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–200, default 50",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}": {
+      "get": {
+        "operationId": "getCard",
+        "summary": "One card with its supersession chain, references and thread",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}/decision": {
+      "post": {
+        "operationId": "decide",
+        "summary": "Decide (RFC §7.3)",
+        "description": "Deciding an order `dismissed` cancels it (A.5).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The card as stored: the protocol card, without what the head rendered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The card is no longer open; the body is the stored card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}/seen": {
+      "post": {
+        "operationId": "markSeen",
+        "summary": "The card was shown to the owner (§4.2 `seen_at`)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The card as stored: the protocol card, without what the head rendered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}/ack": {
+      "post": {
+        "operationId": "acknowledge",
+        "summary": "Acknowledge an artifact or signal (§4.2 `acknowledged_at`)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The card as stored: the protocol card, without what the head rendered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}/snooze": {
+      "post": {
+        "operationId": "snooze",
+        "summary": "Hide an open card until a time (§4.2 `snoozed_until`)",
+        "description": "`until` must be an RFC 3339 timestamp in UTC (ending `Z` or `+00:00`) and later than now; anything else is 400 `invalid_snooze`. A preset is resolved in the effective timezone. `until: null` unsnoozes.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnoozeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The card as stored: the protocol card, without what the head rendered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The card is no longer open; the body is the stored card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/cards/{id}/unsnooze": {
+      "post": {
+        "operationId": "unsnooze",
+        "summary": "Clear `snoozed_until`",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A card id, percent-encoded (it contains `:`)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The card as stored: the protocol card, without what the head rendered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The card is no longer open; the body is the stored card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Card"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/orders": {
+      "get": {
+        "operationId": "listOrders",
+        "summary": "Active orders and those finished this week, with their progress",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "giveOrder",
+        "summary": "Give an order (A.1)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeCard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/producers": {
+      "get": {
+        "operationId": "listProducers",
+        "summary": "Producers by namespace root",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/producers/{root}": {
+      "patch": {
+        "operationId": "updateProducer",
+        "summary": "Set a producer’s ceiling, or revoke it",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "root",
+            "in": "path",
+            "required": true,
+            "description": "A producer’s namespace root",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProducerPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/devices": {
+      "get": {
+        "operationId": "listDevices",
+        "summary": "The signed-in devices",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/devices/{id}": {
+      "delete": {
+        "operationId": "deleteDevice",
+        "summary": "Sign a device out",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A device id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/svg/{hash}": {
+      "get": {
+        "operationId": "getDiagram",
+        "summary": "A drawn diagram",
+        "description": "Linked from `rendered_html` and `first_visual`. No session: an image view cannot send one. Immutable; cache by URL.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "description": "sha256 of the sanitised fence, 64 hex digits",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The SVG",
+            "content": {
+              "image/svg+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/img": {
+      "get": {
+        "operationId": "getImage",
+        "summary": "A remote image, through the head’s proxy",
+        "description": "Linked from `rendered_html`; the URL is signed by the head. No session. At most 2 MB, image types only.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "u",
+            "in": "query",
+            "required": true,
+            "description": "The image URL",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "s",
+            "in": "query",
+            "required": true,
+            "description": "The head’s signature of `u`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/*"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`image_unavailable`: the image could not be fetched, or is not an image of at most 2 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "`Session <access token>`, from sign-in or /api/auth/refresh. A producer’s `Bearer` token is refused with 401."
+      }
+    },
+    "parameters": {
+      "XTimezone": {
+        "name": "X-Timezone",
+        "in": "header",
+        "required": false,
+        "description": "The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief, the day view, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "A stable code: `invalid_request`, `unauthorized`, `not_found`, `too_large`, `invalid_snooze`, … (RFC §7.4 and the head’s own)"
+          },
+          "message": {
+            "type": "string",
+            "description": "For people; its wording may change"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Card": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "pbcp/1"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "artifact",
+              "signal",
+              "order"
+            ]
+          },
+          "to_person": {
+            "description": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)",
+            "type": "string",
+            "minLength": 1
+          },
+          "producer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string"
+          },
+          "urgency": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "thread": {
+            "type": "string",
+            "minLength": 1
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supersedes": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              ]
+            }
+          },
+          "emitted_at": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": {}
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "decided",
+              "superseded"
+            ]
+          },
+          "change_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": "string"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "seen_at": {
+            "type": "string"
+          },
+          "acknowledged_at": {
+            "type": "string"
+          },
+          "snoozed_until": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "edited_proposal": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": "string"
+          },
+          "delegated_to": {
+            "type": "string"
+          },
+          "to_producer": {
+            "type": "string"
+          },
+          "exec_state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "claimed",
+              "done",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "claimed_by": {
+            "type": "string"
+          },
+          "claim_expires_at": {
+            "type": "string"
+          },
+          "claim_seq": {
+            "type": "integer"
+          },
+          "orders.claim_seq": {
+            "description": "On an executor’s outcome card: the claim it reports on (A.3)",
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "orders.result": {
+            "description": "On an executor’s outcome card: how the run ended (A.3)",
+            "type": "string",
+            "enum": [
+              "done",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "protocol",
+          "id",
+          "kind",
+          "producer",
+          "title",
+          "body",
+          "emitted_at",
+          "state",
+          "change_seq",
+          "received_at",
+          "changed_at",
+          "delivery"
+        ],
+        "additionalProperties": {}
+      },
+      "Visual": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "diagram",
+              "image"
+            ]
+          },
+          "src": {
+            "type": "string",
+            "description": "A head URL: /api/me/svg/{hash} or /api/me/img?…"
+          },
+          "caption": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "src",
+          "caption"
+        ],
+        "additionalProperties": false
+      },
+      "MeCard": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "pbcp/1"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "artifact",
+              "signal",
+              "order"
+            ]
+          },
+          "to_person": {
+            "description": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)",
+            "type": "string",
+            "minLength": 1
+          },
+          "producer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string"
+          },
+          "urgency": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "thread": {
+            "type": "string",
+            "minLength": 1
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supersedes": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              ]
+            }
+          },
+          "emitted_at": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": {}
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "decided",
+              "superseded"
+            ]
+          },
+          "change_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": "string"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "seen_at": {
+            "type": "string"
+          },
+          "acknowledged_at": {
+            "type": "string"
+          },
+          "snoozed_until": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "edited_proposal": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": "string"
+          },
+          "delegated_to": {
+            "type": "string"
+          },
+          "to_producer": {
+            "type": "string"
+          },
+          "exec_state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "claimed",
+              "done",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "claimed_by": {
+            "type": "string"
+          },
+          "claim_expires_at": {
+            "type": "string"
+          },
+          "claim_seq": {
+            "type": "integer"
+          },
+          "orders.claim_seq": {
+            "description": "On an executor’s outcome card: the claim it reports on (A.3)",
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "orders.result": {
+            "description": "On an executor’s outcome card: how the run ended (A.3)",
+            "type": "string",
+            "enum": [
+              "done",
+              "failed"
+            ]
+          },
+          "rendered_html": {
+            "type": "string",
+            "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
+          },
+          "rendered_actions": {
+            "description": "Rendered bodies of choice options (§4.4), by action id",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "first_visual": {
+            "description": "The first diagram or image in the body, for a thumbnail",
+            "$ref": "#/components/schemas/Visual"
+          },
+          "order_outcome": {
+            "description": "On an outcome card: whether it moved its order, or came late or from an earlier claim",
+            "type": "string",
+            "enum": [
+              "applied",
+              "stale"
+            ]
+          }
+        },
+        "required": [
+          "protocol",
+          "id",
+          "kind",
+          "producer",
+          "title",
+          "body",
+          "emitted_at",
+          "state",
+          "change_seq",
+          "received_at",
+          "changed_at",
+          "delivery",
+          "rendered_html"
+        ],
+        "additionalProperties": {}
+      },
+      "CardSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "artifact",
+              "signal",
+              "order"
+            ]
+          },
+          "producer": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "decided",
+              "superseded"
+            ]
+          },
+          "received_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "exec_state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "claimed",
+              "done",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "order_outcome": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "stale"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "producer",
+          "state",
+          "received_at"
+        ],
+        "additionalProperties": false
+      },
+      "CardDetail": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+          },
+          "card": {
+            "$ref": "#/components/schemas/MeCard"
+          },
+          "predecessors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeCard"
+            },
+            "description": "The cards this one supersedes, oldest first"
+          },
+          "successors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardSummary"
+            },
+            "description": "The cards that supersede it, in order"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "card": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CardSummary"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Null when this head holds no such card"
+                }
+              },
+              "required": [
+                "id",
+                "card"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "thread": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardSummary"
+            },
+            "description": "Every card of its thread, newest last; for an order, the order first"
+          }
+        },
+        "required": [
+          "timezone",
+          "card",
+          "predecessors",
+          "successors",
+          "references",
+          "thread"
+        ],
+        "additionalProperties": false
+      },
+      "CardList": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeCard"
+            }
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `after` for the next page; null on the last"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+          }
+        },
+        "required": [
+          "cards",
+          "next",
+          "timezone"
+        ],
+        "additionalProperties": false
+      },
+      "LastVisit": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "Fold": {
+        "type": "object",
+        "properties": {
+          "producer": {
+            "type": "string"
+          },
+          "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "latest": {
+            "$ref": "#/components/schemas/MeCard"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "received_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                },
+                "acknowledged_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "kind",
+                "received_at"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "producer",
+          "thread",
+          "count",
+          "latest",
+          "cards"
+        ],
+        "additionalProperties": false
+      },
+      "Brief": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Today, YYYY-MM-DD in `timezone`"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The effective timezone (see X-Timezone)"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The head’s change counter now; post it to /api/me/visit when the owner leaves"
+          },
+          "last_visit": {
+            "$ref": "#/components/schemas/LastVisit"
+          },
+          "daily": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest `head:daily` card"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeCard"
+            },
+            "description": "Open decisions, newest first, snoozed ones left out"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fold"
+            },
+            "description": "Today’s artifacts and signals, folded by thread; immediate first"
+          },
+          "snoozed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "late_outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeCard"
+            },
+            "description": "Order outcomes that came late or from an earlier claim (A.3)"
+          },
+          "lapsed_orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeCard"
+            },
+            "description": "Orders whose lease lapsed with no outcome (A.2)"
+          },
+          "new": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids changed since the last visit"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "seq",
+          "last_visit",
+          "daily",
+          "decisions",
+          "threads",
+          "snoozed",
+          "late_outcomes",
+          "lapsed_orders",
+          "new"
+        ],
+        "additionalProperties": false
+      },
+      "OrderWithProgress": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "pbcp/1"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "artifact",
+              "signal",
+              "order"
+            ]
+          },
+          "to_person": {
+            "description": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)",
+            "type": "string",
+            "minLength": 1
+          },
+          "producer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string"
+          },
+          "urgency": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "thread": {
+            "type": "string",
+            "minLength": 1
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supersedes": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              ]
+            }
+          },
+          "emitted_at": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": {}
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "decided",
+              "superseded"
+            ]
+          },
+          "change_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": "string"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "seen_at": {
+            "type": "string"
+          },
+          "acknowledged_at": {
+            "type": "string"
+          },
+          "snoozed_until": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "edited_proposal": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": "string"
+          },
+          "delegated_to": {
+            "type": "string"
+          },
+          "to_producer": {
+            "type": "string"
+          },
+          "exec_state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "claimed",
+              "done",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "claimed_by": {
+            "type": "string"
+          },
+          "claim_expires_at": {
+            "type": "string"
+          },
+          "claim_seq": {
+            "type": "integer"
+          },
+          "orders.claim_seq": {
+            "description": "On an executor’s outcome card: the claim it reports on (A.3)",
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "orders.result": {
+            "description": "On an executor’s outcome card: how the run ended (A.3)",
+            "type": "string",
+            "enum": [
+              "done",
+              "failed"
+            ]
+          },
+          "rendered_html": {
+            "type": "string",
+            "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
+          },
+          "rendered_actions": {
+            "description": "Rendered bodies of choice options (§4.4), by action id",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "first_visual": {
+            "description": "The first diagram or image in the body, for a thumbnail",
+            "$ref": "#/components/schemas/Visual"
+          },
+          "order_outcome": {
+            "description": "On an outcome card: whether it moved its order, or came late or from an earlier claim",
+            "type": "string",
+            "enum": [
+              "applied",
+              "stale"
+            ]
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "latest": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MeCard"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "count",
+              "latest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "protocol",
+          "id",
+          "kind",
+          "producer",
+          "title",
+          "body",
+          "emitted_at",
+          "state",
+          "change_seq",
+          "received_at",
+          "changed_at",
+          "delivery",
+          "rendered_html",
+          "progress"
+        ],
+        "additionalProperties": {}
+      },
+      "OrderList": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderWithProgress"
+            }
+          }
+        },
+        "required": [
+          "timezone",
+          "orders"
+        ],
+        "additionalProperties": false
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "head": {
+            "type": "string",
+            "description": "The head id: the owner’s person id, which producers address as `to_person`"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The effective timezone"
+          },
+          "last_visit": {
+            "$ref": "#/components/schemas/LastVisit"
+          }
+        },
+        "required": [
+          "head",
+          "display_name",
+          "device_id",
+          "timezone",
+          "last_visit"
+        ],
+        "additionalProperties": false
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "head": {
+            "type": "string",
+            "description": "The stable head id (`to_person`); it never changes"
+          },
+          "display_name": {
+            "description": "How the owner is shown; not used by the protocol",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The effective timezone: the override if set, else the device most recently seen with X-Timezone, else UTC"
+          },
+          "timezone_source": {
+            "type": "string",
+            "enum": [
+              "override",
+              "device",
+              "default"
+            ]
+          },
+          "timezone_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_timezone": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "device_id": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+                  },
+                  "seen_at": {
+                    "type": "string",
+                    "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                  }
+                },
+                "required": [
+                  "device_id",
+                  "timezone",
+                  "seen_at"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most recent zone a device sent"
+          }
+        },
+        "required": [
+          "head",
+          "display_name",
+          "timezone",
+          "timezone_source",
+          "timezone_override",
+          "device_timezone"
+        ],
+        "additionalProperties": false
+      },
+      "Producer": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string"
+          },
+          "ceiling": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "executor": {
+            "type": "boolean"
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "instance": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ceiling": {
+                  "type": "string",
+                  "enum": [
+                    "immediate",
+                    "brief",
+                    "log"
+                  ]
+                },
+                "executor": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                },
+                "revoked_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                }
+              },
+              "required": [
+                "instance",
+                "ceiling",
+                "executor",
+                "created_at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "last_card_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "root",
+          "ceiling",
+          "executor",
+          "revoked",
+          "tokens",
+          "last_card_at"
+        ],
+        "additionalProperties": false
+      },
+      "ProducerList": {
+        "type": "object",
+        "properties": {
+          "producers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Producer"
+            }
+          }
+        },
+        "required": [
+          "producers"
+        ],
+        "additionalProperties": false
+      },
+      "Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "web",
+              "ios",
+              "android"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The zone it last sent in X-Timezone"
+          },
+          "timezone_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "type": "boolean",
+            "description": "The device making this request"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "platform",
+          "created_at",
+          "last_seen_at",
+          "timezone",
+          "timezone_seen_at",
+          "current"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceList": {
+        "type": "object",
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Device"
+            }
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "additionalProperties": false
+      },
+      "HeadDescription": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "const": "pbcp/1"
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "render": {
+            "type": "object",
+            "properties": {
+              "mermaid": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "mermaid"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "protocol",
+          "owner",
+          "seq",
+          "extensions",
+          "render"
+        ],
+        "additionalProperties": {}
+      },
+      "OrderRequest": {
+        "type": "object",
+        "properties": {
+          "to_producer": {
+            "type": "string",
+            "description": "A producer root, or `*` for any executor (A.1)"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "urgency": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          }
+        },
+        "required": [
+          "to_producer",
+          "title"
+        ]
+      },
+      "DecisionRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "edited_proposal": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "delegated_to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "additionalProperties": false
+      },
+      "SnoozeRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "until": {
+                "description": "UTC only (`…Z`), later than now; an offset such as `+02:00` is refused with 400 `invalid_snooze`. Null unsnoozes.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "until"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "preset": {
+                "type": "string",
+                "enum": [
+                  "tonight",
+                  "tomorrow",
+                  "next-week"
+                ],
+                "description": "In the effective timezone: tonight 18:00, tomorrow 05:30, next week 05:30"
+              }
+            },
+            "required": [
+              "preset"
+            ]
+          }
+        ]
+      },
+      "VisitRequest": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "description": "Default: the head’s counter now",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SettingsPatch": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "description": "Sets the override, which wins over the devices; null clears it",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display_name": {
+            "description": "One line, 1–100 characters; null clears it",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProducerPatch": {
+        "type": "object",
+        "properties": {
+          "ceiling": {
+            "description": "Applies to content stored from now on (§9)",
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "revoked": {
+            "description": "Revokes every token of the root; mint a new one to bring it back",
+            "type": "boolean",
+            "const": true
+          }
+        }
+      }
+    }
+  }
+}

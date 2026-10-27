@@ -28,8 +28,8 @@ export async function resetHead(owner = OWNER): Promise<void> {
   await ensureHead(testDb(), owner);
 }
 
-export async function call(method: string, path: string, opts: { auth?: string; body?: unknown; type?: string } = {}) {
-  const headers: Record<string, string> = {};
+export async function call(method: string, path: string, opts: { auth?: string; body?: unknown; type?: string; headers?: Record<string, string> } = {}) {
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.auth) headers.authorization = opts.auth;
   let body: string | undefined;
   if (opts.body !== undefined) {

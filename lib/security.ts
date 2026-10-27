@@ -18,7 +18,7 @@ export function pageCsp(nonce: string, dev = process.env.NODE_ENV === 'developme
     "connect-src 'self'",
     "object-src 'none'",
     "frame-src 'none'",
-    "worker-src 'none'",
+    "worker-src 'self'", // the service worker at /sw.js (lib/pwa), and nothing else
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self'",

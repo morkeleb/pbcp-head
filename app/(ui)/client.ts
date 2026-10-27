@@ -1,7 +1,15 @@
 'use client';
 
 // The web head's one data path: /api/me with `Authorization: Session`, the same calls the phone makes
-// (mobile PRD). Tokens from sign-in live in localStorage; an expired access token is refreshed once.
+// (mobile PRD). Tokens from sign-in live in localStorage; an expired access token is refreshed once. Every
+// call says which zone the browser is in (X-Timezone), so the head follows the owner when they travel.
+//
+// Offline (lib/pwa/service-worker.ts): reads may be answered from the service worker's cache, and then carry
+// `cachedAt`, the time that copy was fetched; the page says "as of" it. Writes (decide, acknowledge, snooze,
+// orders) are never sent without a network and never queued: api() refuses them with OfflineError, and the
+// controls are disabled while offline.
+
+import { useEffect, useSyncExternalStore } from 'react';
 
 export interface Tokens {
   access_token: string;
@@ -28,6 +36,71 @@ export function saveTokens(t: Tokens | null): void {
   } catch {
     // storage unavailable: the session lasts as long as the page
   }
+  // Signed out: the cached brief and cards belong to the session that read them.
+  if (!t && typeof caches !== 'undefined') void clearCachedData();
+}
+
+async function clearCachedData(): Promise<void> {
+  try {
+    for (const name of ['pbcp-data', 'pbcp-pages', 'pbcp-media']) await caches.delete(name);
+  } catch {
+    // no Cache API
+  }
+}
+
+// --- online / offline --------------------------------------------------------------------------------
+
+/** Why a write control is disabled offline. */
+export const OFFLINE_REASON = 'You’re offline. Deciding, acknowledging, snoozing and giving orders need a connection, and nothing is saved to send later.';
+
+/** A write that was not sent because there is no network. */
+export class OfflineError extends Error {
+  constructor() {
+    super('offline: not sent, and not queued');
+  }
+}
+
+let offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+const watchers = new Set<() => void>();
+function setOffline(value: boolean): void {
+  if (offline === value) return;
+  offline = value;
+  for (const w of watchers) w();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => setOffline(false));
+  window.addEventListener('offline', () => setOffline(true));
+}
+
+/** Whether the browser has a network, by its own account and by the last request's. */
+export function useOnline(): boolean {
+  return useSyncExternalStore(
+    (w) => {
+      watchers.add(w);
+      return () => watchers.delete(w);
+    },
+    () => !offline,
+    () => true,
+  );
+}
+
+/**
+ * The service worker answered `path` from its cache and then got the network's answer: `onFresh` gets the new
+ * body. When the network refused (an expired session), `onStale` should ask again with `network: true`.
+ */
+export function useFresh(path: string | null, onFresh: (body: any) => void, onStale: () => void): void {
+  useEffect(() => {
+    if (!path || typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+    const url = new URL(path, location.origin).href;
+    const listen = (e: MessageEvent) => {
+      const m = e.data as { type?: string; url?: string; body?: string };
+      if (m?.url !== url) return;
+      if (m.type === 'pbcp-fresh') onFresh(JSON.parse(m.body!));
+      else if (m.type === 'pbcp-stale') onStale();
+    };
+    navigator.serviceWorker.addEventListener('message', listen);
+    return () => navigator.serviceWorker.removeEventListener('message', listen);
+  }, [path, onFresh, onStale]);
 }
 
 let refreshing: Promise<Tokens | null> | null = null;
@@ -50,28 +123,58 @@ export function signInAgain(): never {
   throw new Error('signed out');
 }
 
+/** The browser's IANA zone as `X-Timezone`, or nothing when it does not know one. */
+function browserZone(): Record<string, string> {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone ? { 'x-timezone': zone } : {};
+  } catch {
+    return {};
+  }
+}
+
 export interface ApiResult<T> {
   status: number;
   body: T;
+  /** Set when the service worker answered from its cache: when that copy was fetched (RFC 3339). */
+  cachedAt?: string;
 }
 
-export async function api<T = any>(path: string, init: { method?: string; body?: unknown; keepalive?: boolean } = {}): Promise<ApiResult<T>> {
+export async function api<T = any>(path: string, init: { method?: string; body?: unknown; keepalive?: boolean; network?: boolean } = {}): Promise<ApiResult<T>> {
+  const method = init.method ?? 'GET';
+  // A write is sent now or not at all: never without a network, never queued for later.
+  if (method !== 'GET' && (offline || navigator.onLine === false)) throw new OfflineError();
   let tokens = loadTokens();
   if (!tokens) signInAgain();
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(path, {
-      method: init.method ?? 'GET',
-      keepalive: init.keepalive,
-      headers: { authorization: `Session ${tokens!.access_token}`, ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}) },
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(path, {
+        method,
+        keepalive: init.keepalive,
+        headers: {
+          authorization: `Session ${tokens!.access_token}`,
+          ...browserZone(),
+          ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(init.network || attempt > 0 ? { 'x-pbcp-network': '1' } : {}),
+        },
+        body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      });
+    } catch (e) {
+      setOffline(true);
+      if (method !== 'GET') throw new OfflineError();
+      return { status: 0, body: { error: 'offline', message: e instanceof Error ? e.message : 'no network' } as T };
+    }
+    if (res.headers.get('x-pbcp-offline')) setOffline(true);
+    else if (!res.headers.get('x-pbcp-from-cache')) setOffline(false);
     if (res.status === 401 && attempt === 0) {
       tokens = await refresh(tokens!);
       if (!tokens) signInAgain();
       continue;
     }
     const text = await res.text();
-    return { status: res.status, body: (text ? JSON.parse(text) : null) as T };
+    const cachedAt = res.headers.get('x-pbcp-from-cache') ? (res.headers.get('x-pbcp-fetched-at') ?? undefined) : undefined;
+    return { status: res.status, body: (text ? JSON.parse(text) : null) as T, ...(cachedAt ? { cachedAt } : {}) };
   }
   return signInAgain();
 }

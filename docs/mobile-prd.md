@@ -78,7 +78,8 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | `POST /api/me/visit` | Advances the last-visit cursor | Called when the Brief is closed |
 | `GET /api/me/orders` / `POST /api/me/orders` | Open orders with `exec_state`; mint a new order | Cancel is a `dismissed` decision on the order (RFC A.1) |
 | `GET /api/me/producers` / `PATCH …/{root}` | Producers, ceilings, revoke | Settings |
-| `GET /api/me/devices` / `DELETE …/{id}` | Signed-in devices | Settings |
+| `GET /api/me/devices` / `DELETE …/{id}` | Signed-in devices, each with the zone it last sent | Settings |
+| `GET /api/me/settings` / `PATCH` | Head id, display name, effective timezone and its override | Settings. Every `/api/me` request may send `X-Timezone: <IANA zone>`; the head follows the device most recently seen unless the override is set |
 | `POST /api/me/devices/{id}/push` | Registers or clears an APNs/FCM token | See Push |
 
 Responses are the same JSON card shape as the producer API, so `@pbcp/core` types are reused in Swift via a generated client (OpenAPI from the Zod schemas). Markdown is rendered on the device; the head never sends HTML.
@@ -96,7 +97,7 @@ The head needs one addition for this: an outbox row written in the same transact
 
 ## Build plan
 
-**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list, a card and a sheet. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase.
+**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list, a card and a sheet. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase. That contract is `packages/api-types/openapi.json`, generated from the head's schemas; the Swift client in `apps/ios/Generated/` is generated from it.
 
 **What must exist in the head first** (these are milestone-1 and milestone-2 items in the repo skeleton, pulled forward where mobile needs them):
 
