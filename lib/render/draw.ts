@@ -87,7 +87,11 @@ export type DiagramTheme = 'light' | 'dark';
 const DARK_BACKGROUND = '#111c27';
 const themed = (theme: DiagramTheme) =>
   theme === 'dark'
-    ? { mermaidConfig: { ...MERMAID_CONFIG, theme: 'dark' }, backgroundColor: DARK_BACKGROUND }
+    ? {
+        // Charts paint their own plot area (#333 in mermaid's dark theme); it gets the same ground as the rest.
+        mermaidConfig: { ...MERMAID_CONFIG, theme: 'dark', themeVariables: { background: DARK_BACKGROUND, xyChart: { backgroundColor: DARK_BACKGROUND } } },
+        backgroundColor: DARK_BACKGROUND,
+      }
     : { mermaidConfig: MERMAID_CONFIG, backgroundColor: 'transparent' };
 
 const isTimeout = (e: unknown) => e instanceof Error && e.message.startsWith('TimeoutError');
