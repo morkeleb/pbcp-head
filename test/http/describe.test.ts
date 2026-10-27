@@ -60,7 +60,7 @@ describe('GET /: JSON for producers, the front door for a browser (Accept)', () 
       expect(html).toContain('Morning Brief');
       expect(html).toContain('href="/signin"');
       expect(html).toContain('href="/brief"');
-      expect(html).toContain('href="https://pbcp.dev"');
+      expect(html).toContain('href="https://morkeleb.github.io/pbcp"');
       expect(html).toContain('href="/api/openapi.json"');
       expect(html).toContain('What producers see at GET /');
       expect(html).toMatch(new RegExp(`<code>${OWNER}</code>`));
