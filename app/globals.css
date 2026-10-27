@@ -137,6 +137,9 @@
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* A control scrolled to (focus, scrollIntoView) clears the sticky masthead and the fixed footer of the brief. */
+    scroll-padding-top: var(--masthead-h, 0px);
+    scroll-padding-bottom: 3rem;
   }
   body {
     @apply bg-background text-foreground font-sans text-body;

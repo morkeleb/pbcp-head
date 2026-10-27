@@ -44,7 +44,7 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
  */
 export async function dailyParagraphNow(db: Db, headId: string, timezone: string, date: string): Promise<string> {
   const { openDecisions, yesterday } = await gatherDaily(db, headId, timezone, date);
-  return dailyParagraph(dailyLines({ openDecisions, yesterday }), cardUrl);
+  return dailyParagraph(dailyLines({ openDecisions, yesterday, at: now() }), cardUrl);
 }
 
 /** Mints `head:daily:<date>`; null on a day with nothing open and nothing new, which gets no card. */

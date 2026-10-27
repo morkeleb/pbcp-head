@@ -125,6 +125,8 @@ describe('web brief', () => {
     await (await article.waitForSelector('textarea[aria-label="Comment"]'))!.type('Check with Anna first.');
     await (await article.$('xpath/.//button[.="Edit…"]'))!.click();
     await (await article.waitForSelector(`textarea[id^="edit-"]`))!.type('Ship Monday instead.');
+    // Clear of the fixed footer: puppeteer clicks a button already in the viewport where it is, even under it.
+    await article.evaluate((a) => a.scrollIntoView({ block: 'center' }));
     await (await article.$('xpath/.//button[.="Send edit"]'))!.click();
     await article.waitForSelector('.state-line');
     await until(async () => (await row('goalpath:item:1:ship')).state === 'decided');
@@ -339,6 +341,76 @@ describe('the brief: days, week strip, layouts', () => {
     await (await strip.$(`xpath/.//button[contains(@aria-label, "${new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`))}")]`))!.click();
     await page.waitForFunction((d) => Math.abs(document.querySelector(`[data-day="${d}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, day);
     await page.waitForFunction(() => document.querySelector('nav[aria-label="Week"] button[aria-pressed="true"]')?.getAttribute('aria-current') !== 'date');
+  });
+
+  /** One signal `days` days ago, through the head's clock; its local day (the test head is on UTC). */
+  async function daysAgo(days: number, title: string) {
+    const at = new Date(Date.now() - days * 24 * 3600 * 1000);
+    await call('POST', '/api/test', { body: { clock: at.toISOString().replace(/\.\d+Z$/, 'Z') } });
+    const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
+    const id = `cal:old:${days}`;
+    await call('PUT', cardPath(id), { auth: cal, body: card(id, { producer: 'cal', kind: 'signal', title, body: `${title}.` }) });
+    await call('POST', '/api/test', { body: { clock: null } });
+    return at.toISOString().slice(0, 10);
+  }
+  const atMasthead = (d: string) =>
+    page.waitForFunction((d) => Math.abs(document.querySelector(`[data-day="${d}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, d);
+
+  it('loads earlier days a week at a time as far back as the head has cards, skipping empty weeks, with no cap', async () => {
+    const oldest = await daysAgo(100, 'Back in the summer');
+    const middle = await daysAgo(45, 'Six weeks ago');
+    const recent = await daysAgo(3, 'Three days ago');
+    const weeks: string[] = [];
+    page.on('request', (r) => r.url().includes('/api/me/cards?from=') && weeks.push(new URL(r.url()).searchParams.get('from')!));
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`[data-day="${recent}"]`);
+    // Scroll to the top until the oldest day is in and nothing more loads.
+    await until(async () => {
+      await page.evaluate(() => scrollTo(0, 0));
+      return (await page.$(`[data-day="${oldest}"]`)) !== null;
+    }, 20_000);
+    await page.evaluate(() => scrollTo(0, 0));
+    await new Promise((r) => setTimeout(r, 800));
+    const shown = await page.$$eval('[data-day]', (hs) => hs.map((h) => h.getAttribute('data-day')!));
+    expect(shown.slice(0, 3)).toEqual([oldest, middle, recent]); // empty days have no header
+    expect(await page.$eval('main', (m) => m.textContent)).not.toMatch(/goes back/);
+    // A week per fetch, and no fetch for the empty weeks between the cards: yesterday's week, then one per card.
+    expect(weeks).toHaveLength(3);
+  });
+
+  it('the week strip’s month label opens a date picker that jumps to any day back to the first card, loading it', async () => {
+    const oldest = await daysAgo(100, 'Back in the summer');
+    await daysAgo(3, 'Three days ago');
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-month]');
+    const month = (d: string) => new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
+    expect((await page.$eval('[data-month]', (b) => b.textContent))!.toLowerCase()).toContain(month(new Date().toISOString().slice(0, 10)).toLowerCase());
+    await (await page.$('[data-month]'))!.click();
+    await page.waitForSelector('[data-date-picker]');
+    // Back to the oldest card's month; no further.
+    while (!(await page.$(`[data-date-picker] [data-date="${oldest}"]`))) await (await page.$('[data-date-picker] button[aria-label="Previous month"]'))!.click();
+    expect(await page.$eval('[data-date-picker] button[aria-label="Previous month"]', (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    const dayBefore = new Date(Date.parse(`${oldest}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    if (dayBefore.slice(0, 7) === oldest.slice(0, 7)) {
+      expect(await page.$eval(`[data-date-picker] [data-date="${dayBefore}"]`, (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    }
+    await (await page.$(`[data-date-picker] [data-date="${oldest}"]`))!.click();
+    await page.waitForSelector(`[data-day="${oldest}"]`);
+    await atMasthead(oldest);
+    await page.waitForFunction(() => !document.querySelector('[data-date-picker]')); // closed on the pick
+    expect(await page.$eval('nav[aria-label="Week"] button[aria-pressed="true"]', (b) => b.getAttribute('aria-label'))).toContain(
+      new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${oldest}T00:00:00Z`)),
+    );
+
+    // A day loaded but empty: shown when picked, saying so.
+    const empty = new Date(Date.parse(`${oldest}T00:00:00Z`) + 20 * 86_400_000).toISOString().slice(0, 10);
+    await (await page.$('[data-month]'))!.click();
+    await page.waitForSelector('[data-date-picker]');
+    while (!(await page.$(`[data-date-picker] [data-date="${empty}"]`))) await (await page.$('[data-date-picker] button[aria-label="Next month"]'))!.click();
+    await (await page.$(`[data-date-picker] [data-date="${empty}"]`))!.click();
+    await atMasthead(empty);
+    expect(await page.$eval(`xpath/.//section[.//h2[@data-day="${empty}"]]`, (s) => s.textContent)).toContain('Nothing arrived this day.');
+    expect(errors).toEqual([]);
   });
 
   it('folds updates after six behind "More signals (N)"', async () => {

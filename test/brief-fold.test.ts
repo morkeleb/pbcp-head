@@ -3,7 +3,7 @@ import { parseCard } from '@pbcp/core';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
-import { dailyParagraph, escapeMarkdown, foldDaily } from '../lib/brief/fold';
+import { dailyLines, dailyParagraph, escapeMarkdown, foldDaily } from '../lib/brief/fold';
 
 let seq = 0;
 function stored(id: string, extra: Partial<Card> = {}): Card {
@@ -47,7 +47,7 @@ describe('the nightly fold', () => {
   it('opens with the daily paragraph: the decisions’ leads, then one sentence of yesterday’s, each linked, nothing else', () => {
     const [paragraph] = fold().body.split('\n');
     expect(paragraph).toMatch(
-      /^2 decisions: \[Anna asks whether the invoice can wait until the \*\*20th\*\*\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\); \[GP\\-9 is finished; accept it\?\]\(<https:\/\/head\.example\/card\/goalpath%3Aitem%3A9>\)\. Yesterday: \[/,
+      /^1 decision, 1 snoozed: \[Anna asks whether the invoice can wait until the \*\*20th\*\*\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\)\. Yesterday: \[/,
     );
     expect(paragraph).toMatch(/\.$/);
     expect(paragraph).toContain('[The reply went out at 09:12](<https://head.example/card/hermes%3Agmail%3Ab>)');
@@ -76,7 +76,7 @@ describe('the nightly fold', () => {
 
   it('ends with the counts on one line, and draws no chart', () => {
     const { body } = fold();
-    expect(body.trimEnd().split('\n').at(-1)).toBe('2 open decisions · 5 cards yesterday from 3 producers');
+    expect(body.trimEnd().split('\n').at(-1)).toBe('1 open decision, 1 snoozed · 5 cards yesterday from 3 producers');
     expect(body).not.toContain('```mermaid');
   });
 
@@ -96,6 +96,29 @@ describe('the nightly fold', () => {
     walk(unified().use(remarkParse).parse(paragraph!) as never);
     expect(links).toHaveLength(8);
     expect(links.every((u) => u.startsWith('https://head.example/card/'))).toBe(true);
+  });
+
+  it('counts a snoozed decision apart and leaves it out of the paragraph, but not out of the entries', () => {
+    const decisions = [
+      ...Array.from({ length: 4 }, (_, i) => stored(`mail:d:${i}`, { kind: 'decision', summary: `Open ${i}` } as Partial<Card>)),
+      stored('mail:d:z', { kind: 'decision', summary: 'Asleep', snoozed_until: '2026-10-09T08:00:00Z' } as Partial<Card>),
+    ];
+    const card = fold({ ...input, openDecisions: decisions, yesterday: [] });
+    const [paragraph] = card.body.split('\n');
+    expect(paragraph).toMatch(/^4 decisions, 1 snoozed: \[Open 0\]/);
+    expect(paragraph).not.toContain('Asleep');
+    expect(entries(card.body).find((l) => l.includes('mail%3Ad%3Az'))).toContain('(snoozed) — Asleep'); // §8: every open decision
+    expect(card.references).toContain('mail:d:z');
+    // No snoozed decision: no snoozed count.
+    expect(fold({ ...input, openDecisions: decisions.slice(0, 4), yesterday: [] }).body.split('\n')[0]).toMatch(/^4 decisions: /);
+    // All of them snoozed: the count, and no list.
+    const asleep = dailyLines({ openDecisions: decisions.slice(4), yesterday: [], at: input.emittedAt });
+    expect(dailyParagraph(asleep, input.cardUrl)).toBe('0 decisions, 1 snoozed.');
+  });
+
+  it('treats a snooze that has run out as no snooze', () => {
+    const woke = stored('mail:d:w', { kind: 'decision', summary: 'Awake again', snoozed_until: '2026-10-07T03:00:00Z' } as Partial<Card>);
+    expect(fold({ ...input, openDecisions: [woke], yesterday: [] }).body.split('\n')[0]).toBe('1 decision: [Awake again](<https://head.example/card/mail%3Ad%3Aw>).');
   });
 
   it('mints nothing on a day with nothing open and nothing new; says only what there is otherwise', () => {

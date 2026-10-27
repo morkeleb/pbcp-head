@@ -37,6 +37,8 @@ Neon's connection strings carry `sslmode=require&channel_binding=require`. `db/u
 
 To give each preview deployment its own database branch instead of the production one, turn on preview branching in the Neon integration.
 
+**Region.** The database is in Neon's `us-east-1` (AWS, N. Virginia), so `vercel.json` pins functions to `iad1`, the Vercel region beside it: `"regions": ["iad1"]`. Every route makes several queries in a transaction, and each one would otherwise cross the Atlantic from a European region. If you move the database, move the region with it. Pinning a region in `vercel.json` overrides **Settings → Functions → Function Region**.
+
 ### 3. Set the environment variables
 
 Under **Settings → Environment Variables**, for Production (and Preview, with different values if you like):

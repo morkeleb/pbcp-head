@@ -733,9 +733,9 @@ public struct Client: APIProtocol {
             }
         )
     }
-    /// Cards received in a local day or between two instants
+    /// Cards received in a local day, a run of local days, or between two instants
     ///
-    /// Ordered by `change_seq`, paginated with `after` and `next`.
+    /// Ordered by `change_seq`, paginated with `after` and `next`. With `from`/`to`, `before` names the latest earlier day that has a card, so a client can page back through the timeline without fetching empty weeks.
     ///
     /// - Remark: HTTP `GET /api/me/cards`.
     /// - Remark: Generated from `#/paths//api/me/cards/get(listCards)`.
@@ -764,6 +764,20 @@ public struct Client: APIProtocol {
                     explode: true,
                     name: "date",
                     value: input.query.date
+                )
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "from",
+                    value: input.query.from
+                )
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "to",
+                    value: input.query.to
                 )
                 try converter.setQueryItemAsURI(
                     in: &request,

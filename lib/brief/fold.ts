@@ -2,7 +2,7 @@
 // Pure: the cron gathers the cards, this writes the card. RFC 0.6 §8 "What a brief contains": every open decision's
 // title and lead, then the title and lead of the newest card of each of the previous day's threads, each linked to
 // its card. The body opens with the daily paragraph, prose made of those leads and nothing else ("2 decisions: …;
-// …. Yesterday: …."), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
+// …. Yesterday: …."; snoozed decisions are counted apart, not listed, and stay in the entries below), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
 // A day with nothing open and nothing new has no paragraph and no card.
 
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
@@ -34,9 +34,10 @@ export interface FoldLine {
 }
 
 export interface FoldLines {
+  /** Every open decision, snoozed ones included (marked). */
   decisions: FoldLine[];
   threads: FoldLine[];
-  /** "2 open decisions · 14 cards yesterday from 5 producers" */
+  /** "2 open decisions, 1 snoozed · 14 cards yesterday from 5 producers" */
   counts: string;
 }
 
@@ -71,25 +72,43 @@ function phrase(c: Card): string {
   return md || escapeMarkdown(c.title);
 }
 
-const line = (c: Card, count = 1): FoldLine => ({ id: c.id, producer: c.producer, title: c.title, lead: leadMarkdown(c), phrase: phrase(c), count, snoozed: !!c.snoozed_until });
+const line = (c: Card, at: string, count = 1): FoldLine => ({
+  id: c.id,
+  producer: c.producer,
+  title: c.title,
+  lead: leadMarkdown(c),
+  phrase: phrase(c),
+  count,
+  // Snoozed now: a snooze that has run out leaves the decision open like any other (§4.2 `snoozed_until`).
+  snoozed: !!c.snoozed_until && Date.parse(c.snoozed_until) > Date.parse(at),
+});
 
 /** Yesterday's cards collapsed by producer thread, newest thread first; each line is its newest card. */
-export function foldThreads(cards: Card[]): FoldLine[] {
+export function foldThreads(cards: Card[], at: string): FoldLine[] {
   const threads = new Map<string, Card[]>();
   for (const c of [...cards].sort((a, b) => a.change_seq - b.change_seq)) {
     const key = `${c.producer}\u0000${c.thread ?? `\u0001${c.id}`}`;
     threads.set(key, [...(threads.get(key) ?? []), c]);
   }
-  return [...threads.values()].sort((a, b) => b.at(-1)!.change_seq - a.at(-1)!.change_seq).map((cs) => line(cs.at(-1)!, cs.length));
+  return [...threads.values()].sort((a, b) => b.at(-1)!.change_seq - a.at(-1)!.change_seq).map((cs) => line(cs.at(-1)!, at, cs.length));
 }
 
-export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday'>): FoldLines {
+/** `at` is now: a decision whose `snoozed_until` is later is snoozed. */
+export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday'> & { at: string }): FoldLines {
   const producers = new Set(input.yesterday.map((c) => c.producer));
+  const decisions = input.openDecisions.map((c) => line(c, input.at));
   return {
-    decisions: input.openDecisions.map((c) => line(c)),
-    threads: foldThreads(input.yesterday),
-    counts: `${plural(input.openDecisions.length, 'open decision')} · ${plural(input.yesterday.length, 'card')} yesterday from ${plural(producers.size, 'producer')}`,
+    decisions,
+    threads: foldThreads(input.yesterday, input.at),
+    counts: `${decisionCount(decisions, 'open decision')} · ${plural(input.yesterday.length, 'card')} yesterday from ${plural(producers.size, 'producer')}`,
   };
+}
+
+/** "4 decisions" or, when any are snoozed, "4 decisions, 1 snoozed": a snoozed decision is not counted among the rest. */
+function decisionCount(decisions: FoldLine[], noun: string): string {
+  const snoozed = decisions.filter((l) => l.snoozed).length;
+  const awake = plural(decisions.length - snoozed, noun);
+  return snoozed > 0 ? `${awake}, ${snoozed} snoozed` : awake;
 }
 
 /** "title — lead", the title linked to the card (§8). */
@@ -101,19 +120,23 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
 
 /**
  * The daily paragraph (markdown): "N decisions: <lead>; <lead>." then "Yesterday: <lead>; <lead>.", each lead a
- * link to its card. Empty when nothing is open and nothing arrived the day before: no sentence for its own sake.
+ * link to its card. Snoozed decisions are counted apart and not listed: "4 decisions, 1 snoozed: <lead>; …."; when
+ * every open decision is snoozed, "0 decisions, 2 snoozed." Empty when nothing is open and nothing arrived the day
+ * before: no sentence for its own sake.
  */
 export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'threads'>, cardUrl: (id: string) => string): string {
   const link = (l: FoldLine) => `[${l.phrase}](<${cardUrl(l.id)}>)`;
   const sentences: string[] = [];
-  if (lines.decisions.length > 0) sentences.push(`${plural(lines.decisions.length, 'decision')}: ${lines.decisions.map(link).join('; ')}.`);
+  const awake = lines.decisions.filter((l) => !l.snoozed);
+  if (lines.decisions.length > 0) sentences.push(`${decisionCount(lines.decisions, 'decision')}${awake.length ? `: ${awake.map(link).join('; ')}` : ''}.`);
   if (lines.threads.length > 0) sentences.push(`Yesterday: ${lines.threads.slice(0, MAX_THREADS).map(link).join('; ')}.`);
   return sentences.join(' ');
 }
 
 /** The nightly card, or null for a day with nothing open and nothing new (no card says nothing). */
 export function foldDaily(input: FoldInput): ProducerCard | null {
-  const { decisions, threads, counts } = dailyLines(input);
+  // The fold is as of when it is emitted: a decision snoozed past then is snoozed in it.
+  const { decisions, threads, counts } = dailyLines({ ...input, at: input.emittedAt });
   const paragraph = dailyParagraph({ decisions, threads }, input.cardUrl);
   if (!paragraph) return null;
   const lines: string[] = [paragraph, ''];

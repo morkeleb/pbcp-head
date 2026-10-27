@@ -4,7 +4,8 @@
 // WeekStrip; docs/mobile-prd.md).
 //
 //   < 900 px   timeline: masthead, week strip, then the days top to bottom, each with a sticky dated header and a thin
-//              rail of times; today first on load, earlier days loaded above as the person scrolls up, tomorrow below.
+//              rail of times; today first on load, earlier days loaded above as the person scrolls up (a week at a
+//              time, back to the head's first card), tomorrow below; the week strip's month label picks any day.
 //   ≥ 900 px   broadsheet: the week strip in the masthead; each day in two columns, 60/40, decisions on the left,
 //              updates and signals on the right; the same past-above, future-below scrolling; j/k/enter/d.
 
@@ -17,7 +18,7 @@ import { DailyBrief } from './DailyBrief';
 import { clock, DecisionCard, type DecisionCardHandle, type Density } from './DecisionCard';
 import { Masthead, useDensity } from './masthead';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
-import { addDays, MAX_DAYS_BACK, useBrief, type Day } from './use-brief';
+import { addDays, useBrief, type Day } from './use-brief';
 import { WeekStrip, type WeekDay } from './WeekStrip';
 
 const WIDE = '(min-width: 900px)';
@@ -56,7 +57,7 @@ const weekOf = (date: string): string[] => {
 export function BriefView() {
   const wide = useWide();
   const [density, setDensity] = useDensity();
-  const { brief, days, cachedAt, error, loadDay, loadedBack, change } = useBrief();
+  const { brief, days, cachedAt, error, loadEarlier, loadedFrom, atStart, loadedBack, change } = useBrief();
   const [selected, setSelected] = useState<string | null>(null);
   const [todayOut, setTodayOut] = useState<'above' | 'below' | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -80,15 +81,15 @@ export function BriefView() {
 
   // Earlier days load above the view. The first day on screen is pinned where it was, so nothing the person is looking
   // at moves (done by hand: Safari has no CSS scroll anchoring). On load that keeps today under the masthead.
-  const loadEarlier = useCallback(
-    async (date: string) => {
+  const loadAbove = useCallback(
+    async () => {
       const mast = document.querySelector('[data-masthead]')?.getBoundingClientRect().bottom ?? 0;
       const el = [...document.querySelectorAll('section[data-section]')].find((s) => s.getBoundingClientRect().bottom > mast);
       // Its place in the document, not on screen: scrolling while the day loads must not be undone.
       anchor.current = el ? { el, docTop: el.getBoundingClientRect().top + scrollY } : null;
-      await loadDay(date);
+      await loadEarlier();
     },
-    [loadDay],
+    [loadEarlier],
   );
   useLayoutEffect(() => {
     const a = anchor.current;
@@ -99,17 +100,15 @@ export function BriefView() {
     if (inserted) scrollBy({ top: inserted, behavior: 'instant' });
   }, [loadedBack]);
 
-  // The sentinel above the first day loads the one before it, back to MAX_DAYS_BACK.
-  const first = days[0]?.date;
+  // The sentinel above the first day loads the week before it, until the head has no earlier cards (§8: every card
+  // stays reachable). Observed afresh after each load, so a sentinel still in view loads the next week too.
   useEffect(() => {
     const el = top.current;
-    if (!el || !first || !today) return;
-    const io = new IntersectionObserver(([e]) => {
-      if (e?.isIntersecting && first > addDays(today, -MAX_DAYS_BACK)) void loadEarlier(addDays(first, -1));
-    }, { rootMargin: '400px 0px 0px 0px' });
+    if (!el || !today || atStart) return;
+    const io = new IntersectionObserver(([e]) => void (e?.isIntersecting && loadAbove()), { rootMargin: '400px 0px 0px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [first, today, loadEarlier]);
+  }, [today, loadedFrom, atStart, loadAbove]);
 
   // The day in view (the last header that has reached the masthead) is the selected day; today's header leaving
   // the view shows "Back to today".
@@ -150,11 +149,12 @@ export function BriefView() {
     for (const ms of [450, 900]) setTimeout(() => Math.abs(offset()) > 2 && scrollBy({ top: offset(), behavior: 'instant' }), ms);
     return true;
   }, []);
-  // A day tapped on the strip that is not loaded yet: load back to it, then go.
+  // A day tapped on the strip or picked that is not on the timeline yet: load back to it (or show it, when it is loaded
+  // but nothing came that day), then go.
   const select = async (date: string) => {
     if (scrollToDay(date)) return;
     jumpTo.current = date;
-    for (let d = addDays(first ?? today, -1); d >= date; d = addDays(d, -1)) await loadDay(d);
+    await loadEarlier(date);
   };
   useEffect(() => {
     if (jumpTo.current && scrollToDay(jumpTo.current)) jumpTo.current = null;
@@ -221,9 +221,10 @@ export function BriefView() {
   const tz = brief.timezone;
   const shownDay = selected ?? today;
   const openOn = new Set(brief.decisions.map((c) => c.received_at.slice(0, 10)));
-  const reachableFrom = addDays(today, -MAX_DAYS_BACK);
-  const week: WeekDay[] = weekOf(shownDay).map((date) => ({ date, open: openOn.has(date), reachable: date >= reachableFrom && date <= addDays(today, 1) }));
-  const strip = <WeekStrip days={week} selected={shownDay} today={today} onSelect={(d) => void select(d)} />;
+  const firstDay = brief.first_day && brief.first_day < today ? brief.first_day : today;
+  const lastDay = addDays(today, 1);
+  const week: WeekDay[] = weekOf(shownDay).map((date) => ({ date, open: openOn.has(date), reachable: date >= firstDay && date <= lastDay }));
+  const strip = <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />;
   const allCards: MeCard[] = days.flatMap((d) => [...d.decisions, ...d.updates.map((t) => t.latest), ...d.signals.map((t) => t.latest)]);
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
 
@@ -239,10 +240,9 @@ export function BriefView() {
       <Masthead today={today} timezone={tz} density={density} onDensity={setDensity} cards={allCards} cachedAt={cachedAt} strip={strip} wide={wide} />
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
-        {first && first <= reachableFrom && <p className="py-4 text-center text-lead text-muted-foreground">The brief goes back {MAX_DAYS_BACK} days.</p>}
         {days
-          // An earlier day with nothing on it is not shown: no header for an empty day.
-          .filter((d) => d.kind !== 'past' || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
+          // An earlier day with nothing on it is not shown (no header for an empty day), unless the person went to it.
+          .filter((d) => d.kind !== 'past' || d.nothing || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
           .map((d) => (
             <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} density={density} tz={tz} decision={decision} update={update} />
           ))}
@@ -293,6 +293,8 @@ function DaySection({ day, name, wide, density, tz, decision, update }: {
       </h2>
       {day.kind === 'tomorrow' && empty ? (
         <p className="py-3 text-lead text-muted-foreground">Nothing set for tomorrow yet.</p>
+      ) : day.nothing ? (
+        <p className="py-3 text-lead text-muted-foreground">Nothing arrived this day.</p>
       ) : wide ? (
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] gap-6 pt-3">
           <div className="min-w-0">

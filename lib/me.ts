@@ -246,12 +246,15 @@ export async function brief(db: Db, headId: string) {
     if (md) paragraph = { html: (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'), so_far: true };
   }
 
+  const [oldest] = await db.select({ at: cards.receivedAt }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.receivedAt)).limit(1);
+
   const shown = [...decisions, ...attention, ...late, ...(daily ? [daily] : [])];
   return {
     date: today,
     timezone: head.timezone,
     seq,
     last_visit: { seq: head.lastVisitSeq, at: head.lastVisitAt ? iso(head.lastVisitAt) : null },
+    first_day: oldest ? localDate(oldest.at, head.timezone) : null,
     daily: presentedDaily,
     daily_paragraph: paragraph,
     tomorrow: { date: tomorrow, cards: await presentCards(db, ahead) },
@@ -268,6 +271,8 @@ export async function brief(db: Db, headId: string) {
 
 export interface CardQuery {
   date?: string | null;
+  from?: string | null;
+  to?: string | null;
   since?: string | null;
   until?: string | null;
   state?: string | null;
@@ -276,8 +281,10 @@ export interface CardQuery {
 }
 
 /**
- * GET /api/me/cards: cards received in a window — a local day (`date`, the Day screen) or `since`/`until`
- * instants — optionally of one `state`, in change_seq order, paginated by change_seq (`after`, `next`).
+ * GET /api/me/cards: cards received in a window — a local day (`date`), local days `from`–`to` inclusive (the
+ * timeline, a week at a time), or `since`/`until` instants — optionally of one `state`, in change_seq order, paginated
+ * by change_seq (`after`, `next`). With `from`, `before` is the latest earlier local day that has a card (null when
+ * there is none), so the timeline skips empty weeks and knows where the head's cards begin.
  */
 export async function listCards(db: Db, headId: string, q: CardQuery) {
   const head = await headSettings(db, headId);
@@ -286,6 +293,20 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
     if (!isDate(q.date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
     const [start, end] = dayRange(q.date, head.timezone);
     where.push(gte(cards.receivedAt, start), lt(cards.receivedAt, end));
+  }
+  let before: string | null | undefined;
+  if (q.from || q.to) {
+    if (q.date) throw new HttpError(400, 'invalid_request', 'date cannot be combined with from/to');
+    if (!q.from || !q.to || !isDate(q.from) || !isDate(q.to) || q.from > q.to) throw new HttpError(400, 'invalid_request', 'from and to must be YYYY-MM-DD, from on or before to');
+    const start = dayRange(q.from, head.timezone)[0];
+    where.push(gte(cards.receivedAt, start), lt(cards.receivedAt, dayRange(q.to, head.timezone)[1]));
+    const [prev] = await db
+      .select({ at: cards.receivedAt })
+      .from(cards)
+      .where(and(eq(cards.headId, headId), lt(cards.receivedAt, start)))
+      .orderBy(desc(cards.receivedAt))
+      .limit(1);
+    before = prev ? localDate(prev.at, head.timezone) : null;
   }
   for (const [key, op] of [['since', gte], ['until', lt]] as const) {
     const v = q[key];
@@ -304,7 +325,12 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
   const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
 
   const rows = await db.select().from(cards).where(and(...where)).orderBy(asc(cards.changeSeq)).limit(limit);
-  return { cards: await presentCards(db, rows), next: rows.length === limit ? rows.at(-1)!.changeSeq : null, timezone: head.timezone };
+  return {
+    cards: await presentCards(db, rows),
+    next: rows.length === limit ? rows.at(-1)!.changeSeq : null,
+    timezone: head.timezone,
+    ...(before !== undefined ? { before } : {}),
+  };
 }
 
 // --- one card with its thread --------------------------------------------------------

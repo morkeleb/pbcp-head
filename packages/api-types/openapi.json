@@ -302,8 +302,8 @@
     "/api/me/cards": {
       "get": {
         "operationId": "listCards",
-        "summary": "Cards received in a local day or between two instants",
-        "description": "Ordered by `change_seq`, paginated with `after` and `next`.",
+        "summary": "Cards received in a local day, a run of local days, or between two instants",
+        "description": "Ordered by `change_seq`, paginated with `after` and `next`. With `from`/`to`, `before` names the latest earlier day that has a card, so a client can page back through the timeline without fetching empty weeks.",
         "parameters": [
           {
             "$ref": "#/components/parameters/XTimezone"
@@ -312,6 +312,22 @@
             "name": "date",
             "in": "query",
             "description": "A local day, YYYY-MM-DD, in the effective timezone",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First local day, YYYY-MM-DD, inclusive; with `to`, not with `date`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last local day, YYYY-MM-DD, inclusive",
             "schema": {
               "type": "string"
             }
@@ -1963,6 +1979,13 @@
           "timezone": {
             "type": "string",
             "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
+          },
+          "before": {
+            "description": "With `from`: the latest local day before `from` that has a card, YYYY-MM-DD; null when there is none",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -2077,6 +2100,13 @@
           "last_visit": {
             "$ref": "#/components/schemas/LastVisit"
           },
+          "first_day": {
+            "description": "The local day of the head’s oldest card, YYYY-MM-DD; how far back the timeline goes",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "daily": {
             "anyOf": [
               {
@@ -2181,6 +2211,7 @@
           "timezone",
           "seq",
           "last_visit",
+          "first_day",
           "daily",
           "daily_paragraph",
           "tomorrow",

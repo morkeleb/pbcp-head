@@ -2134,25 +2134,33 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/CardList/timezone`.
             public var timezone: Swift.String
+            /// With `from`: the latest local day before `from` that has a card, YYYY-MM-DD; null when there is none
+            ///
+            /// - Remark: Generated from `#/components/schemas/CardList/before`.
+            public var before: Swift.String?
             /// Creates a new `CardList`.
             ///
             /// - Parameters:
             ///   - cards:
             ///   - next: Pass as `after` for the next page; null on the last
             ///   - timezone: An IANA timezone, e.g. `Europe/Copenhagen`
+            ///   - before: With `from`: the latest local day before `from` that has a card, YYYY-MM-DD; null when there is none
             public init(
                 cards: [Components.Schemas.MeCard],
                 next: Swift.Int? = nil,
-                timezone: Swift.String
+                timezone: Swift.String,
+                before: Swift.String? = nil
             ) {
                 self.cards = cards
                 self.next = next
                 self.timezone = timezone
+                self.before = before
             }
             public enum CodingKeys: String, CodingKey {
                 case cards
                 case next
                 case timezone
+                case before
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -2168,10 +2176,15 @@ extension Components {
                     Swift.String.self,
                     forKey: .timezone
                 )
+                self.before = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .before
+                )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "cards",
                     "next",
-                    "timezone"
+                    "timezone",
+                    "before"
                 ])
             }
         }
@@ -2379,6 +2392,10 @@ extension Components {
             public var seq: Swift.Int
             /// - Remark: Generated from `#/components/schemas/Brief/last_visit`.
             public var lastVisit: Components.Schemas.LastVisit
+            /// The local day of the head’s oldest card, YYYY-MM-DD; how far back the timeline goes
+            ///
+            /// - Remark: Generated from `#/components/schemas/Brief/first_day`.
+            public var firstDay: Swift.String?
             /// The latest `head:daily` card
             ///
             /// - Remark: Generated from `#/components/schemas/Brief/daily`.
@@ -2508,6 +2525,7 @@ extension Components {
             ///   - timezone: The effective timezone (see X-Timezone)
             ///   - seq: The head’s change counter now; post it to /api/me/visit when the owner leaves
             ///   - lastVisit:
+            ///   - firstDay: The local day of the head’s oldest card, YYYY-MM-DD; how far back the timeline goes
             ///   - daily: The latest `head:daily` card
             ///   - dailyParagraph: The paragraph today opens with; null when nothing is open and nothing arrived yesterday
             ///   - tomorrow: What is already set for tomorrow
@@ -2522,6 +2540,7 @@ extension Components {
                 timezone: Swift.String,
                 seq: Swift.Int,
                 lastVisit: Components.Schemas.LastVisit,
+                firstDay: Swift.String? = nil,
                 daily: Components.Schemas.MeCard? = nil,
                 dailyParagraph: Components.Schemas.Brief.DailyParagraphPayload? = nil,
                 tomorrow: Components.Schemas.Brief.TomorrowPayload,
@@ -2536,6 +2555,7 @@ extension Components {
                 self.timezone = timezone
                 self.seq = seq
                 self.lastVisit = lastVisit
+                self.firstDay = firstDay
                 self.daily = daily
                 self.dailyParagraph = dailyParagraph
                 self.tomorrow = tomorrow
@@ -2551,6 +2571,7 @@ extension Components {
                 case timezone
                 case seq
                 case lastVisit = "last_visit"
+                case firstDay = "first_day"
                 case daily
                 case dailyParagraph = "daily_paragraph"
                 case tomorrow
@@ -2578,6 +2599,10 @@ extension Components {
                 self.lastVisit = try container.decode(
                     Components.Schemas.LastVisit.self,
                     forKey: .lastVisit
+                )
+                self.firstDay = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .firstDay
                 )
                 self.daily = try container.decodeIfPresent(
                     Components.Schemas.MeCard.self,
@@ -2620,6 +2645,7 @@ extension Components {
                     "timezone",
                     "seq",
                     "last_visit",
+                    "first_day",
                     "daily",
                     "daily_paragraph",
                     "tomorrow",
