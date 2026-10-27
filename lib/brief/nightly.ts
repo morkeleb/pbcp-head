@@ -11,12 +11,16 @@ import { cards, heads } from '../../db/schema';
 import { now } from '../clock';
 import { submitCard } from '../protocol';
 import { renderAfterCommit } from '../render';
+import { ownOrigin } from '../render/markdown';
 import { load, toCard } from '../store';
 import { addDays, dayRange, localDate, localMinutes } from '../time';
 import { effectiveTimezone } from '../timezone';
 import { foldDaily } from './fold';
 
 export const BRIEF_AT_MINUTES = 5 * 60 + 30;
+
+/** The head's page for a card: absolute, on the head's own origin, which the renderer keeps as an in-app link. */
+const cardUrl = (id: string) => `${ownOrigin()}/card/${encodeURIComponent(id)}`;
 
 export async function mintDailyCard(db: Db, headId: string, timezone: string, date: string) {
   const [start, end] = dayRange(addDays(date, -1), timezone);
@@ -29,7 +33,7 @@ export async function mintDailyCard(db: Db, headId: string, timezone: string, da
     .select()
     .from(cards)
     .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), gte(cards.receivedAt, start), lt(cards.receivedAt, end)));
-  const card = foldDaily({ owner: headId, date, emittedAt: now(), openDecisions: open.map(toCard), yesterday: yesterday.map(toCard) });
+  const card = foldDaily({ owner: headId, date, emittedAt: now(), openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), cardUrl });
   const r = await submitCard(db, { headId, root: 'head', ceiling: 'brief' }, JSON.stringify(card), encodeURIComponent(card.id));
   await renderAfterCommit(db, headId, r.card);
   return r;

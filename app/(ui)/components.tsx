@@ -41,6 +41,10 @@ export interface MeCard {
   /** On an outcome (A.3): the claim it reports on, and how that run ended. */
   'orders.claim_seq'?: number;
   'orders.result'?: 'done' | 'failed';
+  /** RFC 0.6: one or two plain-text sentences from the producer; the card's lead when present. */
+  summary?: string;
+  /** The lead as plain text (lib/lead.ts): `summary`, else the body's first paragraph. */
+  lead?: string;
 }
 
 // --- offline ---------------------------------------------------------------------------
@@ -138,7 +142,14 @@ export function Viewer({ visual, onClose }: { visual: Visual; onClose: () => voi
     const scale = Math.min(el.clientWidth / natural.w, el.clientHeight / natural.h, visual.src.includes('/api/me/svg/') ? Infinity : 1);
     setView({ scale, x: (el.clientWidth - natural.w * scale) / 2, y: (el.clientHeight - natural.h * scale) / 2 });
   }, [natural, visual.src]);
-  useEffect(fit, [fit]);
+  // §3.1 Presentation: open at native size, and never smaller than the thumbnail: at least the screen's width.
+  const open = useCallback(() => {
+    const el = stage.current;
+    if (!el || !natural) return;
+    const scale = Math.max(1, el.clientWidth / natural.w);
+    setView({ scale, x: Math.max(0, (el.clientWidth - natural.w * scale) / 2), y: Math.max(0, (el.clientHeight - natural.h * scale) / 2) });
+  }, [natural]);
+  useEffect(open, [open]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', key);
@@ -219,7 +230,120 @@ export function Viewer({ visual, onClose }: { visual: Visual; onClose: () => voi
   );
 }
 
-// --- deciding (§4.3, §4.4; mobile PRD gesture model) -----------------------------------
+// --- announcements -----------------------------------------------------------------------
+
+let announced: (message: string) => void = () => undefined;
+
+/** Says a state change out loud to assistive technology, through the one live region on the page. */
+export function announce(message: string): void {
+  announced(message);
+}
+
+/** The page's live region (rendered once, in the layout). */
+export function Announcer() {
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    announced = (m) => {
+      // Cleared first, so the same words twice are announced twice.
+      setMessage('');
+      setTimeout(() => setMessage(m), 50);
+    };
+    return () => {
+      announced = () => undefined;
+    };
+  }, []);
+  return <div className="sr-only" role="status" aria-live="polite">{message}</div>;
+}
+
+// --- the lead, the proposal, and the rest (§4.4; RFC 0.6 `summary`) ---------------------
+
+const PROPOSAL = /^propos(al|ed)\b/i;
+
+interface BodyParts {
+  /** The first paragraph of the rendered body, when there is no summary to lead with. */
+  lead: string;
+  /** A section whose heading starts with "Proposal" or "Proposed": the heading and what follows, to the next heading of its level or above. */
+  proposal: string;
+  /** Everything else, in order. */
+  rest: string;
+}
+
+/**
+ * Splits a card's rendered (server-sanitised) HTML for the card view: the lead rule is lib/lead.ts's, applied
+ * to the rendered body so the lead keeps its emphasis and links. Runs in the browser only, on HTML the head
+ * rendered; it re-serialises those nodes and renders nothing of its own.
+ */
+function splitBody(html: string, hasSummary: boolean): BodyParts {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const nodes = [...t.content.childNodes].filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()));
+  const level = (n: Node) => (n instanceof HTMLElement && /^H[1-6]$/.test(n.tagName) ? Number(n.tagName[1]) : 0);
+  let from = -1;
+  let to = -1;
+  for (let i = 0; i < nodes.length && from < 0; i++) {
+    if (level(nodes[i]!) && PROPOSAL.test(nodes[i]!.textContent?.trim() ?? '')) {
+      from = i;
+      to = nodes.findIndex((n, j) => j > i && level(n) > 0 && level(n) <= level(nodes[i]!));
+      if (to < 0) to = nodes.length;
+    }
+  }
+  const inProposal = (i: number) => from >= 0 && i >= from && i < to;
+  const isBlock = (n: Node, tags: string[]) => n instanceof HTMLElement && tags.includes(n.tagName) && !!n.textContent?.trim();
+  let lead = -1;
+  if (!hasSummary) {
+    lead = nodes.findIndex((n, i) => !inProposal(i) && isBlock(n, ['P']));
+    if (lead < 0) lead = nodes.findIndex((n, i) => !inProposal(i) && isBlock(n, ['UL', 'OL', 'BLOCKQUOTE']));
+  }
+  const html_ = (n: Node) => (n instanceof Element ? n.outerHTML : (n.textContent ?? '').replace(/[&<>]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt' } as Record<string, string>)[c]};`));
+  return {
+    lead: lead >= 0 ? html_(nodes[lead]!) : '',
+    proposal: nodes.filter((_, i) => inProposal(i)).map(html_).join(''),
+    rest: nodes.filter((_, i) => i !== lead && !inProposal(i)).map(html_).join(''),
+  };
+}
+
+/** The card's own `summary` (RFC 0.6): plain text, never markdown. */
+export const summaryOf = (card: MeCard): string | undefined => (typeof card.summary === 'string' && card.summary.trim() ? card.summary.trim() : undefined);
+
+/** The lead, always visible: `summary` as text, else the rendered first paragraph. */
+export function Lead({ card }: { card: MeCard }) {
+  const summary = summaryOf(card);
+  const [parts, setParts] = useState<BodyParts | null>(null);
+  useEffect(() => setParts(splitBody(card.rendered_html, !!summary)), [card.rendered_html, summary]);
+  if (summary) return <p className="lead">{summary}</p>;
+  return parts?.lead ? <Rendered className="lead" html={parts.lead} /> : null;
+}
+
+/**
+ * A card's body on the brief: the lead and any "Proposal" / "Proposed …" section are visible; everything else
+ * is behind one "More". Expanding it is what presents the card (§4.2 seen_at); the lead alone is not.
+ */
+export function CardBody({ card }: { card: MeCard }) {
+  const summary = summaryOf(card);
+  const [parts, setParts] = useState<BodyParts | null>(null);
+  const [opened, setOpened] = useState(false);
+  useEffect(() => setParts(splitBody(card.rendered_html, !!summary)), [card.rendered_html, summary]);
+  if (!parts) return null;
+  const toggle = (e: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (!e.currentTarget.open || opened) return;
+    setOpened(true);
+    if (!card.seen_at) api(`/api/me/cards/${encodeURIComponent(card.id)}/seen`, { method: 'POST' }).catch(() => undefined);
+  };
+  return (
+    <>
+      {summary ? <p className="lead">{summary}</p> : parts.lead && <Rendered className="lead" html={parts.lead} />}
+      {parts.proposal && <Rendered className="proposal" html={parts.proposal} />}
+      {parts.rest.trim() && (
+        <details className="more" onToggle={toggle}>
+          <summary>More</summary>
+          <Rendered html={parts.rest} />
+        </details>
+      )}
+    </>
+  );
+}
+
+// --- deciding (§4.3, §4.4) ------------------------------------------------------------------
 
 interface Option {
   id: string;
@@ -228,128 +352,120 @@ interface Option {
   hasBody: boolean;
 }
 
-/** At most this many options are buttons on the card itself; a longer list opens the sheet. */
-const INLINE_OPTIONS = 3;
-
-function options(card: MeCard): { list: Option[]; edit: boolean; primary: Option | null; reject: Option | null } {
+function options(card: MeCard): { list: Option[]; edit: boolean } {
   const actions = card.actions ?? ['approve', 'reject'];
   const list = actions
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
     .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
   const edit = actions.some((a) => (typeof a === 'string' ? a : a.id) === 'edit');
-  const plainDefault = actions.every((a) => typeof a === 'string') && list.some((o) => o.id === 'approve');
-  // §4.4: the default is the bare-approve gesture; with the plain list that is `approve`; with no default, none.
-  const primary = list.find((o) => o.isDefault) ?? (plainDefault ? list.find((o) => o.id === 'approve')! : null);
-  const reject = list.find((o) => o.id === 'reject' && o !== primary) ?? null;
-  return { list, edit, primary, reject };
+  return { list, edit };
 }
 
-type Pending = { decision: string; edited_proposal?: string; comment?: string; label: string };
+/** What a recorded decision reads as: the option's label, or the protocol decision's name (§4.3). */
+export function decisionLabel(card: MeCard): string {
+  const { list } = options(card);
+  const named: Record<string, string> = { dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated' };
+  return list.find((o) => o.id === card.decision)?.label ?? named[card.decision ?? ''] ?? card.decision ?? '';
+}
 
-/** Decide buttons: the default (swipe right), reject (swipe left), and the sheet. Every decision waits behind an undo toast. */
-export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided: (c: MeCard) => void }) {
-  const { list, edit, primary, reject } = options(card);
-  // A short list is decided on the card: one button per option, in the producer's order (§4.4). The sheet is
-  // for what a button cannot carry: a long list, option bodies to read, an edited proposal, a comment.
-  const inline = list.length <= INLINE_OPTIONS;
-  const shown = inline ? list : primary ? [primary] : [];
-  const more = !inline || edit || list.some((o) => o.hasBody);
-  const tone = (o: Option) => (o === primary ? 'primary' : o === reject ? 'danger' : undefined);
-  const [sheet, setSheet] = useState(false);
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+type DecisionBody = { decision: string; edited_proposal?: string; comment?: string };
 
+/**
+ * The card's actions, on the card (§4.4): a row of buttons in the producer's order, the default (else the
+ * first) primary; or, for options with a `body`, a vertical group with each body under its label and the
+ * default pre-selected. `Dismiss` is always there, quietly; "Edit…" only when `actions` offers `edit`. A
+ * comment is behind "Add a comment". Deciding updates the card at once and posts; a failure puts the
+ * controls back with the error. The head offers no undo, so none is shown.
+ */
+export function DecisionControls({ card, onChange, showDecided = false }: { card: MeCard; onChange: (c: MeCard) => void; showDecided?: boolean }) {
+  const { list, edit } = options(card);
+  const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
+  const primary = list.find((o) => o.isDefault) ?? list[0];
   const online = useOnline();
-  const post = useCallback(
-    async (p: Pending) => {
-      const { label: _label, ...decision } = p;
-      try {
-        const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body: decision });
-        setPending(null);
-        if (r.status === 200 || r.status === 409) onDecided(r.body);
-        else setError(r.body.message ?? `could not record the decision (${r.status})`);
-      } catch (e) {
-        // The network went while the undo toast was up: the decision is dropped, not kept for later.
-        if (!(e instanceof OfflineError)) throw e;
-        setPending(null);
-        setError(NOT_SENT);
-      }
-    },
-    [card.id, onDecided],
-  );
-  const choose = (p: Pending) => {
-    setSheet(false);
-    setError(null);
-    setPending(p);
-    timer.current = setTimeout(() => post(p), 4000);
-  };
-  const undo = () => {
-    if (timer.current) clearTimeout(timer.current);
-    setPending(null);
-  };
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-
-  if (card.state !== 'open' || card.kind !== 'decision') return null;
-  return (
-    <>
-      <div className="row decide">
-        {shown.map((o) => (
-          <button key={o.id} className={tone(o)} disabled={!!pending || !online} onClick={() => choose({ decision: o.id, label: o.label })}>{o.label}</button>
-        ))}
-        {(more || shown.length === 0) && <button disabled={!!pending || !online} onClick={() => setSheet(true)}>{shown.length ? 'More…' : 'Decide…'}</button>}
-      </div>
-      <OfflineNote />
-      {error && <p className="error">{error}</p>}
-      {pending && (
-        <div className="toast" role="status">
-          <span>{pending.label}: {card.title}</span>
-          <button onClick={undo}>Undo</button>
-        </div>
-      )}
-      {sheet && online && <DecideSheet card={card} list={list} edit={edit} onChoose={choose} onClose={() => setSheet(false)} />}
-    </>
-  );
-}
-
-function DecideSheet({ card, list, edit, onChoose, onClose }: { card: MeCard; list: Option[]; edit: boolean; onChoose: (p: Pending) => void; onClose: () => void }) {
   const [selected, setSelected] = useState<string | null>(list.find((o) => o.isDefault)?.id ?? null);
-  const [other, setOther] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState('');
   const [comment, setComment] = useState('');
-  const withComment = (p: Pending): Pending => (comment.trim() ? { ...p, comment: comment.trim() } : p);
-  const submit = () => {
-    if (selected === '\u0000edit') onChoose(withComment({ decision: 'edited', edited_proposal: other, label: 'Edited' }));
-    else if (selected) onChoose(withComment({ decision: selected, label: list.find((o) => o.id === selected)!.label }));
+  const [error, setError] = useState<string | null>(null);
+
+  const decide = async (d: DecisionBody) => {
+    const before = card;
+    const body = comment.trim() ? { ...d, comment: comment.trim() } : d;
+    const optimistic: MeCard = { ...card, ...body, state: 'decided', decided_at: new Date().toISOString() };
+    setError(null);
+    onChange(optimistic);
+    announce(`Decided: ${decisionLabel(optimistic)}. ${card.title}`);
+    const failed = (message: string) => {
+      onChange(before);
+      setError(message);
+      announce(`Not recorded: ${message}`);
+    };
+    try {
+      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
+      if (r.status === 200 || r.status === 409) onChange({ ...before, ...r.body });
+      else failed(r.body?.message ?? `the head answered ${r.status}`);
+    } catch (e) {
+      if (!(e instanceof OfflineError)) failed(e instanceof Error ? e.message : 'the request failed');
+      else failed(NOT_SENT);
+    }
   };
+
+  if (card.kind !== 'decision') return null;
+  if (card.state === 'decided') {
+    if (!showDecided) return null;
+    return (
+      <p className="decided-line">
+        Decided: <strong>{decisionLabel(card)}</strong>
+        {card.decided_at && <> · {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(card.decided_at))}</>}
+      </p>
+    );
+  }
+  if (card.state !== 'open') return null;
+  const off = !online;
+  const chosen = list.find((o) => o.id === selected);
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Decide">
-        <h3 style={{ marginTop: 0 }}>{card.title}</h3>
-        {list.map((o) => (
-          <label key={o.id} className={`option ${selected === o.id ? 'selected' : ''}`}>
-            <input type="radio" name="option" checked={selected === o.id} onChange={() => setSelected(o.id)} style={{ marginRight: 8 }} />
-            <span className="label">{o.label}</span>
-            {o.isDefault && <span className="default">default</span>}
-            {card.rendered_actions?.[o.id] && <Rendered html={card.rendered_actions[o.id]!} />}
-          </label>
-        ))}
-        {edit && (
-          <label className={`option ${selected === '\u0000edit' ? 'selected' : ''}`}>
-            <input type="radio" name="option" checked={selected === '\u0000edit'} onChange={() => setSelected('\u0000edit')} style={{ marginRight: 8 }} />
-            <span className="label">Other…</span>
-            {selected === '\u0000edit' && <textarea rows={4} value={other} onChange={(e) => setOther(e.target.value)} placeholder="What you want instead" autoFocus />}
-          </label>
-        )}
-        <p className="muted" style={{ marginBottom: 4 }}>Comment (optional)</p>
-        <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
-        <div className="row">
-          <button className="primary" onClick={submit} disabled={!selected || (selected === '\u0000edit' && other.trim() === '')}>Decide</button>
-          <button onClick={() => onChoose(withComment({ decision: 'dismissed', label: 'Dismissed' }))}>Dismiss</button>
-          <button onClick={onClose}>Cancel</button>
+    <div className="decide-controls">
+      {grouped ? (
+        <fieldset className="choices" disabled={off}>
+          <legend className="sr-only">Options</legend>
+          {list.map((o) => (
+            <label key={o.id} className={`option ${selected === o.id ? 'selected' : ''}`}>
+              <input type="radio" name={`option-${card.id}`} checked={selected === o.id} onChange={() => setSelected(o.id)} />
+              <span className="label">{o.label}</span>
+              {o.isDefault && <span className="default">default</span>}
+              {card.rendered_actions?.[o.id] && <Rendered className="option-body" html={card.rendered_actions[o.id]!} />}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      {editing ? (
+        <div className="edit">
+          <label className="muted" htmlFor={`edit-${card.id}`}>What you want instead</label>
+          <textarea id={`edit-${card.id}`} rows={4} value={edited} onChange={(e) => setEdited(e.target.value)} autoFocus />
         </div>
+      ) : null}
+      <div className="row decide">
+        {editing ? (
+          <>
+            <button className="primary" disabled={off || edited.trim() === ''} onClick={() => decide({ decision: 'edited', edited_proposal: edited.trim() })}>Send edit</button>
+            <button onClick={() => setEditing(false)}>Back</button>
+          </>
+        ) : grouped ? (
+          <button className="primary" disabled={off || !chosen} onClick={() => chosen && decide({ decision: chosen.id })}>{chosen ? chosen.label : 'Pick an option'}</button>
+        ) : (
+          list.map((o) => (
+            <button key={o.id} className={o === primary ? 'primary' : undefined} disabled={off} onClick={() => decide({ decision: o.id })}>{o.label}</button>
+          ))
+        )}
+        {!editing && edit && <button disabled={off} onClick={() => setEditing(true)}>Edit…</button>}
+        {!editing && <button className="quiet" disabled={off} onClick={() => decide({ decision: 'dismissed' })}>Dismiss</button>}
       </div>
+      <details className="comment">
+        <summary>Add a comment</summary>
+        <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={off} />
+      </details>
+      <OfflineNote />
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { HttpError } from './http';
 import { expireDueOrders } from './orders';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
+import { leadOf } from './lead';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
 import { dayRange, isDate, localDate } from './time';
@@ -19,6 +20,8 @@ type Row = typeof cards.$inferSelect;
 
 export type MeCard = Card & {
   rendered_html: string;
+  /** The card's lead as plain text: `summary`, else the body's first paragraph (lib/lead.ts). */
+  lead: string;
   /** On an order's outcome card (A.3): whether it moved the order, or came late or from an old lease. */
   order_outcome?: 'applied' | 'stale';
   rendered_actions?: Record<string, string>;
@@ -40,6 +43,7 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
     out.push({
       ...card,
       rendered_html: html,
+      lead: leadOf(card),
       ...(actions && Object.keys(actions).length > 0 ? { rendered_actions: actions } : {}),
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),

@@ -59,6 +59,7 @@ export const Visual = z.object({
 
 export const MeCard = Card.extend({
   rendered_html: z.string().describe('The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.'),
+  lead: z.string().describe('The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.'),
   rendered_actions: z.record(z.string(), z.string()).optional().describe('Rendered bodies of choice options (§4.4), by action id'),
   first_visual: Visual.optional().describe('The first diagram or image in the body, for a thumbnail'),
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),

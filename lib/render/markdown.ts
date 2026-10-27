@@ -105,6 +105,15 @@ function fallbackImageAfter(parent: Parent, index: number): { paragraph: Paragra
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
+/** The head's own origin (WEBAUTHN_ORIGIN, where its pages are served). Links there are in-app links. */
+export function ownOrigin(): string {
+  try {
+    return new URL(process.env.WEBAUTHN_ORIGIN ?? 'http://localhost:3000').origin;
+  } catch {
+    return 'http://localhost:3000';
+  }
+}
+
 interface Fence {
   node: Code;
   parent: Parent;
@@ -248,7 +257,19 @@ function visibleText(tree: HastRoot): string {
   return toText(copy);
 }
 
-/** Links: only http(s) and mailto keep an href; they open in a new tab without referrer, with the host shown (§12). */
+function inApp(href: string): string | null {
+  try {
+    const u = new URL(href);
+    return u.origin === ownOrigin() && u.pathname.startsWith('/card/') ? `${u.pathname}${u.search}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Links: only http(s) and mailto keep an href; they open in a new tab without referrer, with the host shown (§12).
+ * A link to one of the head's own card pages (the nightly brief's) stays in the app: a relative /card/… link.
+ */
 function links() {
   return (tree: HastRoot) => {
     const walk = (node: HastRoot | Element) => {
@@ -258,6 +279,11 @@ function links() {
         if (c.tagName !== 'a') return [c];
         const href = String(c.properties.href ?? '');
         if (!SAFE_LINK.test(href)) return c.children;
+        const own = inApp(href);
+        if (own) {
+          c.properties = { href: own };
+          return [c];
+        }
         c.properties = { href, rel: ['noopener', 'noreferrer', 'nofollow', 'ugc'], target: '_blank' };
         if (/^https?:/i.test(href)) {
           let host = '';
