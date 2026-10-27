@@ -109,7 +109,7 @@ export function CardView() {
           <button onClick={() => post('snooze', { preset: 'tonight' })}>Tonight</button>
           <button onClick={() => post('snooze', { preset: 'tomorrow' })}>Tomorrow’s brief</button>
           <button onClick={() => post('snooze', { preset: 'next-week' })}>Next week</button>
-          {card.snoozed_until && <button onClick={() => post('snooze', { until: null })}>Unsnooze</button>}
+          {card.snoozed_until && <button onClick={() => post('unsnooze')}>Unsnooze</button>}
         </div>
       )}
 

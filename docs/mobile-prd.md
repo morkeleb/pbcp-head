@@ -73,7 +73,8 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | `GET /api/me/cards/{id}` | One card with its thread (predecessors, references, progress) |  |
 | `POST /api/me/cards/{id}/decision` | The core decide operation, actor = device | Same semantics as RFC §7.3 |
 | `POST /api/me/cards/{id}/ack` | Sets `acknowledged_at` | Artifacts and signals |
-| `POST /api/me/cards/{id}/snooze` | Sets `snoozed_until` |  |
+| `POST /api/me/cards/{id}/snooze` | Sets `snoozed_until` (`until: null` clears it) |  |
+| `POST /api/me/cards/{id}/unsnooze` | Clears `snoozed_until` |  |
 | `POST /api/me/visit` | Advances the last-visit cursor | Called when the Brief is closed |
 | `GET /api/me/orders` / `POST /api/me/orders` | Open orders with `exec_state`; mint a new order | Cancel is a `dismissed` decision on the order (RFC A.1) |
 | `GET /api/me/producers` / `PATCH …/{root}` | Producers, ceilings, revoke | Settings |

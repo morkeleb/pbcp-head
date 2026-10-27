@@ -1,7 +1,8 @@
 // HeadUnderTest (from @pbcp/core/conformance) over HTTP, against a running head in test mode.
 //
 //   reset       truncate every table, recreate head `morten`, sign in one owner device, reset the test hooks
-//   token       mint a producer token for the root, as `pnpm mint-token` does (see `token` for the ceiling)
+//   token       mint a producer token for the root, as `pnpm mint-token` does; a further token for the same
+//               root is a further instance of it (C35)
 //   describe    GET /                          Bearer, or none
 //   put         PUT /api/cards/{id}            Bearer   (JSON, or text/markdown for the file form)
 //   changes     GET /api/changes?after=        Bearer   (`after` sent as given, so malformed cursors reach the head)
@@ -11,7 +12,8 @@
 //   claim       POST /api/cards/{id}/claim     Bearer   { lease_seconds } (A.2)
 //   seen        POST /api/me/cards/{id}/seen      Session
 //   acknowledge POST /api/me/cards/{id}/ack       Session
-//   clock.set   queued, then POSTed to /api/test before the next request (the interface's set() is synchronous)
+//   snooze      POST /api/me/cards/{id}/snooze    Session  { until }; null unsnoozes, via /unsnooze
+//   clock.set   POST /api/test { clock }; the runner awaits it before the next step
 
 import type { Decision } from '@pbcp/core';
 import type { HeadUnderTest, Response } from '@pbcp/core/conformance';
@@ -35,14 +37,10 @@ export interface HttpHeadOptions {
 export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
   const owner = opts.owner ?? 'morten';
   let session = '';
-  let pendingClock: string | undefined;
+  /** Tokens minted per root since the last reset. */
+  const minted = new Map<string, number>();
 
   async function request(method: string, path: string, auth: string | null, body?: unknown): Promise<Response> {
-    if (pendingClock !== undefined) {
-      const at = pendingClock;
-      pendingClock = undefined;
-      await hooks({ clock: at });
-    }
     const headers: Record<string, string> = auth === null ? {} : { authorization: auth };
     let payload: string | undefined;
     if (body !== undefined) {
@@ -72,17 +70,22 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
       await opts.db.execute(sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads restart identity`);
       await ensureHead(opts.db, owner);
       session = `Session ${(await startSession(opts.db, { headId: owner, identityId: null, platform: 'web', name: 'conformance' })).access_token}`;
-      pendingClock = undefined;
+      minted.clear();
       await hooks({ clock: opts.startClock ?? '2026-10-07T00:00:00Z', syncPageSize: opts.pageSize ?? null });
     },
 
     /**
-     * The fixtures' "no ceiling" (C28 step 6 expects an unclamped `delivery`) is minted as `immediate`, the
-     * ceiling that clamps nothing. Left to itself `pnpm mint-token` gives a new producer `brief`, as §9's
-     * SHOULD asks; that tension is reported, not resolved here.
+     * The runner asks for one token per root, ceiling, executor flag and `instance` (C35: two installations of
+     * one producer). The interface does not pass the instance, so every further token for a root is minted as a
+     * further instance of it, a distinct principal under the same root, as `pnpm mint-token --instance` does.
+     * No ceiling is the head's default, `brief` (§9).
      */
     async token(root, o) {
-      return mintProducerToken(opts.db, { headId: owner, root, ...(o?.executor ? { executor: true } : {}), ceiling: o?.ceiling ?? 'immediate' });
+      const n = (minted.get(root) ?? 0) + 1;
+      minted.set(root, n);
+      return mintProducerToken(opts.db, {
+        headId: owner, root, ...(n > 1 ? { instance: `instance-${n}` } : {}), ...(o?.executor ? { executor: true } : {}), ...(o?.ceiling ? { ceiling: o.ceiling } : {}),
+      });
     },
 
     async describe(token) {
@@ -121,10 +124,12 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
       return request('POST', `${card(id)}/ack`, session);
     },
 
+    async snooze(id, until) {
+      return until === null ? request('POST', `${card(id)}/unsnooze`, session) : request('POST', `${card(id)}/snooze`, session, { until });
+    },
+
     clock: {
-      set(iso) {
-        pendingClock = iso;
-      },
+      set: (iso) => hooks({ clock: iso }),
     },
   };
 }

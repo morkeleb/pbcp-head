@@ -5,7 +5,7 @@
 import { db } from '../db/client';
 import { authenticateSession, type Session } from './auth/session';
 import { decodeId, handle, json, rawSegment, readJson, readObject } from './http';
-import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, type OwnerContext, type Outcome } from './protocol';
+import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, unsnoozeCard, type OwnerContext, type Outcome } from './protocol';
 import { snoozeUntil } from './settings-me';
 
 function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req: Request) => Promise<Outcome>) {
@@ -30,6 +30,12 @@ export function meHandler(fn: (session: Session, req: Request) => Promise<Respon
     handle(async () => fn(await authenticateSession(db(), req), req));
 }
 
-/** POST /api/me/cards/{id}/snooze { until } | { preset }. */
+/** POST /api/me/cards/{id}/snooze { until } | { preset }; `until: null` unsnoozes. */
 export const snoozeHandler = (idSegment: number) =>
-  ownerAction(idSegment, async (ctx, id, req) => snoozeCard(db(), ctx, id, await snoozeUntil(db(), ctx.headId, await readObject(req))));
+  ownerAction(idSegment, async (ctx, id, req) => {
+    const until = await snoozeUntil(db(), ctx.headId, await readObject(req));
+    return until === null ? unsnoozeCard(db(), ctx, id) : snoozeCard(db(), ctx, id, until);
+  });
+
+/** POST /api/me/cards/{id}/unsnooze. */
+export const unsnoozeHandler = (idSegment: number) => ownerAction(idSegment, (ctx, id) => unsnoozeCard(db(), ctx, id));

@@ -4,7 +4,7 @@
 // that involves an order (OPEN, Orders 15), because the head runs no worker.
 
 import {
-  applyOutcome, claim, expireIfDue, isOrder, mintOrder, outcomeTarget, PbcpError, ulid, visibleTo,
+  applyOutcome, checkLease, claim, ClaimRefusal, expireIfDue, isOrder, mintOrder, PbcpError, ulid, visibleTo,
   type Card, type OrderCard, type OrderInput, type ProducerCard,
 } from '@pbcp/core';
 import { and, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
@@ -56,24 +56,27 @@ export async function expireDueOrders(db: Db, headId: string): Promise<void> {
 
 /**
  * `POST /cards/{id}/claim { lease_seconds }` (A.2, A.5): the row is locked, expiry is evaluated inside the same
- * lock, then core's claim decides. 200 claims or renews; 409 (another lease is live) and 410 (the order is
- * terminal) carry the order. Every response carries `exec_state`. An order the caller cannot read, or a card
- * that is not an order, is 404 (OPEN, Orders 9).
+ * lock, then core's claim decides. 200 claims or renews (a renewal keeps `claim_seq`); a refusal is core's
+ * `ClaimRefusal`, `{ error, message, order }`: 409 `lease_held`, 410 `order_terminal`. It is thrown once the
+ * transaction has committed, so an expiry evaluated on the way is kept. An order the caller cannot read, or a
+ * card that is not an order, is 404 (A.2); a bad `lease_seconds` is 400 `invalid_lease`.
  */
 export async function claimOrder(db: Db, producer: { headId: string; root: string }, rawId: string, body: unknown): Promise<Outcome> {
   const id = decodeId(rawId);
-  const lease = (body as { lease_seconds?: unknown } | null)?.lease_seconds;
-  if (typeof lease === 'number' && lease > MAX_LEASE_SECONDS) throw new PbcpError('invalid_card', `lease_seconds may be at most ${MAX_LEASE_SECONDS}`);
-  return writeTx(db, producer.headId, async (tx) => {
+  const r = await writeTx(db, producer.headId, async (tx) => {
     const stored = await load(tx, producer.headId, id, { forUpdate: true });
     if (!stored || !isOrder(stored.card) || !visibleTo(stored.card as unknown as OrderCard, producer.root, stored.eligible)) {
       throw new PbcpError('not_found', `no order ${id} for ${producer.root}`);
     }
-    const r = claim(stored.card as unknown as OrderCard, producer.root, lease as number, now());
+    const lease = checkLease((body as { lease_seconds?: unknown } | null)?.lease_seconds);
+    if (lease > MAX_LEASE_SECONDS) throw new PbcpError('invalid_lease', `lease_seconds may be at most ${MAX_LEASE_SECONDS}`);
+    const r = claim(stored.card as unknown as OrderCard, producer.root, lease, now());
     let card: Card = stored.card;
     for (const c of r.changed) card = await persist(tx, producer.headId, c);
-    return { status: r.status, card };
+    return { status: r.status, card, refused: r.status === 200 ? undefined : r.code };
   });
+  if (r.refused) throw new ClaimRefusal(r.refused, r.card as unknown as Record<string, unknown> & { id: string });
+  return { status: r.status, card: r.card };
 }
 
 /**
@@ -82,9 +85,7 @@ export async function claimOrder(db: Db, producer: { headId: string; root: strin
  * comes from the current lease. Either way the outcome stays stored; the head marks it `applied` or `stale`,
  * and the brief surfaces stale ones as late or duplicate results.
  */
-export async function applyOutcomeInTx(tx: Tx, headId: string, incoming: ProducerCard): Promise<void> {
-  const target = outcomeTarget(incoming);
-  if (target === undefined) return;
+export async function applyOutcomeInTx(tx: Tx, headId: string, incoming: ProducerCard, target: string): Promise<void> {
   const o = await load(tx, headId, target, { forUpdate: true });
   if (!o || !isOrder(o.card)) return;
   const at = now();
