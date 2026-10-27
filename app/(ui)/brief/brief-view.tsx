@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, cardHref, when } from '../client';
-import { DecisionControls, Rendered, Thumb, type MeCard } from '../components';
+import { api, cardHref, useFresh, when } from '../client';
+import { AsOf, DecisionControls, Rendered, Thumb, type MeCard } from '../components';
 
 interface Fold {
   producer: string;
@@ -30,15 +30,24 @@ interface Brief {
 export function BriefView() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const seq = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
-    const r = await api<Brief>('/api/me/brief');
-    if (r.status !== 200) return setError(`could not load the brief (${r.status})`);
+  const load = useCallback(async (network = false) => {
+    const r = await api<Brief>('/api/me/brief', { network });
+    if (r.status !== 200) return setError(r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of the brief yet.' : `could not load the brief (${r.status})`);
     setBrief(r.body);
+    setCachedAt(r.cachedAt ?? null);
     seq.current ??= r.body.seq; // the first view sets what "seen" means when the owner leaves
   }, []);
   useEffect(() => void load(), [load]);
+  // Shown from the cache first; the network's answer replaces it when it comes.
+  const fresh = useCallback((b: Brief) => {
+    setBrief(b);
+    setCachedAt(null);
+  }, []);
+  const stale = useCallback(() => void load(true), [load]);
+  useFresh('/api/me/brief', fresh, stale);
 
   // Leaving the brief advances the global last-visit cursor to what was on screen (mobile PRD: on close).
   useEffect(() => {
@@ -68,7 +77,7 @@ export function BriefView() {
       <h1>{new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${brief.date}T00:00:00Z`))}</h1>
       <p className="muted">
         {brief.new.length > 0 ? `${brief.new.length} new since ${brief.last_visit.at ? when(brief.last_visit.at, brief.timezone) : 'your first visit'}` : 'Nothing new since your last visit'}
-        {brief.snoozed > 0 && ` · ${brief.snoozed} snoozed`}
+        {brief.snoozed > 0 && ` · ${brief.snoozed} snoozed`} <AsOf at={cachedAt} timezone={brief.timezone} />
       </p>
 
       {brief.daily && (

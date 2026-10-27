@@ -21,6 +21,7 @@ export function proxy(req: NextRequest): NextResponse {
 }
 
 export const config = {
-  // Pages only. Static assets have no script to protect; /api gets its headers from next.config.ts.
-  matcher: ['/((?!api/|_next/static|_next/image|favicon.ico|icon.svg).*)'],
+  // Pages only. Static assets, icons and the manifest have no script to protect; the service worker sends its
+  // own policy (app/sw.js); /api gets its headers from next.config.ts.
+  matcher: ['/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|icons/|sw.js|manifest.webmanifest).*)'],
 };

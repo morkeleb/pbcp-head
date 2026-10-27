@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { api, loadTokens, saveTokens, when } from './client';
+import { api, loadTokens, OFFLINE_REASON, OfflineError, saveTokens, useOnline, when } from './client';
 
 // --- types: the /api/me card shape ----------------------------------------------------
 
@@ -42,6 +42,24 @@ export interface MeCard {
   'orders.claim_seq'?: number;
   'orders.result'?: 'done' | 'failed';
 }
+
+// --- offline ---------------------------------------------------------------------------
+
+/** "as of <time>": shown when what is on screen came from the service worker's cache, not the network. */
+export function AsOf({ at, timezone }: { at?: string | null; timezone?: string }) {
+  if (!at) return null;
+  return <span className="badge as-of" title="Shown from this device’s copy; it updates when the network answers">as of {when(at, timezone)}</span>;
+}
+
+/** Why the controls below it are disabled. Renders nothing while online. */
+export function OfflineNote() {
+  const online = useOnline();
+  if (online) return null;
+  return <p className="muted offline" role="status">{OFFLINE_REASON}</p>;
+}
+
+/** What a write that was not sent says: nothing is queued. */
+export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send later; do it again when you’re back online.';
 
 // --- navigation ----------------------------------------------------------------------
 
@@ -231,13 +249,21 @@ export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided:
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const online = useOnline();
   const post = useCallback(
     async (p: Pending) => {
       const { label: _label, ...decision } = p;
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body: decision });
-      setPending(null);
-      if (r.status === 200 || r.status === 409) onDecided(r.body);
-      else setError(r.body.message ?? `could not record the decision (${r.status})`);
+      try {
+        const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body: decision });
+        setPending(null);
+        if (r.status === 200 || r.status === 409) onDecided(r.body);
+        else setError(r.body.message ?? `could not record the decision (${r.status})`);
+      } catch (e) {
+        // The network went while the undo toast was up: the decision is dropped, not kept for later.
+        if (!(e instanceof OfflineError)) throw e;
+        setPending(null);
+        setError(NOT_SENT);
+      }
     },
     [card.id, onDecided],
   );
@@ -258,11 +284,12 @@ export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided:
   if (card.state !== 'open' || card.kind !== 'decision') return null;
   return (
     <>
-      <div className="row">
-        {primary && <button className="primary" disabled={!!pending} onClick={() => choose({ decision: primary.id, label: primary.label })}>{primary.label}</button>}
-        {reject && <button className="danger" disabled={!!pending} onClick={() => choose({ decision: reject.id, label: reject.label })}>{reject.label}</button>}
-        <button disabled={!!pending} onClick={() => setSheet(true)}>{primary ? 'More…' : 'Decide…'}</button>
+      <div className="row decide">
+        {primary && <button className="primary" disabled={!!pending || !online} onClick={() => choose({ decision: primary.id, label: primary.label })}>{primary.label}</button>}
+        {reject && <button className="danger" disabled={!!pending || !online} onClick={() => choose({ decision: reject.id, label: reject.label })}>{reject.label}</button>}
+        <button disabled={!!pending || !online} onClick={() => setSheet(true)}>{primary ? 'More…' : 'Decide…'}</button>
       </div>
+      <OfflineNote />
       {error && <p className="error">{error}</p>}
       {pending && (
         <div className="toast" role="status">
@@ -270,7 +297,7 @@ export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided:
           <button onClick={undo}>Undo</button>
         </div>
       )}
-      {sheet && <DecideSheet card={card} list={list} edit={edit} onChoose={choose} onClose={() => setSheet(false)} />}
+      {sheet && online && <DecideSheet card={card} list={list} edit={edit} onChoose={choose} onClose={() => setSheet(false)} />}
     </>
   );
 }

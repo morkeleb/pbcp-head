@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, cardHref, when } from '../client';
-import type { MeCard } from '../components';
+import { api, cardHref, OfflineError, useOnline, when } from '../client';
+import { NOT_SENT, OfflineNote, type MeCard } from '../components';
 
 export interface Order extends MeCard {
   to_producer: string;
@@ -71,11 +71,19 @@ function NewOrder({ producers, onGiven }: { producers: string[]; onGiven: () => 
   const [to, setTo] = useState('*');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnline();
   const give = async () => {
     const [title, ...rest] = text.trim().split('\n');
     setBusy(true);
     setError(null);
-    const r = await api<{ message?: string }>('/api/me/orders', { method: 'POST', body: { to_producer: to, title: title!.trim(), body: rest.join('\n').trim() } });
+    let r: { status: number; body: { message?: string } };
+    try {
+      r = await api<{ message?: string }>('/api/me/orders', { method: 'POST', body: { to_producer: to, title: title!.trim(), body: rest.join('\n').trim() } });
+    } catch (e) {
+      setBusy(false);
+      if (!(e instanceof OfflineError)) throw e;
+      return setError(NOT_SENT);
+    }
     setBusy(false);
     if (r.status !== 201) return setError(r.body.message ?? `could not give the order (${r.status})`);
     setText('');
@@ -92,8 +100,9 @@ function NewOrder({ producers, onGiven }: { producers: string[]; onGiven: () => 
             {producers.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
-        <button className="primary" onClick={give} disabled={busy || text.trim() === ''}>Give order</button>
+        <button className="primary" onClick={give} disabled={busy || text.trim() === '' || !online}>Give order</button>
       </div>
+      <OfflineNote />
       {error && <p className="error">{error}</p>}
     </section>
   );
@@ -107,21 +116,31 @@ export function ExecBadge({ order }: { order: Pick<Order, 'exec_state'> }) {
 /** Cancelling is the decision `dismissed` on the order (A.1), behind the same undo toast as any decision. */
 export function CancelOrder({ order, onCancelled }: { order: Order | MeCard; onCancelled: (c: MeCard) => void }) {
   const [pending, setPending] = useState(false);
+  const [notSent, setNotSent] = useState(false);
+  const online = useOnline();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const cancel = () => {
     setPending(true);
+    setNotSent(false);
     timer.current = setTimeout(async () => {
-      const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
-      setPending(false);
-      if (r.status === 200 || r.status === 409) onCancelled(r.body);
+      try {
+        const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
+        if (r.status === 200 || r.status === 409) onCancelled(r.body);
+      } catch (e) {
+        if (!(e instanceof OfflineError)) throw e;
+        setNotSent(true);
+      } finally {
+        setPending(false);
+      }
     }, 4000);
   };
   return (
     <>
-      <button className="danger" onClick={cancel} disabled={pending}>Cancel order</button>
+      <button className="danger" onClick={cancel} disabled={pending || !online}>Cancel order</button>
+      {notSent && <p className="error">{NOT_SENT}</p>}
       {pending && (
         <div className="toast" role="status">
           <span>Cancelling: {order.title}</span>

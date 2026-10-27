@@ -21,7 +21,8 @@
     "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "test:gate": "vitest run",
-    "api:generate": "tsx scripts/api-generate.ts"
+    "api:generate": "tsx scripts/api-generate.ts",
+    "icons": "tsx scripts/icons.ts"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
@@ -62,6 +63,7 @@
     "@types/react-dom": "19.3.0",
     "ajv": "8.17.1",
     "drizzle-kit": "0.31.11",
+    "sharp": "0.35.5",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.5"

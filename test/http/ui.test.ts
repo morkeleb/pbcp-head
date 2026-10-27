@@ -44,7 +44,11 @@ beforeEach(async () => {
   await until(async () => (await row('goalpath:report:1')).renderedHtml !== null);
 
   const tokens = await startSession(testDb(), { headId: OWNER, identityId: null, platform: 'web', name: 'browser' });
-  page = await browser.newPage();
+  // A fresh browser profile per test: the service worker and its cache would otherwise carry cards from the
+  // previous test's database into this one.
+  const context = await browser.createBrowserContext();
+  page = await context.newPage();
+  page.once('close', () => void context.close().catch(() => undefined));
   await page.setViewport({ width: 390, height: 844 });
   errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));

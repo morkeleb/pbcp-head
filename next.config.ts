@@ -5,6 +5,12 @@ import { API_CSP, COMMON_HEADERS } from './lib/security';
 refuseTestModeInProduction();
 
 /**
+ * One id per build, the same in the build and at runtime: Next.js's own build id, and baked into the service
+ * worker (app/sw.js) through `env`, so each deployment ships a worker the browser sees as new.
+ */
+const BUILD_ID = process.env.PBCP_BUILD_ID ?? process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? Date.now().toString(36);
+
+/**
  * A package's files as mermaid-cli resolves them at runtime (import.meta.resolve): through pnpm's link
  * beside it, and in pnpm's store, where that link points when the function keeps it as a link.
  */
@@ -68,6 +74,8 @@ const config: NextConfig = {
     '/api/render/draw': ['**/next/dist/compiled/next-server/*.map', '**/next/dist/compiled/next-server/*.dev.js', '**/node_modules/@img/**', '**/node_modules/sharp/**'],
   },
   poweredByHeader: false,
+  generateBuildId: () => BUILD_ID,
+  env: { PBCP_BUILD_ID: BUILD_ID },
   // The pages' headers, with their per-request nonce CSP, are set in proxy.ts. The image routes (drawn
   // diagrams, the remote-image proxy) send their own image CSP.
   async headers() {
