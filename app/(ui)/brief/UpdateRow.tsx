@@ -3,7 +3,7 @@
 // UpdateRow: an artifact or signal, or a thread of them (cards sharing producer and thread, newest last, §8), as a
 // row of the reference UI. The iOS app mirrors this component; it is self-contained: a thread in, acknowledgement out.
 //
-//   ▢ PRODUCER · 09:14                                              Acknowledge
+//   ▢ PRODUCER · 09:14 · source ↗                                   Acknowledge
 //   Title
 //   lead (rendered_lead)
 //   [first diagram or image, fitted to the row, captioned; opens full-screen at native size or larger]
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
+import { announce, NOT_SENT, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
 import { clock, type Density } from './DecisionCard';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
@@ -97,11 +97,18 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
+            {/* One line: the producer and time keep their room, the source's label truncates first (§4.1 `source`). */}
             <Icon className="size-3.5 flex-none" aria-label={c.kind} />
-            <span className="truncate">{c.producer}</span>
+            <span className="max-w-[45%] flex-none truncate">{c.producer}</span>
             <span aria-hidden>·</span>
-            <time dateTime={c.received_at}>{clock(c.received_at, timezone)}</time>
+            <time className="flex-none" dateTime={c.received_at}>{clock(c.received_at, timezone)}</time>
+            {sourceLink(c.source) && (
+              <>
+                <span aria-hidden>·</span>
+                <SourceLink source={c.source} />
+              </>
+            )}
           </div>
           <h4 className={cn('mt-0.5 font-serif font-semibold tracking-editorial', ledger ? 'text-body' : 'text-title')}>
             <Link href={cardHref(c.id)} className="hover:underline">{c.title}</Link>

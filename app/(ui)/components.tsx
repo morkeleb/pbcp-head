@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
@@ -128,6 +129,46 @@ interface Visual {
 }
 
 /** Server-rendered, sanitised card HTML. Tapping a visual opens it full-screen (§3.1 Presentation). */
+// --- source: the card's way out to the thing it is about (RFC 0.6 §4.1) ----------------------
+
+/** A followable source (§3.1 Links: http, https or mailto only), its label (or the URL's host) and its host. */
+export function sourceLink(source: MeCard['source']): { href: string; label: string; host: string } | null {
+  if (!source?.url) return null;
+  let url: URL;
+  try {
+    url = new URL(source.url);
+  } catch {
+    return null;
+  }
+  if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) return null;
+  const host = url.protocol === 'mailto:' ? url.pathname.split('@').pop() || url.pathname : url.host;
+  return { href: url.href, label: source.label?.trim() || host, host };
+}
+
+/**
+ * The source on a card's header line, "label ↗", opening in a new tab. The label is the producer's display text
+ * (§12: untrusted, it says nothing about where the link goes), so the host is in the link's title and accessible
+ * name. It truncates before anything else on the line does. Nothing when the card has no followable source.
+ */
+export function SourceLink({ source, className }: { source: MeCard['source']; className?: string }) {
+  const link = sourceLink(source);
+  if (!link) return null;
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener"
+      title={link.host}
+      aria-label={`${link.label} (${link.host}, opens in a new tab)`}
+      data-source
+      className={`inline-flex min-w-0 items-center gap-0.5 normal-case tracking-normal hover:text-foreground hover:underline ${className ?? ''}`}
+    >
+      <span className="truncate">{link.label}</span>
+      <ArrowUpRight className="size-3 flex-none" aria-hidden />
+    </a>
+  );
+}
+
 export function Rendered({ html, className }: { html: string; className?: string }) {
   const [open, setOpen] = useState<Visual | null>(null);
   const dark = useDark();
