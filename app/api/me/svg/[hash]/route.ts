@@ -10,6 +10,20 @@ import { json } from '../../../../../lib/http';
 
 const notFound = () => json({ error: 'not_found', message: 'no such diagram' }, 404);
 
+/**
+ * mermaid sizes its SVG `width="100%"` with no height, which an <img> reads as no intrinsic size at all: the
+ * browser falls back to 300px wide, and the full-screen viewer, which starts from the natural size, shows the
+ * diagram smaller than its thumbnail. The served SVG declares the size its viewBox gives; in a card it is
+ * still scaled to the card's width by CSS.
+ */
+function withIntrinsicSize(svg: string): string {
+  return svg.replace(/<svg\b[^>]*>/, (root) => {
+    const box = /\sviewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(root);
+    if (!box || /\sheight="/.test(root)) return root;
+    return root.replace(/\swidth="[^"]*"/, '').replace(/^<svg/, `<svg width="${box[1]}" height="${box[2]}"`);
+  });
+}
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ hash: string }> }): Promise<Response> {
@@ -17,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
   if (!/^[0-9a-f]{64}$/.test(hash)) return notFound();
   const [row] = await db().select({ svg: diagrams.svg }).from(diagrams).where(eq(diagrams.hash, hash));
   if (!row?.svg) return notFound();
-  return new Response(row.svg, {
+  return new Response(withIntrinsicSize(row.svg), {
     headers: {
       'content-type': 'image/svg+xml; charset=utf-8',
       'cache-control': 'public, max-age=31536000, immutable',

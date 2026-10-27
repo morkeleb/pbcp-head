@@ -114,11 +114,15 @@ export function CardView() {
       {card.order_outcome === 'stale' && <p className="muted">This result came late or from an earlier lease; it did not change the order.</p>}
 
       <DecisionSummary card={card} timezone={timezone} />
-      <DecisionControls card={card} onDecided={(c) => update(c)} />
+      <DecisionControls card={card} onChange={(c) => update(c)} />
 
       {card.state === 'open' && card.kind !== 'decision' && card.kind !== 'order' && (
         <div className="row">
-          <button onClick={() => post('ack')} disabled={!!card.acknowledged_at || !online}>{card.acknowledged_at ? 'Acknowledged' : 'Acknowledge'}</button>
+          {card.acknowledged_at ? (
+            <p className="decided-line">Acknowledged {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(card.acknowledged_at))}</p>
+          ) : (
+            <button onClick={() => post('ack')} disabled={!online}>Acknowledge</button>
+          )}
         </div>
       )}
       {card.state === 'open' && card.kind !== 'order' && (

@@ -1739,6 +1739,10 @@
             "type": "string",
             "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
           },
+          "lead": {
+            "type": "string",
+            "description": "The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with."
+          },
           "rendered_actions": {
             "description": "Rendered bodies of choice options (§4.4), by action id",
             "type": "object",
@@ -1775,7 +1779,8 @@
           "received_at",
           "changed_at",
           "delivery",
-          "rendered_html"
+          "rendered_html",
+          "lead"
         ],
         "additionalProperties": {}
       },
@@ -2311,6 +2316,10 @@
             "type": "string",
             "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
           },
+          "lead": {
+            "type": "string",
+            "description": "The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with."
+          },
           "rendered_actions": {
             "description": "Rendered bodies of choice options (§4.4), by action id",
             "type": "object",
@@ -2372,6 +2381,7 @@
           "changed_at",
           "delivery",
           "rendered_html",
+          "lead",
           "progress"
         ],
         "additionalProperties": {}

@@ -170,18 +170,12 @@ describe('offline', () => {
     expect(controls.every((c) => c.disabled)).toBe(true);
     expect(await page.$eval('.offline', (e) => e.textContent)).toContain('nothing is saved to send later');
     await page.click('.row.decide button.primary').catch(() => undefined);
+    await page.click('.row.decide button.quiet').catch(() => undefined); // Dismiss too
+    expect(await page.$('.decided-line')).toBeNull();
 
-    // Online, decide; the network goes while the undo toast is up: the decision is dropped, not kept.
+    // Back online, nothing goes out on its own: there is no queue to send it from.
     await setOffline(false, worker);
     await page.waitForFunction(() => !(document.querySelector('.row.decide button.primary') as HTMLButtonElement).disabled);
-    await page.click('.row.decide button.primary');
-    await page.waitForSelector('.toast');
-    await setOffline(true, worker);
-    await page.waitForFunction(() => document.body.innerText.includes('Not sent: you’re offline'), { timeout: 8000 });
-    expect(await page.$('.toast')).toBeNull();
-
-    // Back online, nothing goes out on its own.
-    await setOffline(false, worker);
     await wait(5000);
     expect((await row(DECISION)).state).toBe('open');
     expect(await testDb().select().from(decisionLog)).toEqual([]);

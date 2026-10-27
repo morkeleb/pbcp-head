@@ -18,12 +18,16 @@ describe('the nightly fold', () => {
     owner: 'morten',
     date: '2026-10-07',
     emittedAt: '2026-10-07T03:30:00Z',
-    openDecisions: [stored('hermes:gmail:1', { kind: 'decision', title: 'Reply to Anna re [invoice](https://evil.example)' }), stored('goalpath:item:9', { kind: 'decision', snoozed_until: '2026-10-08T03:30:00Z' })],
+    cardUrl: (id: string) => `https://head.example/card/${encodeURIComponent(id)}`,
+    openDecisions: [
+      stored('hermes:gmail:1', { kind: 'decision', title: 'Reply to Anna re [invoice](https://evil.example)', body: '## Evidence\n\nAnna asks whether the invoice can wait until the **20th**.\n\n## Proposed reply\n\n> Fine.' }),
+      stored('goalpath:item:9', { kind: 'decision', snoozed_until: '2026-10-08T03:30:00Z', summary: 'GP-9 is finished; accept it?' } as Partial<Card>),
+    ],
     yesterday: [
       stored('hermes:gmail:a', { thread: 'gmail:t1' }),
-      stored('hermes:gmail:b', { kind: 'signal', thread: 'gmail:t1', title: 'Sent' }),
+      stored('hermes:gmail:b', { kind: 'signal', thread: 'gmail:t1', title: 'Sent', body: 'The reply went out at 09:12.' }),
       stored('hermes:gmail:1', { kind: 'decision' }),
-      stored('goalpath:item:9', { kind: 'decision', decision: 'approve', state: 'decided' }),
+      stored('goalpath:item:9', { kind: 'decision', decision: 'approve', state: 'decided', body: 'word '.repeat(80) }),
     ],
   };
 
@@ -33,26 +37,39 @@ describe('the nightly fold', () => {
     expect(card).toMatchObject({ id: 'head:daily:2026-10-07', kind: 'artifact', urgency: 'brief', producer: 'head', thread: 'daily', title: 'Brief for Wednesday 7 October', references: ['hermes:gmail:1', 'goalpath:item:9'] });
   });
 
-  it('counts by producer and kind, lists open decisions, and collapses yesterday by thread', () => {
+  it('leads with the open decisions, one line each: producer, linked title, lead', () => {
     const { body } = foldDaily(input);
-    expect(body).toContain('**2 open decisions** · 4 cards yesterday from 2 producers');
-    expect(body).toContain('```mermaid\npie title Cards yesterday by producer\n  "hermes" : 3\n  "goalpath" : 1\n```');
-    expect(body).toContain('| hermes | 1 | 1 | 1 | 3 |');
-    expect(body).toContain('| goalpath | 1 | 0 | 0 | 1 |');
-    expect(body).toContain('- **goalpath** · Title goalpath:item:9 — since 6 Oct (snoozed)');
-    expect(body).toContain('- **hermes** · gmail:t1 — 2 cards, latest “Sent” (signal)');
-    expect(body).toContain('(decision, approve)');
+    const lines = body.split('\n');
+    expect(lines[0]).toBe('- **hermes** · [Reply to Anna re \\[invoice\\]\\(https://evil\\.example\\)](<https://head.example/card/hermes%3Agmail%3A1>) — Anna asks whether the invoice can wait until the 20th\\.');
+    // The summary is the lead when there is one: plain text, escaped, not cut.
+    expect(lines[1]).toBe('- **goalpath** · [Title goalpath:item:9](<https://head.example/card/goalpath%3Aitem%3A9>) (snoozed) — GP\\-9 is finished; accept it?');
+  });
+
+  it('then yesterday’s threads by their newest card’s lead, cut at about 200 characters without a summary', () => {
+    const { body } = foldDaily(input);
+    expect(body).toContain('**Yesterday**');
+    expect(body).toContain('- **hermes** · [Sent](<https://head.example/card/hermes%3Agmail%3Ab>) (2 in thread) — The reply went out at 09:12\\.');
+    const long = body.split('\n').find((l) => l.includes('goalpath%3Aitem%3A9>) —') && l.includes('word'))!;
+    expect(long).toMatch(/word…$/);
+    expect(long.split(' — ')[1]!.length).toBeLessThanOrEqual(200);
+  });
+
+  it('ends with the counts on one line, and draws no chart', () => {
+    const { body } = foldDaily(input);
+    expect(body.trimEnd().split('\n').at(-1)).toBe('2 open decisions · 4 cards yesterday from 2 producers');
+    expect(foldDaily(input)).toMatchObject({ summary: '2 open decisions · 4 cards yesterday from 2 producers' }); // its lead
+    expect(body).not.toContain('```mermaid');
+    expect(body).not.toContain('| --- |');
   });
 
   it('escapes producer titles so they cannot add links or images', () => {
-    expect(foldDaily(input).body).toContain('Reply to Anna re \\[invoice\\]\\(https://evil\\.example\\)');
     expect(escapeMarkdown('![x](y) <b>')).toBe('\\!\\[x\\]\\(y\\) \\<b\\>');
   });
 
-  it('says so when the day was quiet, without a chart', () => {
+  it('says so when the day was quiet', () => {
     const { body } = foldDaily({ ...input, openDecisions: [], yesterday: [] });
-    expect(body).toContain('Nothing is waiting for you.');
+    expect(body.split('\n')[0]).toBe('Nothing is waiting for you.');
     expect(body).toContain('No cards arrived yesterday.');
-    expect(body).not.toContain('```mermaid');
+    expect(body).toContain('0 open decisions · 0 cards yesterday from 0 producers');
   });
 });

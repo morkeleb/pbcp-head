@@ -1203,6 +1203,10 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/rendered_html`.
             public var renderedHtml: Swift.String
+            /// The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/lead`.
+            public var lead: Swift.String
             /// Rendered bodies of choice options (§4.4), by action id
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/rendered_actions`.
@@ -1282,6 +1286,7 @@ extension Components {
             ///   - orders_claimSeq: On an executor’s outcome card: the claim it reports on (A.3)
             ///   - orders_result: On an executor’s outcome card: how the run ended (A.3)
             ///   - renderedHtml: The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.
+            ///   - lead: The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
@@ -1322,6 +1327,7 @@ extension Components {
                 orders_claimSeq: Swift.Int? = nil,
                 orders_result: Components.Schemas.MeCard.Orders_resultPayload? = nil,
                 renderedHtml: Swift.String,
+                lead: Swift.String,
                 renderedActions: Components.Schemas.MeCard.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.MeCard.OrderOutcomePayload? = nil,
@@ -1362,6 +1368,7 @@ extension Components {
                 self.orders_claimSeq = orders_claimSeq
                 self.orders_result = orders_result
                 self.renderedHtml = renderedHtml
+                self.lead = lead
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
@@ -1403,6 +1410,7 @@ extension Components {
                 case orders_claimSeq = "orders.claim_seq"
                 case orders_result = "orders.result"
                 case renderedHtml = "rendered_html"
+                case lead
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
@@ -1549,6 +1557,10 @@ extension Components {
                     Swift.String.self,
                     forKey: .renderedHtml
                 )
+                self.lead = try container.decode(
+                    Swift.String.self,
+                    forKey: .lead
+                )
                 self.renderedActions = try container.decodeIfPresent(
                     Components.Schemas.MeCard.RenderedActionsPayload.self,
                     forKey: .renderedActions
@@ -1597,6 +1609,7 @@ extension Components {
                     "orders.claim_seq",
                     "orders.result",
                     "rendered_html",
+                    "lead",
                     "rendered_actions",
                     "first_visual",
                     "order_outcome"
@@ -1743,6 +1756,10 @@ extension Components {
                 try container.encode(
                     self.renderedHtml,
                     forKey: .renderedHtml
+                )
+                try container.encode(
+                    self.lead,
+                    forKey: .lead
                 )
                 try container.encodeIfPresent(
                     self.renderedActions,
@@ -2743,6 +2760,10 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/rendered_html`.
             public var renderedHtml: Swift.String
+            /// The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/lead`.
+            public var lead: Swift.String
             /// Rendered bodies of choice options (§4.4), by action id
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/rendered_actions`.
@@ -2862,6 +2883,7 @@ extension Components {
             ///   - orders_claimSeq: On an executor’s outcome card: the claim it reports on (A.3)
             ///   - orders_result: On an executor’s outcome card: how the run ended (A.3)
             ///   - renderedHtml: The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.
+            ///   - lead: The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
@@ -2903,6 +2925,7 @@ extension Components {
                 orders_claimSeq: Swift.Int? = nil,
                 orders_result: Components.Schemas.OrderWithProgress.Orders_resultPayload? = nil,
                 renderedHtml: Swift.String,
+                lead: Swift.String,
                 renderedActions: Components.Schemas.OrderWithProgress.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.OrderWithProgress.OrderOutcomePayload? = nil,
@@ -2944,6 +2967,7 @@ extension Components {
                 self.orders_claimSeq = orders_claimSeq
                 self.orders_result = orders_result
                 self.renderedHtml = renderedHtml
+                self.lead = lead
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
@@ -2986,6 +3010,7 @@ extension Components {
                 case orders_claimSeq = "orders.claim_seq"
                 case orders_result = "orders.result"
                 case renderedHtml = "rendered_html"
+                case lead
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
@@ -3133,6 +3158,10 @@ extension Components {
                     Swift.String.self,
                     forKey: .renderedHtml
                 )
+                self.lead = try container.decode(
+                    Swift.String.self,
+                    forKey: .lead
+                )
                 self.renderedActions = try container.decodeIfPresent(
                     Components.Schemas.OrderWithProgress.RenderedActionsPayload.self,
                     forKey: .renderedActions
@@ -3185,6 +3214,7 @@ extension Components {
                     "orders.claim_seq",
                     "orders.result",
                     "rendered_html",
+                    "lead",
                     "rendered_actions",
                     "first_visual",
                     "order_outcome",
@@ -3332,6 +3362,10 @@ extension Components {
                 try container.encode(
                     self.renderedHtml,
                     forKey: .renderedHtml
+                )
+                try container.encode(
+                    self.lead,
+                    forKey: .lead
                 )
                 try container.encodeIfPresent(
                     self.renderedActions,

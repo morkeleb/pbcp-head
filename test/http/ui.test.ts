@@ -92,26 +92,54 @@ describe('web brief', () => {
     expect(errors).toEqual([]);
   });
 
-  it('decides through the choice sheet after the undo window, and logs the device', async () => {
+  it('lays out options with bodies as a group on the card, default pre-selected, and records the pick at once', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await (await page.$('xpath/.//button[contains(., "More…")]'))!.click();
-    await page.waitForSelector('.sheet');
-    expect(await page.$eval('.option.selected .label', (e) => e.textContent)).toBe('Ship Friday'); // the default, preselected
-    await (await page.$('xpath/.//label[contains(., "Ship next sprint")]'))!.click();
-    await (await page.$('xpath/.//div[@class="sheet"]//button[.="Decide"]'))!.click();
-    await page.waitForSelector('.toast');
-    expect((await row('goalpath:item:1:ship')).state).toBe('open'); // still undoable
+    const article = (await page.$('xpath/.//article[.//h3[contains(., "When should M4 ship?")]]'))!;
+    expect(await article.$eval('.option.selected .label', (e) => e.textContent)).toBe('Ship Friday');
+    expect(await article.$eval('.option.selected .option-body', (e) => e.textContent)).toContain('Needs sign-off.');
+    expect(await page.$('.sheet')).toBeNull();
+    expect(await page.$('xpath/.//button[.="Decide…"]')).toBeNull();
+    await (await article.$('xpath/.//label[contains(., "Ship next sprint")]'))!.click();
+    await (await article.$('xpath/.//button[contains(@class,"primary") and .="Ship next sprint"]'))!.click();
+    // In place, at once: the controls give way to the state, the card dims, and it is announced.
+    await article.waitForSelector('.decided-line');
+    expect(await article.$eval('.decided-line', (e) => e.textContent)).toMatch(/^Decided: Ship next sprint · \d\d:\d\d$/);
+    expect(await article.evaluate((e) => e.classList.contains('done'))).toBe(true);
+    expect(await article.$('.badge.new')).toBeNull();
+    await page.waitForFunction(() => document.querySelector('[aria-live="polite"]')?.textContent?.startsWith('Decided: Ship next sprint'));
     await until(async () => (await row('goalpath:item:1:ship')).state === 'decided');
     const [log] = await testDb().select().from(decisionLog);
     expect(log).toMatchObject({ cardId: 'goalpath:item:1:ship', decision: 'ship-next' });
     expect(errors).toEqual([]);
   });
 
-  it('undo really cancels the decision', async () => {
+  it('offers Edit… only when actions has edit, and records `edited` with the text; a comment is behind a disclosure', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await (await page.$('xpath/.//button[.="Ship Friday"]'))!.click();
-    await (await page.$('xpath/.//div[contains(@class,"toast")]//button[.="Undo"]'))!.click();
-    await new Promise((r) => setTimeout(r, 4500));
+    const article = (await page.$('xpath/.//article[.//h3[contains(., "When should M4 ship?")]]'))!;
+    expect(await article.$eval('details.comment', (d) => (d as HTMLDetailsElement).open)).toBe(false);
+    expect(await article.$eval('textarea[aria-label="Comment"]', (t) => t.checkVisibility())).toBe(false); // not shown until asked for
+    await (await article.$('details.comment summary'))!.click();
+    await (await article.$('textarea[aria-label="Comment"]'))!.type('Check with Anna first.');
+    await (await article.$('xpath/.//button[.="Edit…"]'))!.click();
+    await (await article.waitForSelector('.edit textarea'))!.type('Ship Monday instead.');
+    await (await article.$('xpath/.//button[.="Send edit"]'))!.click();
+    await article.waitForSelector('.decided-line');
+    await until(async () => (await row('goalpath:item:1:ship')).state === 'decided');
+    expect(await row('goalpath:item:1:ship')).toMatchObject({ decision: 'edited', editedProposal: 'Ship Monday instead.', comment: 'Check with Anna first.' });
+  });
+
+  it('puts the controls back with the error when the head does not record the decision', async () => {
+    // Without the service worker, so the page's own request can be answered with a failure here.
+    await page.setBypassServiceWorker(true);
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.setRequestInterception(true);
+    page.on('request', (r) => (r.method() === 'POST' && r.url().includes('/decision') ? void r.respond({ status: 500, contentType: 'application/json', body: '{"error":"internal","message":"internal error"}' }) : void r.continue()));
+    const article = (await page.$('xpath/.//article[.//h3[contains(., "When should M4 ship?")]]'))!;
+    await (await article.$('xpath/.//button[contains(@class,"primary")]'))!.click();
+    await article.waitForSelector('.error');
+    expect(await article.$eval('.error', (e) => e.textContent)).toBe('internal error');
+    expect(await article.$('.decided-line')).toBeNull();
+    expect(await article.$('xpath/.//button[contains(@class,"primary") and .="Ship Friday"]')).not.toBeNull();
     expect((await row('goalpath:item:1:ship')).state).toBe('open');
   });
 
@@ -123,6 +151,99 @@ describe('web brief', () => {
     await page.click('.rendered figure img');
     await page.waitForSelector('.viewer');
     expect(await page.$eval('.viewer .caption', (e) => e.textContent)).toBe('Burndown');
+    expect(errors).toEqual([]);
+  });
+});
+
+describe('the brief: lead, proposal, More', () => {
+  beforeEach(async () => {
+    const mail = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'mail' })}`;
+    await call('PUT', cardPath('mail:inbox:1'), { auth: mail, body: card('mail:inbox:1', {
+      producer: 'mail', title: 'Offsite on the 14th: are you in?', actions: ['archive', 'keep'],
+      body: '- **From:** Jonas\n\n> Can you confirm by Friday whether you join for both days?',
+    }) });
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes' })}`;
+    await call('PUT', cardPath('hermes:gmail:anna:reply'), { auth: hermes, body: card('hermes:gmail:anna:reply', {
+      producer: 'hermes', title: 'Reply to Anna re invoice timing', actions: ['approve', 'reject', 'edit'],
+      body: 'Anna asks whether the September invoice can be paid on the 20th.\n\n## Evidence\n\nCash flow covers it.\n\n## Proposed reply\n\n> Hi Anna, the 20th is fine.',
+    }) });
+    await call('PUT', cardPath('mail:inbox:2'), { auth: mail, body: card('mail:inbox:2', {
+      producer: 'mail', title: 'Invoice question', actions: ['archive', 'keep'], summary: 'Anna asks to pay on the **20th**.',
+      body: 'The full mail, quoted.',
+    }) });
+  });
+  const article = (title: string) => page.$(`xpath/.//article[.//h3[contains(., "${title}")]]`);
+
+  it('shows the lead and the proposal on the card, the rest behind More, and marks seen only when More opens', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const reply = (await article('Reply to Anna'))!;
+    expect(await reply.$eval('.lead', (e) => e.textContent)).toBe('Anna asks whether the September invoice can be paid on the 20th.');
+    expect(await reply.$eval('.proposal', (e) => e.textContent)).toContain('Hi Anna, the 20th is fine.');
+    expect(await reply.$eval('details.more', (d) => (d as HTMLDetailsElement).open)).toBe(false);
+    expect(await reply.$eval('details.more', (d) => d.textContent)).toContain('Cash flow covers it.');
+    expect(await page.$('xpath/.//button[.="Read"]')).toBeNull();
+    await new Promise((r) => setTimeout(r, 1500));
+    expect((await row('hermes:gmail:anna:reply')).seenAt).toBeNull(); // the lead alone does not present the card
+    await (await reply.$('details.more summary'))!.click();
+    await until(async () => (await row('hermes:gmail:anna:reply')).seenAt !== null);
+    expect(errors).toEqual([]);
+  });
+
+  it('leads with the summary, as text, when the producer gives one', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const mail = (await article('Invoice question'))!;
+    expect(await mail.$eval('.lead', (e) => e.textContent)).toBe('Anna asks to pay on the **20th**.'); // never markdown
+    expect(await mail.$eval('.lead', (e) => e.innerHTML)).not.toContain('<strong>');
+    expect(await mail.$eval('details.more', (d) => d.textContent)).toContain('The full mail, quoted.');
+  });
+
+  it('puts a bare-string list on the card as buttons, default or first primary, Dismiss quiet, no Edit… unless offered', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const mail = (await article('Offsite on the 14th'))!;
+    const buttons = await mail.$$eval('.row.decide button', (bs) => bs.map((b) => [b.textContent, b.className]));
+    expect(buttons).toEqual([['archive', 'primary'], ['keep', ''], ['Dismiss', 'quiet']]);
+    const reply = (await article('Reply to Anna'))!;
+    expect(await reply.$$eval('.row.decide button', (bs) => bs.map((b) => b.textContent))).toEqual(['approve', 'reject', 'Edit…', 'Dismiss']);
+    await (await mail.$('xpath/.//button[.="archive"]'))!.click();
+    await mail.waitForSelector('.decided-line');
+    await until(async () => (await row('mail:inbox:1')).decision === 'archive');
+    expect(errors).toEqual([]);
+  });
+
+  it('acknowledges in place: the button becomes the time, the card collapses to title and lead, not new any more', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const fold = (await article('Burndown'))!;
+    expect(await fold.$('.thumb')).not.toBeNull();
+    await (await fold.$('xpath/.//button[.="Acknowledge"]'))!.click();
+    await fold.waitForSelector('.decided-line');
+    expect(await fold.$eval('.decided-line', (e) => e.textContent)).toMatch(/^Acknowledged \d\d:\d\d$/);
+    expect(await fold.$('button')).toBeNull();
+    expect(await fold.$('.thumb')).toBeNull();
+    expect(await fold.$('.badge.new')).toBeNull();
+    await page.waitForFunction(() => document.querySelector('[aria-live="polite"]')?.textContent === 'Acknowledged: Burndown');
+    await until(async () => (await row('goalpath:report:1')).acknowledgedAt !== null);
+  });
+
+  it('heads the page with the brief so far today until the nightly card exists', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const top = (await page.$('main section.card.daily'))!;
+    expect(await top.$eval('h3', (e) => e.textContent)).toBe('So far today');
+    const text = await top.evaluate((e) => e.textContent);
+    expect(text).toContain('hermes · Reply to Anna re invoice timing — Anna asks whether the September invoice can be paid on the 20th.');
+    expect(text).toContain('mail · Invoice question — Anna asks to pay on the **20th**.');
+    expect(text).toMatch(/4 open decisions · \d+ cards? today from \d+ producers?/);
+  });
+
+  it('opens a diagram full-screen at least as wide as the screen, never smaller than its thumbnail', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const thumb = (await (await page.$('.thumb img'))!.boundingBox())!;
+    await page.click('.thumb img');
+    await page.waitForSelector('.viewer .stage img');
+    await page.waitForFunction(() => (document.querySelector('.viewer .stage img') as HTMLImageElement).style.width !== '');
+    await new Promise((r) => setTimeout(r, 200));
+    const full = (await (await page.$('.viewer .stage img'))!.boundingBox())!;
+    expect(full.width).toBeGreaterThanOrEqual(390 - 1);
+    expect(full.width).toBeGreaterThan(thumb.width);
     expect(errors).toEqual([]);
   });
 });

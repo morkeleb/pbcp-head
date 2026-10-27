@@ -31,9 +31,11 @@ describe('GET /api/cron/brief', () => {
 
     const brief = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
     expect(brief.daily).toMatchObject({ id: 'head:daily:2026-10-07', kind: 'artifact', producer: 'head', references: ['hermes:gmail:1'] });
-    expect(brief.daily.body).toContain('**1 open decision** · 2 cards yesterday from 1 producer');
-    expect(brief.daily.rendered_html).toMatch(/\/api\/me\/svg\/[0-9a-f]{64}/);
-    expect(brief.daily.first_visual).toMatchObject({ kind: 'diagram', caption: 'Cards yesterday by producer' });
+    expect(brief.daily.body).toContain('1 open decision · 2 cards yesterday from 1 producer');
+    // Each line links to the card's page in the head; the renderer keeps that link in the app.
+    expect(brief.daily.rendered_html).toContain(`href="/card/${encodeURIComponent('hermes:gmail:1')}"`);
+    expect(brief.daily.rendered_html).not.toContain('/api/me/svg/'); // no chart: §8, counts are additions
+    expect(brief.daily.lead).toBe('1 open decision · 2 cards yesterday from 1 producer'); // its summary
     expect(brief.threads).toEqual([]); // the head's own card is the brief, not one of its folds
   });
 
