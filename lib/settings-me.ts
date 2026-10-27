@@ -54,16 +54,14 @@ export async function snoozeUntil(db: Db, headId: string, body: { until?: unknow
     }
   }
   if (body.until === null) return null;
-  if (typeof body.until !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(body.until) || Number.isNaN(Date.parse(body.until))) {
-    throw new HttpError(400, 'invalid_request', 'give until (an RFC 3339 timestamp, or null to unsnooze) or a preset');
-  }
-  return iso(new Date(body.until));
+  // Checked by core's snooze: anything but a UTC timestamp later than now is 400 invalid_snooze.
+  return body.until as string;
 }
 
 /**
  * PATCH /api/me/producers/{root} { ceiling?, revoked? }: sets the ceiling on every live token of the root
  * (§9: the person sets a per-producer ceiling), or revokes them all (§12: revoking is how to silence a
- * producer). A ceiling applies to content stored from now on: §9 (0.4) says changing a ceiling does not
+ * producer). A ceiling applies to content stored from now on: §9 says changing a ceiling does not
  * revisit stored cards, so their `delivery` stays as it was clamped.
  */
 export async function updateProducer(db: Db, headId: string, root: string, body: { ceiling?: unknown; revoked?: unknown }) {

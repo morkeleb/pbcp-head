@@ -2,7 +2,7 @@
 // HTTP, recording each call. The fixtures match partially; this compares the whole response — status, every
 // field of every card, sync pages and `next` — so any place the two implementations disagree shows up, not
 // only the places a fixture happens to check. Both use a sync page cap of 2 so their pages line up.
-// Error bodies are compared by code; messages are for people (§7.4).
+// Error bodies are compared by code, and a claim refusal's order in full; messages are for people (§7.4).
 
 import { loadFixtures, runFixture, type HeadUnderTest, type Response } from '@pbcp/core/conformance';
 import { describe, expect, inject, it } from 'vitest';
@@ -36,10 +36,11 @@ function recording(h: HeadUnderTest, log: Call[]): HeadUnderTest {
     decideWithToken: (t, id, d) => rec('decideWithToken', { id, ...d })(h.decideWithToken(t, id, d)),
     seen: (id) => rec('seen', id)(h.seen(id)),
     acknowledge: (id) => rec('acknowledge', id)(h.acknowledge(id)),
+    snooze: (id, until) => rec('snooze', { id, until })(h.snooze(id, until)),
     clock: {
       set: (iso) => {
         log.push({ op: 'clock', arg: iso });
-        h.clock.set(iso);
+        return h.clock.set(iso);
       },
     },
   };
@@ -79,6 +80,9 @@ const isErrorBody = (b: unknown): b is { error: string } => typeof b === 'object
 function diff(a: unknown, b: unknown, path: string, out: string[]): void {
   if (isErrorBody(a) && isErrorBody(b)) {
     if (a.error !== b.error) out.push(`${path}.error: in-process ${a.error}, http ${b.error}`);
+    // A.2, A.5: a 409 lease_held or 410 order_terminal body also carries the order.
+    const order = (x: object) => (x as { order?: unknown }).order;
+    if (order(a) !== undefined || order(b) !== undefined) diff(order(a), order(b), `${path}.order`, out);
     return;
   }
   if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null && Array.isArray(a) === Array.isArray(b)) {
@@ -88,18 +92,6 @@ function diff(a: unknown, b: unknown, path: string, out: string[]): void {
   }
   if (a !== b) out.push(`${path}: in-process ${JSON.stringify(a)}, http ${JSON.stringify(b)}`);
 }
-
-/**
- * Disagreements found, reported to pbcp, and asserted here exactly, so they stay visible and anything new
- * fails. Remove an entry when pbcp fixes it (the test then fails until it is removed).
- *
- * - The in-process adapter at af785f1 implements the orders extension but describes `extensions: []`;
- *   this head implements orders and says so (§7.5). The in-process adapter's describe() is hard-coded.
- */
-const KNOWN: Record<string, (d: string) => boolean> = {
-  C25: (d) => d === '#1 describe null.body.extensions.0: in-process undefined, http "orders"',
-  C31: (d) => /^#\d+ describe null\.body\.extensions\.0: in-process undefined, http "orders"$/.test(d),
-};
 
 describe('in-process adapter vs HTTP head, call by call', () => {
   for (const fixture of loadFixtures('core')) {
@@ -121,13 +113,7 @@ describe('in-process adapter vs HTTP head, call by call', () => {
         if (!other) return;
         diff({ op: call.op, arg: call.arg, status: call.status, body: call.body }, { ...other }, `#${i + 1} ${call.op} ${JSON.stringify(call.arg)}`, disagreements);
       });
-      const known = KNOWN[fixture.name.slice(0, 3)];
-      if (known) {
-        expect(disagreements.length, 'a known disagreement went away: update KNOWN').toBeGreaterThan(0);
-        expect(disagreements.filter((d) => !known(d))).toEqual([]);
-      } else {
-        expect(disagreements).toEqual([]);
-      }
+      expect(disagreements).toEqual([]);
     });
   }
 });

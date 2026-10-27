@@ -137,7 +137,7 @@ describe('web orders', () => {
     await call('POST', `${cardPath(order!.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
     const k = order!.id.split(':')[2]!;
     for (const n of [1, 2, 3, 4]) {
-      await call('PUT', cardPath(`hermes:order:${k}:progress-${n}`), { auth: hermes, body: card(`hermes:order:${k}:progress-${n}`, { kind: 'signal', urgency: 'log', thread: order!.id, title: `Step ${n}` }) });
+      await call('PUT', cardPath(`hermes:order:${k}:progress-1-${n}`), { auth: hermes, body: card(`hermes:order:${k}:progress-1-${n}`, { kind: 'signal', urgency: 'log', thread: order!.id, title: `Step ${n}` }) });
     }
 
     await page.goto(`${headUrl()}/card/${encodeURIComponent(order!.id)}`, { waitUntil: 'networkidle0' });

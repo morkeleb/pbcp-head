@@ -38,6 +38,9 @@ export interface MeCard {
   claimed_by?: string;
   claim_expires_at?: string;
   claim_seq?: number;
+  /** On an outcome (A.3): the claim it reports on, and how that run ended. */
+  'orders.claim_seq'?: number;
+  'orders.result'?: 'done' | 'failed';
 }
 
 // --- navigation ----------------------------------------------------------------------

@@ -93,7 +93,11 @@ export function BriefView() {
         <>
           <h2>Late results</h2>
           <p className="muted">These arrived after the order ended or from an earlier lease; they changed nothing.</p>
-          {brief.late_outcomes.map((c) => <p key={c.id}><Link href={cardHref(c.id)}>{c.title}</Link> <span className="muted">{c.producer}</span></p>)}
+          {brief.late_outcomes.map((c) => (
+            <p key={c.id}>
+              <Link href={cardHref(c.id)}>{c.title}</Link> <span className="badge">claim {c['orders.claim_seq']}{c['orders.result'] ? ` · ${c['orders.result']}` : ''}</span> <span className="muted">{c.producer}</span>
+            </p>
+          ))}
         </>
       )}
 

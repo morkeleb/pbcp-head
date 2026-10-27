@@ -1,5 +1,5 @@
 // The gate (CLAUDE.md, milestone H1): the conformance suite from @pbcp/core/conformance over HTTP against
-// this head on local Postgres: every core fixture, and the orders extension's (C16–C20, C32, C33) with
+// this head on local Postgres: every core fixture (C37 snooze included), and the orders extension's (C16–C20, C32–C36) with
 // extensions: ['orders'], as shipped (page cap 200) and
 // again with a page cap of 2 so §7.2 paging is exercised on every fixture.
 //

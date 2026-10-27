@@ -3,8 +3,8 @@
 // lifecycle, supersession, decision values) are @pbcp/core's; nothing here decides them.
 
 import {
-  acknowledge, CARD_LIMIT_BYTES, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
-  submit, type Card, type Decision, type Urgency,
+  acknowledge, CARD_LIMIT_BYTES, checkOutcome, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
+  snooze, submit, unsnooze, type Card, type Decision, type Urgency,
 } from '@pbcp/core';
 import { and, asc, eq, gt, max, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
@@ -40,13 +40,15 @@ export interface SubmitContext {
 
 /**
  * `PUT /cards/{id}`. The refusal order of §7.1: 401 is the route's (before this is called), then 413, then
- * the 400s of parsing, then 403, then the supersession checks and the §5 submission table inside `submit`.
+ * the 400s of parsing, then 403, then the outcome checks (A.3), then the supersession checks and the §5 submission table inside `submit`.
  */
 export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPathId: string): Promise<Outcome> {
   if (wireBytes(raw) > CARD_LIMIT_BYTES) throw new PbcpError('too_large', `a card may be at most ${CARD_LIMIT_BYTES} bytes`);
   const incoming = parseCardOrThrow(raw);
   // The head's id is its owner's person id (§10).
   checkSubmission(incoming, { root: ctx.root, owner: ctx.headId, pathId: decodeId(rawPathId) });
+  // A.3: an outcome carries `orders.claim_seq`, `orders.result` and its order in `references`, or is a 400.
+  const ordered = checkOutcome(incoming);
 
   return writeTx(db, ctx.headId, async (tx) => {
     const stored = await load(tx, ctx.headId, incoming.id);
@@ -59,7 +61,7 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
       if (c.id === incoming.id) card = saved;
     }
     // A.3: a stored outcome moves its order's exec_state only if it comes from the current lease.
-    if (r.changed.length > 0) await applyOutcomeInTx(tx, ctx.headId, incoming);
+    if (r.changed.length > 0 && ordered !== undefined) await applyOutcomeInTx(tx, ctx.headId, incoming, ordered);
     return { status: r.status, card };
   });
 }
@@ -169,19 +171,16 @@ async function ownerUpdate(db: Db, ctx: OwnerContext, id: string, op: (c: Card) 
 }
 
 /**
- * The owner hides an open card until `until` (§4.2 `snoozed_until`; §6: "Snooze is not a state"), or shows
- * it again with null. Like seen and ack it is a change to a head-owned field, so the card takes a fresh
- * change_seq and producers see it through sync (§4.2). @pbcp/core 0.3 has no snooze transition; this mirrors
- * markSeen: a decided or superseded card is not snoozed and comes back as 409 with the stored card.
- * (@pbcp/core 0.4 still has no snooze(); this stays the head's mirror until the core grows one.)
+ * The owner hides an open card until `until` (§4.2 `snoozed_until`; §6: "Snooze is not a state"). Like seen and
+ * ack it is a change to a head-owned field, so the card takes a fresh change_seq and producers see it through
+ * sync. Core decides: an `until` that is not a UTC timestamp later than now is 400 `invalid_snooze`; a card that
+ * is no longer open is a 409 carrying the stored card.
  */
-export async function snoozeCard(db: Db, ctx: OwnerContext, id: string, until: string | null): Promise<Outcome> {
-  return writeTx(db, ctx.headId, async (tx) => {
-    const stored = await loadOrThrow(tx, ctx.headId, id);
-    if (stored.card.state !== 'open') return { status: 409, card: stored.card };
-    const { snoozed_until: current, ...rest } = stored.card;
-    if ((current ?? null) === until) return { status: 200, card: stored.card };
-    const changed: Card = { ...rest, ...(until !== null ? { snoozed_until: until } : {}), changed_at: now() } as Card;
-    return { status: 200, card: await persist(tx, ctx.headId, changed) };
-  });
+export async function snoozeCard(db: Db, ctx: OwnerContext, id: string, until: string): Promise<Outcome> {
+  return ownerUpdate(db, ctx, id, (c) => snooze(c, until, now()));
+}
+
+/** Clears `snoozed_until` (§4.2); a card that is no longer open is a 409, as for snooze. */
+export async function unsnoozeCard(db: Db, ctx: OwnerContext, id: string): Promise<Outcome> {
+  return ownerUpdate(db, ctx, id, (c) => unsnooze(c, now()));
 }

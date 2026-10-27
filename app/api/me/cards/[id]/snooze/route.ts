@@ -1,4 +1,5 @@
-// POST /api/me/cards/{id}/snooze { until: RFC 3339 | null } or { preset: tonight | tomorrow | next-week }.
+// POST /api/me/cards/{id}/snooze { until: RFC 3339 UTC | null } or { preset: tonight | tomorrow | next-week }.
+// A past or malformed `until` is 400 invalid_snooze (core); `until: null` unsnoozes, as /unsnooze does.
 
 import { snoozeHandler } from '../../../../../../lib/owner';
 

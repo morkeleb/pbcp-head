@@ -80,10 +80,10 @@ create table decision_log (                -- append-only; the thing the hosted 
 
 | Route | Core call | Transactional effect |
 | --- | --- | --- |
-| `PUT /api/cards/[id]` | `parseCard`, `inRoot`, `canSupersede`, `submit` | insert/replace card; mark predecessor; one or two `change_seq` |
+| `PUT /api/cards/[id]` | `parseCard`, `inRoot`, `canSupersede`, `checkOutcome`, `submit`, `applyOutcome` | insert/replace card; mark predecessor; one or two `change_seq`; an outcome (stored under its per-claim id) moves its order when it comes from the current claim (A.3) |
 | `GET /api/changes?after=` | — | `where change_seq > $after and (producer = $root or (kind='order' and (to_producer = $root or $root = any(wildcard_eligible)))) order by change_seq limit 200` |
 | `POST /api/cards/[id]/decision` | `decide` | set decision fields, freeze `decided_doc`, append `decision_log`; for orders also `exec_state = cancelled` |
-| `POST /api/cards/[id]/claim` | `expireIfDue`, `claim` | `select … for update`; expiry is evaluated inside the same row lock (A.2) |
+| `POST /api/cards/[id]/claim` | `checkLease`, `expireIfDue`, `claim`, `ClaimRefusal` | `select … for update`; expiry is evaluated inside the same row lock and kept when the claim is refused (409 `lease_held`, 410 `order_terminal`); a renewal keeps `claim_seq` (A.2, A.5) |
 | `GET /api/cron/brief` | — | Vercel Cron, 05:30 local; mints `head:daily:YYYY-MM-DD` through the same PUT path |
 
 Auth: bearer token → sha256 → `producer_tokens` lookup, root attached to the request. Human sessions for the UI are a separate concern (NextAuth or similar) and never touch producer routes.

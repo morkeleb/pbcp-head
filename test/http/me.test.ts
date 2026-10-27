@@ -133,13 +133,42 @@ describe('POST /api/me/cards/{id}/snooze', () => {
     expect(sync.body.changes[0].card.snoozed_until).toBe('2026-10-08T03:30:00Z');
     const un = await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/snooze`, { until: null });
     expect(un.body).not.toHaveProperty('snoozed_until');
-    expect((await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/snooze`, { until: 'soon' })).status).toBe(400);
   });
 
-  it('does not snooze a decided card', async () => {
+  it('refuses an until that is not a UTC timestamp later than now with 400 invalid_snooze, changing nothing', async () => {
+    const { body: c } = await put('hermes:gmail:1');
+    const path = `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/snooze`;
+    // The head clock is 2026-10-07T09:00:00Z.
+    for (const until of ['soon', '2026-10-07T09:00:00Z', '2026-10-06T12:00:00Z', '2026-10-08T06:00:00+02:00', '2026-02-30T06:00:00Z', 42, undefined]) {
+      expect(await me('POST', path, until === undefined ? {} : { until }), String(until)).toMatchObject({ status: 400, body: { error: 'invalid_snooze' } });
+    }
+    expect((await me('POST', path, { preset: 'someday' })).status).toBe(400);
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}`)).body.card.change_seq).toBe(c.change_seq);
+  });
+
+  it('unsnoozes on /unsnooze with a fresh change_seq; unsnoozing a card that is not snoozed changes nothing', async () => {
+    const { body: c } = await put('hermes:gmail:1');
+    const id = encodeURIComponent('hermes:gmail:1');
+    const s = await me('POST', `/api/me/cards/${id}/snooze`, { until: '2026-10-08T06:00:00Z' });
+    expect(s.body).toMatchObject({ state: 'open', snoozed_until: '2026-10-08T06:00:00Z' });
+    const un = await me('POST', `/api/me/cards/${id}/unsnooze`);
+    expect(un.status).toBe(200);
+    expect(un.body).not.toHaveProperty('snoozed_until');
+    expect(un.body.change_seq).toBe(s.body.change_seq + 1);
+    const again = await me('POST', `/api/me/cards/${id}/unsnooze`);
+    expect(again.body.change_seq).toBe(un.body.change_seq);
+    expect(c.change_seq).toBeLessThan(s.body.change_seq);
+    expect((await call('POST', `/api/me/cards/${id}/unsnooze`, { auth: hermes })).status).toBe(401);
+    expect((await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:none')}/unsnooze`)).status).toBe(404);
+  });
+
+  it('does not snooze or unsnooze a decided card: 409 with the stored card', async () => {
     await put('hermes:gmail:1');
-    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/decision`, { decision: 'approve' });
-    expect((await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/snooze`, { preset: 'tonight' })).status).toBe(409);
+    const id = encodeURIComponent('hermes:gmail:1');
+    await me('POST', `/api/me/cards/${id}/decision`, { decision: 'approve' });
+    expect(await me('POST', `/api/me/cards/${id}/snooze`, { preset: 'tonight' })).toMatchObject({ status: 409, body: { id: 'hermes:gmail:1', state: 'decided' } });
+    expect(await me('POST', `/api/me/cards/${id}/unsnooze`)).toMatchObject({ status: 409, body: { state: 'decided' } });
+    expect(await me('POST', `/api/me/cards/${id}/snooze`, { until: null })).toMatchObject({ status: 409, body: { state: 'decided' } });
   });
 });
 
