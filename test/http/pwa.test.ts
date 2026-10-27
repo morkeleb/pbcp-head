@@ -87,7 +87,7 @@ describe('installable app', () => {
     const res = await fetch(`${headUrl()}/manifest.webmanifest`);
     expect(res.headers.get('content-type')).toMatch(/^application\/manifest\+json/);
     const m = await res.json();
-    expect(m).toMatchObject({ name: 'PBCP head', short_name: 'Brief', start_url: '/brief', scope: '/', display: 'standalone', theme_color: '#2456c8' });
+    expect(m).toMatchObject({ name: 'PBCP head', short_name: 'Brief', start_url: '/brief', scope: '/', display: 'standalone', theme_color: '#7047f5' });
     for (const icon of m.icons) {
       const [w, h] = icon.sizes.split('x').map(Number);
       expect(await fetchPng(icon.src), icon.src).toMatchObject({ width: w, height: h });
@@ -111,7 +111,7 @@ describe('installable app', () => {
         viewport: attr('meta[name="viewport"]', 'content'),
       };
     });
-    expect(head).toMatchObject({ manifest: '/manifest.webmanifest', appleIcon: '/icons/apple-touch-icon.png', appleIconSizes: '180x180', capable: 'yes', title: 'Brief', status: 'default', theme: '#2456c8' });
+    expect(head).toMatchObject({ manifest: '/manifest.webmanifest', appleIcon: '/icons/apple-touch-icon.png', appleIconSizes: '180x180', capable: 'yes', title: 'Brief', status: 'default', theme: '#7047f5' });
     expect(head.viewport).toContain('width=device-width');
     // iOS rounds the corners itself and shows transparency as black: 180×180, opaque.
     expect(await fetchPng(head.appleIcon!)).toEqual({ width: 180, height: 180, alpha: false });
@@ -165,17 +165,17 @@ describe('offline', () => {
     await page.waitForFunction(() => document.body.innerText.includes('When should M4 ship?'));
 
     // Offline: the controls are disabled and say why.
-    const controls = await page.$$eval('.row.decide button', (bs) => bs.map((b) => ({ text: b.textContent, disabled: (b as HTMLButtonElement).disabled })));
+    const controls = await page.$$eval('.decide-row button', (bs) => bs.map((b) => ({ text: b.textContent, disabled: (b as HTMLButtonElement).disabled })));
     expect(controls.length).toBeGreaterThan(0);
     expect(controls.every((c) => c.disabled)).toBe(true);
     expect(await page.$eval('.offline', (e) => e.textContent)).toContain('nothing is saved to send later');
-    await page.click('.row.decide button.primary').catch(() => undefined);
-    await page.click('.row.decide button.quiet').catch(() => undefined); // Dismiss too
-    expect(await page.$('.decided-line')).toBeNull();
+    await page.click('.decide-row button[data-variant="default"]').catch(() => undefined);
+    await page.click('.decide-row button[data-variant="ghost"]').catch(() => undefined); // Dismiss too
+    expect(await page.$('.state-line')).toBeNull();
 
     // Back online, nothing goes out on its own: there is no queue to send it from.
     await setOffline(false, worker);
-    await page.waitForFunction(() => !(document.querySelector('.row.decide button.primary') as HTMLButtonElement).disabled);
+    await page.waitForFunction(() => !(document.querySelector('.decide-row button[data-variant="default"]') as HTMLButtonElement).disabled);
     await wait(5000);
     expect((await row(DECISION)).state).toBe('open');
     expect(await testDb().select().from(decisionLog)).toEqual([]);

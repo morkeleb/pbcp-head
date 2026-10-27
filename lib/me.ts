@@ -9,11 +9,12 @@ import { cards, changeCounter, devices, heads, producerTokens } from '../db/sche
 import { iso, now } from './clock';
 import { HttpError } from './http';
 import { expireDueOrders } from './orders';
-import { renderCard, renderSource, type RenderMeta } from './render';
+import { dailyParagraphNow } from './brief/nightly';
+import { renderBody, renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
-import { dayRange, isDate, localDate } from './time';
+import { addDays, dayRange, isDate, localDate } from './time';
 
 type Row = typeof cards.$inferSelect;
 
@@ -216,13 +217,42 @@ export async function brief(db: Db, headId: string) {
     .orderBy(desc(cards.changeSeq))
     .limit(50);
 
+  // Tomorrow: cards snoozed until then, and cards about that day (`thread: day-<date>`, the calendar's agenda).
+  const tomorrow = addDays(today, 1);
+  const [tStart, tEnd] = dayRange(tomorrow, head.timezone);
+  const ahead = await db
+    .select()
+    .from(cards)
+    .where(
+      and(
+        eq(cards.headId, headId),
+        eq(cards.state, 'open'),
+        or(and(gte(cards.snoozedUntil, tStart), lt(cards.snoozedUntil, tEnd)), sql`${cards.producerDoc}->>'thread' = ${`day-${tomorrow}`}`),
+      ),
+    )
+    .orderBy(asc(cards.receivedAt))
+    .limit(100);
+
+  // The day opens with its paragraph (lib/brief/fold.ts): the nightly card's lead once it exists, else the same
+  // fold now, "so far today". None on a day with nothing open and nothing new.
+  const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
+  let paragraph: { html: string; so_far: boolean } | null = null;
+  if (presentedDaily && presentedDaily.id === `head:daily:${today}`) {
+    if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false };
+  } else {
+    const md = await dailyParagraphNow(db, headId, head.timezone, today);
+    if (md) paragraph = { html: (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'), so_far: true };
+  }
+
   const shown = [...decisions, ...attention, ...late, ...(daily ? [daily] : [])];
   return {
     date: today,
     timezone: head.timezone,
     seq,
     last_visit: { seq: head.lastVisitSeq, at: head.lastVisitAt ? iso(head.lastVisitAt) : null },
-    daily: daily ? (await presentCards(db, [daily]))[0]! : null,
+    daily: presentedDaily,
+    daily_paragraph: paragraph,
+    tomorrow: { date: tomorrow, cards: await presentCards(db, ahead) },
     decisions: await presentCards(db, decisions),
     threads: folds.map(({ immediate: _i, order: _o, ...f }) => f),
     snoozed,

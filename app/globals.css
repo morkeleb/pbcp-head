@@ -1,106 +1,311 @@
-/* Phone-width first: one column, 16px gutters, nothing wider than the viewport. */
+/*
+ * The design system, in one file: tokens as shadcn/ui CSS variables (light, and dark under `.dark`), mapped into
+ * Tailwind v4 by @theme; the type scale and 8 px spacing; then the few styles that are not components: the HTML the
+ * server renders for card bodies (.rendered), the full-screen viewer, and the pages that predate the reference UI
+ * (.legacy). The brief itself is built from Tailwind utilities and shadcn components.
+ *
+ * Fonts: Newsreader (editorial: masthead, day headings, card titles) and Inter (interface: everything else), loaded
+ * by next/font in lib/fonts.ts as --font-editorial and --font-interface.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* --- tokens: light --------------------------------------------------------------------------------- */
 :root {
-  --bg: #fafaf8; --fg: #1b1b1a; --muted: #6b6b66; --line: #e3e2dc; --card: #fff;
-  --accent: #2456c8; --accent-fg: #fff; --ok: #1f7a43; --warn: #a35a00; --bad: #b3261e; --new: #2456c8;
-  color-scheme: light dark;
+  --background: #fafaf8;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  /* The one accent: the primary button, the unseen dot, the selected day, focus rings. Nothing else. */
+  --primary: #7047f5;
+  --primary-hover: #5d35df;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f2f5;
+  --secondary-foreground: #344054;
+  --muted: #f3f4f6;
+  --muted-foreground: #667085;
+  /* shadcn's hover surface; neutral, never the brand accent. */
+  --accent: #f0f2f5;
+  --accent-foreground: #172033;
+  --destructive: #b42318;
+  --success: #ddf5eb;
+  --success-foreground: #11603f;
+  --border: #d9dee5;
+  --input: #d9dee5;
+  --ring: #7047f5;
+  /* A proposal's inset box: one step off the card. */
+  --inset: #f6f7f9;
+  --radius: 0.4375rem; /* 7 px: cards */
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #151514; --fg: #ecebe6; --muted: #9a9993; --line: #2c2c29; --card: #1d1d1b; --accent: #7aa2ff; --accent-fg: #0d1a3a; --new: #7aa2ff; }
-  .rendered img.diagram-svg { background: #fff; border-radius: 6px; }
+
+/* --- tokens: dark (its own palette, not an inversion) ----------------------------------------------- */
+.dark {
+  --background: #0b1118;
+  --foreground: #e8edf5;
+  --card: #111c27;
+  --card-foreground: #e8edf5;
+  --popover: #111c27;
+  --popover-foreground: #e8edf5;
+  --primary: #8057ff;
+  --primary-hover: #9677ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1b2937;
+  --secondary-foreground: #dce5f0;
+  --muted: #16222e;
+  --muted-foreground: #9baabc;
+  --accent: #1b2937;
+  --accent-foreground: #e8edf5;
+  --destructive: #f97066;
+  --success: #173c35;
+  --success-foreground: #8fe3c0;
+  --border: #293747;
+  --input: #293747;
+  --ring: #8057ff;
+  --inset: #0e1821;
+  color-scheme: dark;
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, sans-serif; }
-main { max-width: 640px; margin: 0 auto; padding: 12px 16px 96px; }
-a { color: var(--accent); }
-h1 { font-size: 22px; margin: 8px 0 4px; }
-h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 8px; }
-nav.top { display: flex; gap: 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; }
-nav.top a { text-decoration: none; font-weight: 600; }
-nav.top .spacer { flex: 1; }
-.muted { color: var(--muted); font-size: 14px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 10px 0; }
-.card h3 { margin: 0 0 4px; font-size: 17px; line-height: 1.3; }
-.card h3 a { color: inherit; text-decoration: none; }
-.meta { color: var(--muted); font-size: 13px; display: flex; gap: 6px; flex-wrap: wrap; }
-.badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-.badge.new { border-color: var(--new); color: var(--new); }
-.badge.decided { color: var(--ok); border-color: var(--ok); }
-.badge.as-of { border-style: dashed; }
-.offline { font-size: 14px; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-button, .button { font: inherit; font-size: 15px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; min-height: 40px; }
-button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-button.danger { color: var(--bad); }
-button:disabled { opacity: .5; }
-.toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 608px; margin: 0 auto; background: var(--fg); color: var(--bg); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; z-index: 20; }
-.toast button { margin-left: auto; background: transparent; color: inherit; border-color: currentColor; }
-.error { color: var(--bad); }
 
-/* Rendered card bodies (server-rendered, sanitised HTML). */
-.rendered { overflow-wrap: anywhere; }
-.rendered > :first-child { margin-top: 0; }
-.rendered img { max-width: 100%; height: auto; }
-.rendered table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
-.rendered th, .rendered td { border: 1px solid var(--line); padding: 4px 8px; }
-.rendered pre { overflow-x: auto; background: var(--bg); padding: 8px; border-radius: 8px; font-size: 13px; }
-.rendered blockquote { margin: 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
-.rendered .link-host { color: var(--muted); font-size: 12px; }
-.rendered figure { margin: 12px 0; }
-.rendered figure img { display: block; width: 100%; height: auto; cursor: zoom-in; }
-.rendered figcaption { font-size: 13px; color: var(--muted); margin-top: 4px; }
-.rendered .diagram-fallback { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; }
-.rendered .diagram-message { white-space: pre-wrap; color: var(--warn); }
-.rendered details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.collapsed-body { max-height: 9em; overflow: hidden; position: relative; }
-.collapsed-body::after { content: ''; position: absolute; inset: auto 0 0 0; height: 3em; background: linear-gradient(transparent, var(--card)); }
+/* --- Tailwind theme ---------------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-inset: var(--inset);
 
-/* Thumbnails: fitted to the width, never cropped (§3.1 Presentation). */
-.thumb { margin: 8px 0 0; }
-.thumb img { display: block; max-width: 100%; max-height: 220px; width: auto; height: auto; object-fit: contain; cursor: zoom-in; }
-.thumb figcaption { font-size: 12px; color: var(--muted); }
+  --font-sans: var(--font-interface), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-editorial), ui-serif, Georgia, serif;
 
-/* Decide sheet. */
-.option { display: block; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; cursor: pointer; }
-.option.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.option .label { font-weight: 600; }
-.option .default { font-size: 12px; color: var(--accent); margin-left: 6px; }
-textarea { width: 100%; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem; /* 6 px: buttons and inputs */
+  --radius-lg: var(--radius); /* 7 px: cards */
+  --radius-xl: 0.5rem;
 
-/* Full-screen viewer: native size, zoom and pan. */
-.viewer { position: fixed; inset: 0; background: rgb(10 10 10 / .94); z-index: 30; display: flex; flex-direction: column; color: #eee; }
-.viewer .bar { display: flex; gap: 8px; padding: 10px; align-items: center; }
-.viewer .bar button { background: transparent; color: #eee; border-color: #555; min-width: 44px; }
-.viewer .stage { flex: 1; overflow: hidden; touch-action: none; position: relative; cursor: grab; }
-.viewer .stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; background: #fff; user-select: none; -webkit-user-drag: none; }
-.viewer .caption { padding: 6px 12px; font-size: 14px; }
-.viewer details { padding: 0 12px 12px; max-height: 30vh; overflow: auto; }
-.viewer pre { white-space: pre-wrap; font-size: 12px; color: #ccc; }
+  /* 8 px spacing on a 4 px step: p-2 = 8px, p-4 = 16px, gap-6 = 24px. */
+  --spacing: 4px;
 
+  /* The type scale. */
+  --text-masthead: 30px;
+  --text-masthead--line-height: 1.1;
+  --text-masthead-sm: 24px;
+  --text-masthead-sm--line-height: 1.1;
+  --text-day: 20px;
+  --text-day--line-height: 1.25;
+  --text-title: 15px;
+  --text-title--line-height: 1.4;
+  --text-body: 14px;
+  --text-body--line-height: 1.55;
+  --text-lead: 13px;
+  --text-lead--line-height: 1.55;
+  --text-control: 12.5px;
+  --text-control--line-height: 1.2;
+  --text-meta: 10.5px;
+  --text-meta--line-height: 1.3;
 
-/* Cards on the brief: the lead and the proposal on the card, the rest behind "More" (§4.4; RFC 0.6 summary). */
-.lead { margin: 8px 0 0; }
-.rendered.lead > :first-child, .rendered.proposal > :first-child { margin-top: 8px; }
-.rendered.proposal h1, .rendered.proposal h2, .rendered.proposal h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
-details.more { margin-top: 8px; }
-details.more > summary, details.comment > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-.decide-controls { margin-top: 10px; }
-.decide-controls .row { margin-top: 8px; }
-button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
-details.comment { margin-top: 6px; }
-details.comment textarea { width: 100%; margin-top: 6px; font: inherit; }
-.edit textarea { width: 100%; font: inherit; margin-top: 4px; }
-fieldset.choices { border: 0; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
-fieldset.choices .option { margin: 0; display: grid; grid-template-columns: auto 1fr auto; column-gap: 8px; align-items: baseline; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
-fieldset.choices .option.selected { border-color: var(--accent); }
-fieldset.choices .option .default { font-size: 12px; color: var(--muted); }
-fieldset.choices .option .option-body { grid-column: 2 / 4; color: var(--muted); font-size: 14px; }
-fieldset.choices .option .option-body > :first-child { margin-top: 2px; }
-.decided-line { margin: 10px 0 0; color: var(--muted); }
-.card.done { opacity: .62; }
-.card.done .decided-line { opacity: 1; }
-.card.daily ul { padding-left: 18px; margin: 6px 0; }
-.card.daily li { margin: 4px 0; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  --tracking-editorial: -0.03em;
+  --tracking-meta: 0.04em;
+}
 
-/* Swipe right for the default, left for reject; touch only, vertical scrolling stays the browser's. */
-.card.swipeable { touch-action: pan-y; transition: transform .12s ease-out; }
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-body;
+    /* The brief pins what is on screen itself when earlier days load above (app/(ui)/brief/brief-view.tsx). */
+    overflow-anchor: none;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 20%, transparent);
+  }
+}
+
+/* --- server-rendered card HTML (sanitised on the server; never markdown rendered here) ---------------- */
+@layer components {
+  .rendered {
+    overflow-wrap: anywhere;
+  }
+  .rendered > * + * {
+    margin-top: 8px;
+  }
+  .rendered a {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--border);
+  }
+  .rendered strong {
+    font-weight: 600;
+  }
+  .rendered h1,
+  .rendered h2,
+  .rendered h3,
+  .rendered h4 {
+    font-size: var(--text-meta);
+    letter-spacing: var(--tracking-meta);
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    font-weight: 600;
+    margin-top: 12px;
+  }
+  .rendered ul {
+    list-style: disc;
+    padding-left: 18px;
+  }
+  .rendered ol {
+    list-style: decimal;
+    padding-left: 18px;
+  }
+  .rendered blockquote {
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+    color: var(--muted-foreground);
+  }
+  .rendered code {
+    font-size: 0.92em;
+  }
+  .rendered pre {
+    overflow-x: auto;
+    background: var(--inset);
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .rendered table {
+    border-collapse: collapse;
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .rendered th,
+  .rendered td {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    text-align: left;
+  }
+  .rendered img {
+    max-width: 100%;
+    height: auto;
+  }
+  .rendered figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: zoom-in;
+    background: #fff;
+    border-radius: 4px;
+  }
+  .rendered figcaption {
+    font-size: var(--text-meta);
+    color: var(--muted-foreground);
+    margin-top: 4px;
+  }
+  .rendered .link-host {
+    color: var(--muted-foreground);
+    font-size: var(--text-meta);
+  }
+  .rendered .diagram-fallback {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 8px;
+  }
+  .rendered .diagram-message {
+    white-space: pre-wrap;
+    color: var(--destructive);
+  }
+  .rendered details summary {
+    cursor: pointer;
+    color: var(--muted-foreground);
+  }
+
+  /* Full-screen viewer: native size or larger, zoom and pan (§3.1 Presentation). */
+  .viewer { position: fixed; inset: 0; background: rgb(8 10 14 / 0.96); z-index: 50; display: flex; flex-direction: column; color: #eef1f6; }
+  .viewer .bar { display: flex; gap: 8px; padding: 10px; align-items: center; }
+  .viewer .bar button { background: transparent; color: inherit; border: 1px solid #3a4452; border-radius: 6px; min-width: 40px; min-height: 36px; padding: 0 10px; font-size: var(--text-control); }
+  .viewer .stage { flex: 1; overflow: hidden; touch-action: none; position: relative; cursor: grab; }
+  .viewer .stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; background: #fff; user-select: none; -webkit-user-drag: none; }
+  .viewer .caption { padding: 6px 12px; font-size: var(--text-lead); }
+  .viewer details { padding: 0 12px 12px; max-height: 30vh; overflow: auto; }
+  .viewer pre { white-space: pre-wrap; font-size: 12px; color: #c9d1dc; }
+}
+
+/* --- the pages that predate the reference UI (card, day, orders, sign-in), on the same tokens ---------- */
+@layer components {
+  nav.top { display: flex; gap: 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--background); z-index: 5; font-size: 15px; }
+  nav.top a { text-decoration: none; font-weight: 600; color: var(--foreground); }
+  nav.top .spacer { flex: 1; }
+  nav.top button { border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: var(--text-control); }
+
+  .legacy { max-width: 640px; margin: 0 auto; padding: 12px 16px 96px; font-size: 15px; line-height: 1.5; }
+  .legacy a { color: var(--primary); }
+  .legacy h1 { font-family: var(--font-serif); font-size: 24px; font-weight: 600; letter-spacing: var(--tracking-editorial); margin: 8px 0 4px; }
+  .legacy h2 { font-size: var(--text-meta); text-transform: uppercase; letter-spacing: var(--tracking-meta); color: var(--muted-foreground); font-weight: 600; margin: 28px 0 8px; }
+  .legacy p { margin: 8px 0; }
+  .legacy .muted { color: var(--muted-foreground); font-size: 14px; }
+  .legacy .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin: 10px 0; }
+  .legacy .card h3 { font-family: var(--font-serif); margin: 0 0 4px; font-size: 18px; font-weight: 600; line-height: 1.3; }
+  .legacy .card h3 a { color: inherit; text-decoration: none; }
+  .legacy .meta { color: var(--muted-foreground); font-size: 13px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .legacy .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+  .legacy .badge.new { border-color: var(--primary); color: var(--primary); }
+  .legacy .badge.decided { color: var(--success-foreground); border-color: var(--success-foreground); }
+  .legacy .badge.as-of { border-style: dashed; }
+  .legacy .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .legacy button { font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--foreground); cursor: pointer; min-height: 36px; }
+  .legacy button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .legacy button.danger { color: var(--destructive); }
+  .legacy button.quiet { border-color: transparent; color: var(--muted-foreground); }
+  .legacy button:disabled { opacity: 0.5; }
+  .legacy .error { color: var(--destructive); }
+  .legacy textarea, .legacy input[type="text"], .legacy select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); }
+  .legacy .thumb { margin: 8px 0 0; }
+  .legacy .thumb img { display: block; max-width: 100%; max-height: 220px; object-fit: contain; cursor: zoom-in; background: #fff; border-radius: 4px; }
+  .legacy .thumb figcaption { font-size: 12px; color: var(--muted-foreground); }
+  .legacy .option { display: block; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 8px 0; cursor: pointer; }
+  .legacy .option.selected { border-color: var(--primary); }
+  .legacy .option .label { font-weight: 600; }
+  .legacy .option .default { font-size: 12px; color: var(--muted-foreground); margin-left: 6px; }
+  .legacy .lead { margin: 8px 0 0; }
+  .legacy .rendered.proposal { background: var(--inset); border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
+  .legacy details.more, .legacy details.comment { margin-top: 8px; }
+  .legacy details.more > summary, .legacy details.comment > summary { cursor: pointer; color: var(--muted-foreground); font-size: 14px; }
+  .legacy .decide-controls { margin-top: 10px; }
+  .legacy fieldset.choices { border: 0; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+  .legacy fieldset.choices .option { margin: 0; display: grid; grid-template-columns: auto 1fr auto; column-gap: 8px; align-items: baseline; }
+  .legacy fieldset.choices .option .option-body { grid-column: 2 / 4; color: var(--muted-foreground); font-size: 14px; }
+  .legacy .decided-line { margin: 10px 0 0; color: var(--muted-foreground); }
+  .legacy .card.done { opacity: 0.72; }
+  .legacy .offline { font-size: 14px; }
+
+  /* The undo toast a swipe or key waits behind (used by every page). */
+  .toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 560px; margin: 0 auto; background: var(--foreground); color: var(--background); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; z-index: 40; font-size: var(--text-lead); }
+  .toast button { margin-left: auto; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 4px 10px; font-size: var(--text-control); }
+}

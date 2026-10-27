@@ -2088,6 +2088,54 @@
             ],
             "description": "The latest `head:daily` card"
           },
+          "daily_paragraph": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "type": "string",
+                    "description": "Safe inline HTML: \"N decisions: <lead>; …. Yesterday: <lead>; ….\" with each lead linked to its card (RFC 0.6 §8)"
+                  },
+                  "so_far": {
+                    "type": "boolean",
+                    "description": "True until today’s `head:daily` card exists: the same fold, made now"
+                  }
+                },
+                "required": [
+                  "html",
+                  "so_far"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The paragraph today opens with; null when nothing is open and nothing arrived yesterday"
+          },
+          "tomorrow": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "description": "YYYY-MM-DD in `timezone`"
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MeCard"
+                },
+                "description": "Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)"
+              }
+            },
+            "required": [
+              "date",
+              "cards"
+            ],
+            "additionalProperties": false,
+            "description": "What is already set for tomorrow"
+          },
           "decisions": {
             "type": "array",
             "items": {
@@ -2134,6 +2182,8 @@
           "seq",
           "last_visit",
           "daily",
+          "daily_paragraph",
+          "tomorrow",
           "decisions",
           "threads",
           "snoozed",

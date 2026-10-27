@@ -2383,6 +2383,102 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/Brief/daily`.
             public var daily: Components.Schemas.MeCard?
+            /// The paragraph today opens with; null when nothing is open and nothing arrived yesterday
+            ///
+            /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph`.
+            public struct DailyParagraphPayload: Codable, Hashable, Sendable {
+                /// Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)
+                ///
+                /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph/html`.
+                public var html: Swift.String
+                /// True until today’s `head:daily` card exists: the same fold, made now
+                ///
+                /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph/so_far`.
+                public var soFar: Swift.Bool
+                /// Creates a new `DailyParagraphPayload`.
+                ///
+                /// - Parameters:
+                ///   - html: Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)
+                ///   - soFar: True until today’s `head:daily` card exists: the same fold, made now
+                public init(
+                    html: Swift.String,
+                    soFar: Swift.Bool
+                ) {
+                    self.html = html
+                    self.soFar = soFar
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case html
+                    case soFar = "so_far"
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.html = try container.decode(
+                        Swift.String.self,
+                        forKey: .html
+                    )
+                    self.soFar = try container.decode(
+                        Swift.Bool.self,
+                        forKey: .soFar
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "html",
+                        "so_far"
+                    ])
+                }
+            }
+            /// The paragraph today opens with; null when nothing is open and nothing arrived yesterday
+            ///
+            /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph`.
+            public var dailyParagraph: Components.Schemas.Brief.DailyParagraphPayload?
+            /// What is already set for tomorrow
+            ///
+            /// - Remark: Generated from `#/components/schemas/Brief/tomorrow`.
+            public struct TomorrowPayload: Codable, Hashable, Sendable {
+                /// YYYY-MM-DD in `timezone`
+                ///
+                /// - Remark: Generated from `#/components/schemas/Brief/tomorrow/date`.
+                public var date: Swift.String
+                /// Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)
+                ///
+                /// - Remark: Generated from `#/components/schemas/Brief/tomorrow/cards`.
+                public var cards: [Components.Schemas.MeCard]
+                /// Creates a new `TomorrowPayload`.
+                ///
+                /// - Parameters:
+                ///   - date: YYYY-MM-DD in `timezone`
+                ///   - cards: Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)
+                public init(
+                    date: Swift.String,
+                    cards: [Components.Schemas.MeCard]
+                ) {
+                    self.date = date
+                    self.cards = cards
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case date
+                    case cards
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.date = try container.decode(
+                        Swift.String.self,
+                        forKey: .date
+                    )
+                    self.cards = try container.decode(
+                        [Components.Schemas.MeCard].self,
+                        forKey: .cards
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "date",
+                        "cards"
+                    ])
+                }
+            }
+            /// What is already set for tomorrow
+            ///
+            /// - Remark: Generated from `#/components/schemas/Brief/tomorrow`.
+            public var tomorrow: Components.Schemas.Brief.TomorrowPayload
             /// Open decisions, newest first, snoozed ones left out
             ///
             /// - Remark: Generated from `#/components/schemas/Brief/decisions`.
@@ -2413,6 +2509,8 @@ extension Components {
             ///   - seq: The head’s change counter now; post it to /api/me/visit when the owner leaves
             ///   - lastVisit:
             ///   - daily: The latest `head:daily` card
+            ///   - dailyParagraph: The paragraph today opens with; null when nothing is open and nothing arrived yesterday
+            ///   - tomorrow: What is already set for tomorrow
             ///   - decisions: Open decisions, newest first, snoozed ones left out
             ///   - threads: Today’s artifacts and signals, folded by thread; immediate first
             ///   - snoozed:
@@ -2425,6 +2523,8 @@ extension Components {
                 seq: Swift.Int,
                 lastVisit: Components.Schemas.LastVisit,
                 daily: Components.Schemas.MeCard? = nil,
+                dailyParagraph: Components.Schemas.Brief.DailyParagraphPayload? = nil,
+                tomorrow: Components.Schemas.Brief.TomorrowPayload,
                 decisions: [Components.Schemas.MeCard],
                 threads: [Components.Schemas.Fold],
                 snoozed: Swift.Int,
@@ -2437,6 +2537,8 @@ extension Components {
                 self.seq = seq
                 self.lastVisit = lastVisit
                 self.daily = daily
+                self.dailyParagraph = dailyParagraph
+                self.tomorrow = tomorrow
                 self.decisions = decisions
                 self.threads = threads
                 self.snoozed = snoozed
@@ -2450,6 +2552,8 @@ extension Components {
                 case seq
                 case lastVisit = "last_visit"
                 case daily
+                case dailyParagraph = "daily_paragraph"
+                case tomorrow
                 case decisions
                 case threads
                 case snoozed
@@ -2478,6 +2582,14 @@ extension Components {
                 self.daily = try container.decodeIfPresent(
                     Components.Schemas.MeCard.self,
                     forKey: .daily
+                )
+                self.dailyParagraph = try container.decodeIfPresent(
+                    Components.Schemas.Brief.DailyParagraphPayload.self,
+                    forKey: .dailyParagraph
+                )
+                self.tomorrow = try container.decode(
+                    Components.Schemas.Brief.TomorrowPayload.self,
+                    forKey: .tomorrow
                 )
                 self.decisions = try container.decode(
                     [Components.Schemas.MeCard].self,
@@ -2509,6 +2621,8 @@ extension Components {
                     "seq",
                     "last_visit",
                     "daily",
+                    "daily_paragraph",
+                    "tomorrow",
                     "decisions",
                     "threads",
                     "snoozed",

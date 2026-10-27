@@ -1,7 +1,9 @@
 // The nightly card's body: a mechanical fold of the head's own records, no language model (CLAUDE.md H2).
 // Pure: the cron gathers the cards, this writes the card. RFC 0.6 §8 "What a brief contains": every open decision's
 // title and lead, then the title and lead of the newest card of each of the previous day's threads, each linked to
-// its card. Counts are one closing line: an addition, never the brief.
+// its card. The body opens with the daily paragraph, prose made of those leads and nothing else ("2 decisions: …;
+// …. Yesterday: …."), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
+// A day with nothing open and nothing new has no paragraph and no card.
 
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
 import { cutSummary, inlineLead } from '../render/lead';
@@ -24,6 +26,8 @@ export interface FoldLine {
   title: string;
   /** The lead as markdown for the brief: a summary escaped and cut at 280 characters, a body lead inline (§3.1). */
   lead: string;
+  /** The lead as a phrase for the daily paragraph: link-free inline markdown (it becomes a link), no closing stop; the title if the lead is empty. */
+  phrase: string;
   count: number;
   snoozed: boolean;
 }
@@ -54,7 +58,19 @@ export function leadMarkdown(c: { summary?: string; body: string }): string {
   return lead.source === 'summary' ? escapeMarkdown(cutSummary(lead.text), Infinity) : inlineLead(lead.text);
 }
 
-const line = (c: Card, count = 1): FoldLine => ({ id: c.id, producer: c.producer, title: c.title, lead: leadMarkdown(c), count, snoozed: !!c.snoozed_until });
+/** A lead inside the daily paragraph, where it is itself a link: its own links and images unwrapped, no closing stop. */
+function phrase(c: Card): string {
+  // The closing stop goes before escaping: an escaped one would leave a backslash that escapes the link's `]`.
+  const stop = (s: string) => s.replace(/[\s.;:,]+$/, '').trim();
+  const lead = leadOf(c);
+  const md =
+    lead.source === 'summary'
+      ? escapeMarkdown(stop(cutSummary(lead.text)), Infinity)
+      : stop(inlineLead(lead.text).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'));
+  return md || escapeMarkdown(c.title);
+}
+
+const line = (c: Card, count = 1): FoldLine => ({ id: c.id, producer: c.producer, title: c.title, lead: leadMarkdown(c), phrase: phrase(c), count, snoozed: !!c.snoozed_until });
 
 /** Yesterday's cards collapsed by producer thread, newest thread first; each line is its newest card. */
 export function foldThreads(cards: Card[]): FoldLine[] {
@@ -82,9 +98,24 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
   return `- [${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${more}${snoozed}${l.lead ? ` — ${l.lead}` : ''}`;
 }
 
-export function foldDaily(input: FoldInput): ProducerCard {
+/**
+ * The daily paragraph (markdown): "N decisions: <lead>; <lead>." then "Yesterday: <lead>; <lead>.", each lead a
+ * link to its card. Empty when nothing is open and nothing arrived the day before: no sentence for its own sake.
+ */
+export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'threads'>, cardUrl: (id: string) => string): string {
+  const link = (l: FoldLine) => `[${l.phrase}](<${cardUrl(l.id)}>)`;
+  const sentences: string[] = [];
+  if (lines.decisions.length > 0) sentences.push(`${plural(lines.decisions.length, 'decision')}: ${lines.decisions.map(link).join('; ')}.`);
+  if (lines.threads.length > 0) sentences.push(`Yesterday: ${lines.threads.slice(0, MAX_THREADS).map(link).join('; ')}.`);
+  return sentences.join(' ');
+}
+
+/** The nightly card, or null for a day with nothing open and nothing new (no card says nothing). */
+export function foldDaily(input: FoldInput): ProducerCard | null {
   const { decisions, threads, counts } = dailyLines(input);
-  const lines: string[] = [];
+  const paragraph = dailyParagraph({ decisions, threads }, input.cardUrl);
+  if (!paragraph) return null;
+  const lines: string[] = [paragraph, ''];
 
   // Every open decision (§8 MUST): no cap.
   if (decisions.length === 0) lines.push('Nothing is waiting for you.');
@@ -106,8 +137,6 @@ export function foldDaily(input: FoldInput): ProducerCard {
     thread: 'daily',
     urgency: 'brief',
     title: `Brief for ${longDate(input.date)}`,
-    // The head is this card's producer: its lead is the counts (RFC 0.6 `summary`), since the body opens with a list.
-    summary: counts,
     references: input.openDecisions.map((c) => c.id),
     emitted_at: input.emittedAt,
     body: lines.join('\n').trimEnd() + '\n',

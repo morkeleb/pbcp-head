@@ -36,7 +36,7 @@ export function OrdersView() {
     });
   }, [load]);
 
-  if (error) return <main><p className="error">{error}</p></main>;
+  if (error) return <main className="legacy"><p className="error">{error}</p></main>;
   const active = (orders ?? []).filter((o) => ACTIVE.includes(o.exec_state) && o.state === 'open');
   const finished = (orders ?? []).filter((o) => !active.includes(o));
   // Grouped by who has it: the lease holder, else the addressee (`*` until someone claims it).
@@ -44,7 +44,7 @@ export function OrdersView() {
   for (const o of active) groups.set(o.claimed_by ?? o.to_producer, [...(groups.get(o.claimed_by ?? o.to_producer) ?? []), o]);
 
   return (
-    <main>
+    <main className="legacy">
       <h1>Orders</h1>
       <NewOrder producers={producers} onGiven={load} />
       {orders === null && <p className="muted">Loading…</p>}

@@ -18,15 +18,17 @@ const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&${{ '&': 'amp',
 
 /**
  * A body lead's markdown as one inline line: its lines joined by a space, and a leading block marker (a list
- * item, a quotation, a table row: §3.1 lets the lead's first line be one) escaped, so it renders as text in a
+ * item (a marker followed by a space, so `**bold**` stays bold), a quotation, a table row: §3.1 lets the lead's
+ * first line be one) escaped, so it renders as text in a
  * line, not as a list or a quotation.
  */
 export function inlineLead(text: string): string {
   return text
     .split('\n')
     .join(' ')
-    .replace(/^(\s*)([-*+>|])/, '$1\\$2')
-    .replace(/^(\s*\d{1,9})([.)])/, '$1\\$2');
+    .replace(/^(\s*)([-*+])(?=[ \t])/, '$1\\$2')
+    .replace(/^(\s*)([>|])/, '$1\\$2')
+    .replace(/^(\s*\d{1,9})([.)])(?=[ \t])/, '$1\\$2');
 }
 
 export interface PresentedLead extends Lead {

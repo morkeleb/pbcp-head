@@ -2,7 +2,7 @@
 
 import type { MetadataRoute } from 'next';
 
-export const THEME_COLOR = '#2456c8';
+export const THEME_COLOR = '#7047f5';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

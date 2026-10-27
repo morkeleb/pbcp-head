@@ -17,7 +17,7 @@ import { proxiedImageSrc } from './proxy';
 import { sanitiseSvg } from './svg';
 
 /** Bump when the pipeline's output changes, so stored renders are redone on next read. */
-export const RENDER_VERSION = 'h2.2'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body
+export const RENDER_VERSION = 'h2.3'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body; h2.3: `**bold**` leads stay bold
 
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 

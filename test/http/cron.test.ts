@@ -35,11 +35,14 @@ describe('GET /api/cron/brief', () => {
     // Each line links to the card's page in the head; the renderer keeps that link in the app.
     expect(brief.daily.rendered_html).toContain(`href="/card/${encodeURIComponent('hermes:gmail:1')}"`);
     expect(brief.daily.rendered_html).not.toContain('/api/me/svg/'); // no chart: §8, counts are additions
-    expect(brief.daily.lead).toBe('1 open decision · 2 cards yesterday from 1 producer'); // its summary
+    // Its lead is its opening paragraph: the leads of what is open and of yesterday's threads, each linked.
+    expect(brief.daily.lead).toMatch(/^1 decision: \[.+\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\)\. Yesterday: /);
+    expect(brief.daily.lead_source).toBe('body');
     expect(brief.threads).toEqual([]); // the head's own card is the brief, not one of its folds
   });
 
   it('follows the owner from Denver to Stockholm mid-day and mints the day exactly once', async () => {
+    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     const phone = await ownerSession(OWNER, 'phone');
     const at = (zone: string) => call('GET', '/api/me', { auth: phone.auth, headers: { 'x-timezone': zone } });
     // 2026-10-07 06:00 in Denver (MDT, UTC-6): the phone is there; the day's card is minted at Denver's 05:30.
@@ -64,6 +67,7 @@ describe('GET /api/cron/brief', () => {
   });
 
   it('a mid-day move from Denver to Stockholm on the same date neither doubles nor skips the day', async () => {
+    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     const phone = await ownerSession(OWNER, 'phone');
     const at = (zone: string) => call('GET', '/api/me', { auth: phone.auth, headers: { 'x-timezone': zone } });
     await clock('2026-10-07T04:30:00Z'); // 22:30 on the 6th in Denver: before 05:30 on the 7th
@@ -81,6 +85,12 @@ describe('GET /api/cron/brief', () => {
     expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }] });
     const days = await testDb().select({ id: cards.id }).from(cards).where(and(eq(cards.headId, OWNER), eq(cards.namespace, 'daily')));
     expect(days.map((d) => d.id).sort()).toEqual(['head:daily:2026-10-06', 'head:daily:2026-10-07', 'head:daily:2026-10-08']);
+  });
+
+  it('mints no card on a day with nothing open and nothing new', async () => {
+    await clock('2026-10-07T06:00:00Z');
+    expect((await cron()).body).toEqual({ minted: [] });
+    expect(await testDb().select({ id: cards.id }).from(cards).where(eq(cards.namespace, 'daily'))).toEqual([]);
   });
 
   it('refuses anything but the cron secret', async () => {

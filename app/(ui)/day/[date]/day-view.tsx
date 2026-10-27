@@ -55,7 +55,7 @@ export function DayView({ date }: { date: string }) {
 
   const time = (iso: string) => new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
   return (
-    <main>
+    <main className="legacy">
       <div className="row" style={{ alignItems: 'center' }}>
         <button onClick={() => router.push(`/day/${shift(date, -1)}`)} aria-label="Previous day">‹</button>
         <input type="date" value={date} onChange={(e) => e.target.value && router.push(`/day/${e.target.value}`)} style={{ font: 'inherit', padding: 6 }} />
