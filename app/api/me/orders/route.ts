@@ -5,7 +5,7 @@
 import { after } from 'next/server';
 import { db } from '../../../../db/client';
 import { HttpError, json, readObject } from '../../../../lib/http';
-import { orderProgress, presentCards, rowsFor } from '../../../../lib/me';
+import { headSettings, orderProgress, presentCards, rowsFor } from '../../../../lib/me';
 import { giveOrder, ordersFor } from '../../../../lib/orders';
 import { meHandler } from '../../../../lib/owner';
 import { renderAfterCommit } from '../../../../lib/render';
@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic';
 
 export const GET = meHandler(async (s) => {
   const orders = await ordersFor(db(), s.headId);
-  return json({ orders: await orderProgress(db(), s.headId, orders) });
+  const { timezone } = await headSettings(db(), s.headId);
+  return json({ timezone, orders: await orderProgress(db(), s.headId, orders) });
 });
 
 export const POST = meHandler(async (s, req) => {

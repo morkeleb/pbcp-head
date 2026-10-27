@@ -93,3 +93,33 @@ describe('web brief', () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe('web orders', () => {
+  it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    await page.type('textarea[aria-label="Order"]', 'Renew the parking permit\nZone 4, before Friday.');
+    await (await page.$('xpath/.//button[.="Give order"]'))!.click();
+    await page.waitForSelector('xpath/.//article//a[.="Renew the parking permit"]');
+
+    const [order] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.toProducer, '*')));
+    expect(order!.producerDoc).toMatchObject({ title: 'Renew the parking permit', body: 'Zone 4, before Friday.' });
+    expect(order!.wildcardEligible).toEqual(['hermes']);
+    await call('POST', `${cardPath(order!.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    const k = order!.id.split(':')[2]!;
+    for (const n of [1, 2, 3, 4]) {
+      await call('PUT', cardPath(`hermes:order:${k}:progress-${n}`), { auth: hermes, body: card(`hermes:order:${k}:progress-${n}`, { kind: 'signal', urgency: 'log', thread: order!.id, title: `Step ${n}` }) });
+    }
+
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(order!.id)}`, { waitUntil: 'networkidle0' });
+    const text = await page.$eval('main', (m) => m.textContent);
+    expect(text).toContain('held by hermes');
+    expect(text).toContain('Order and progress');
+    expect(text).toContain('1 earlier updates'); // four updates: one folded, the latest three shown
+    await (await page.$('xpath/.//button[.="Cancel order"]'))!.click();
+    await page.waitForSelector('.toast');
+    await until(async () => (await row(order!.id)).execState === 'cancelled');
+    expect((await row(order!.id)).state).toBe('decided');
+    expect(errors).toEqual([]);
+  });
+});

@@ -22,6 +22,8 @@ interface Brief {
   decisions: MeCard[];
   threads: Fold[];
   snoozed: number;
+  late_outcomes: MeCard[];
+  lapsed_orders: MeCard[];
   new: string[];
 }
 
@@ -79,6 +81,21 @@ export function BriefView() {
       <h2>Decisions · {brief.decisions.length}</h2>
       {brief.decisions.length === 0 && <p className="muted">Nothing is waiting for you.</p>}
       {brief.decisions.map((c) => <DecisionItem key={c.id} card={c} isNew={isNew(c.id)} onDecided={replace} timezone={brief.timezone} />)}
+
+      {brief.lapsed_orders.length > 0 && (
+        <>
+          <h2>Orders back on the shelf</h2>
+          <p className="muted">An executor took these and let the lease lapse without a result; any executor may take them again.</p>
+          {brief.lapsed_orders.map((o) => <p key={o.id}><Link href={cardHref(o.id)}>{o.title}</Link> <span className="badge">claim {o.claim_seq}</span></p>)}
+        </>
+      )}
+      {brief.late_outcomes.length > 0 && (
+        <>
+          <h2>Late results</h2>
+          <p className="muted">These arrived after the order ended or from an earlier lease; they changed nothing.</p>
+          {brief.late_outcomes.map((c) => <p key={c.id}><Link href={cardHref(c.id)}>{c.title}</Link> <span className="muted">{c.producer}</span></p>)}
+        </>
+      )}
 
       <h2>Today</h2>
       {brief.threads.length === 0 && <p className="muted">No artifacts or signals today.</p>}

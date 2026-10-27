@@ -10,7 +10,7 @@ export type ActionEntry = string | { id: string; label?: string; body?: string; 
 
 export interface MeCard {
   id: string;
-  kind: 'decision' | 'artifact' | 'signal';
+  kind: 'decision' | 'artifact' | 'signal' | 'order';
   producer: string;
   title: string;
   body: string;
@@ -32,6 +32,12 @@ export interface MeCard {
   rendered_html: string;
   rendered_actions?: Record<string, string>;
   first_visual?: { kind: 'diagram' | 'image'; src: string; caption: string };
+  order_outcome?: 'applied' | 'stale';
+  to_producer?: string;
+  exec_state?: 'open' | 'claimed' | 'done' | 'failed' | 'cancelled';
+  claimed_by?: string;
+  claim_expires_at?: string;
+  claim_seq?: number;
 }
 
 // --- navigation ----------------------------------------------------------------------
@@ -47,6 +53,7 @@ export function Nav() {
     <nav className="top">
       <Link href="/brief">Brief</Link>
       <Link href={`/day/${today}`}>Day</Link>
+      <Link href="/orders">Orders</Link>
       <span className="spacer" />
       <button onClick={signOut} style={{ minHeight: 32, padding: '4px 10px', fontSize: 14 }}>Sign out</button>
     </nav>
