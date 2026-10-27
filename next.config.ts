@@ -8,7 +8,8 @@ refuseTestModeInProduction();
  * One id per build, the same in the build and at runtime: Next.js's own build id, and baked into the service
  * worker (app/sw.js) through `env`, so each deployment ships a worker the browser sees as new.
  */
-const BUILD_ID = process.env.PBCP_BUILD_ID ?? process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? Date.now().toString(36);
+// `||`, not `??`: an env file can set these to an empty string, and an empty build id stops `next start`.
+const BUILD_ID = process.env.PBCP_BUILD_ID || process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) || Date.now().toString(36);
 
 /**
  * A package's files as mermaid-cli resolves them at runtime (import.meta.resolve): through pnpm's link

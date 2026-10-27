@@ -22,7 +22,8 @@
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "test:gate": "vitest run",
     "api:generate": "tsx scripts/api-generate.ts",
-    "icons": "tsx scripts/icons.ts"
+    "icons": "tsx scripts/icons.ts",
+    "demo": "tsx --env-file-if-exists=.env scripts/demo.ts"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
