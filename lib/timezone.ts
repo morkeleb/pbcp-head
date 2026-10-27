@@ -1,4 +1,4 @@
-// The head's effective timezone: the owner's day for the brief, the day view, snooze presets and the nightly
+// The head's effective timezone: the owner's day for the brief and its timeline, snooze presets and the nightly
 // card. Not a protocol concern (the RFC's timestamps are UTC); the head decides which calendar its owner lives on.
 //
 //   1. heads.timezone, when the owner set it (PATCH /api/me/settings): an explicit choice wins.

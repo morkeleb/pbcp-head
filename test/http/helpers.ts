@@ -22,9 +22,20 @@ export const headUrl = (): string => inject('headUrl');
 
 /** An empty head owned by `owner`: every table truncated, the head and its counter recreated. */
 export async function resetHead(owner = OWNER): Promise<void> {
-  await testDb().execute(
-    sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads, diagrams, rate_limits restart identity`,
-  );
+  // The previous test's cards may still be rendering after their responses (lib/render renderAfterCommit, now two
+  // drawings per fence): a truncate that deadlocks with that work is retried.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await testDb().execute(
+        sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads, diagrams, rate_limits restart identity`,
+      );
+      break;
+    } catch (e) {
+      const code = (e as { cause?: { code?: string } }).cause?.code ?? (e as { code?: string }).code;
+      if (code !== '40P01' || attempt >= 5) throw e;
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
+  }
   await ensureHead(testDb(), owner);
 }
 

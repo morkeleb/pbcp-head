@@ -37,6 +37,8 @@ export function verifyDrawKey(given: string | null): boolean {
 export interface DrawRequest {
   source: string;
   svgId: string;
+  /** Absent: light. */
+  theme?: 'light' | 'dark';
 }
 
 /** 200 `{ svg }`; 422 `{ error: 'diagram', message }` when mermaid refused the source; anything else is infrastructure. */
@@ -48,14 +50,14 @@ const DRAW_TIMEOUT_MS = 60_000;
  * Draws `source` (already sanitised) to SVG text. A DiagramError means mermaid refused it; any other error
  * is the drawing infrastructure, which callers must not cache.
  */
-export async function drawSvg(source: string, svgId: string): Promise<string> {
+export async function drawSvg(source: string, svgId: string, theme: 'light' | 'dark' = 'light'): Promise<string> {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-pbcp-draw-key': drawKey() };
   // Vercel's Protection Bypass for Automation, for preview deployments behind Deployment Protection.
   if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   const res = await fetch(drawUrl(), {
     method: 'POST',
     headers,
-    body: JSON.stringify({ source, svgId } satisfies DrawRequest),
+    body: JSON.stringify({ source, svgId, ...(theme === 'dark' ? { theme } : {}) } satisfies DrawRequest),
     signal: AbortSignal.timeout(DRAW_TIMEOUT_MS),
   });
   const body = (await res.json().catch(() => null)) as DrawResponse | null;

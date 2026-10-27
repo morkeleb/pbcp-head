@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { api, loadTokens, OFFLINE_REASON, OfflineError, saveTokens, useOnline, when } from './client';
 
 // --- types: the /api/me card shape ----------------------------------------------------
@@ -81,7 +81,6 @@ export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send l
 export function Nav() {
   // The brief has its own masthead (app/(ui)/brief/masthead.tsx), which leads to the other pages.
   const path = usePathname();
-  const today = new Date().toISOString().slice(0, 10);
   const signOut = async () => {
     if (loadTokens()) await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     saveTokens(null);
@@ -91,12 +90,33 @@ export function Nav() {
   return (
     <nav className="top">
       <Link href="/brief">Brief</Link>
-      <Link href={`/day/${today}`}>Day</Link>
       <Link href="/orders">Orders</Link>
       <span className="spacer" />
       <button onClick={signOut} style={{ minHeight: 32, padding: '4px 10px', fontSize: 14 }}>Sign out</button>
     </nav>
   );
+}
+
+// --- the page theme, and diagrams drawn for it -------------------------------------------
+
+/** Whether the page is dark (the `.dark` class on <html>, set before paint and by the theme toggle), followed live. */
+export function useDark(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const o = new MutationObserver(changed);
+      o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => o.disconnect();
+    },
+    () => document.documentElement.classList.contains('dark'),
+    () => false,
+  );
+}
+
+/** A drawn diagram's address for the page's theme: `?theme=dark` on a dark page (app/api/me/svg). Other images as they are. */
+export function themedSrc(src: string, dark: boolean): string {
+  if (!src.startsWith('/api/me/svg/')) return src;
+  const bare = src.replace(/[?&]theme=dark\b/, '');
+  return dark ? `${bare}${bare.includes('?') ? '&' : '?'}theme=dark` : bare;
 }
 
 // --- rendered bodies and the full-screen viewer ----------------------------------------
@@ -110,6 +130,15 @@ interface Visual {
 /** Server-rendered, sanitised card HTML. Tapping a visual opens it full-screen (§3.1 Presentation). */
 export function Rendered({ html, className }: { html: string; className?: string }) {
   const [open, setOpen] = useState<Visual | null>(null);
+  const dark = useDark();
+  const root = useRef<HTMLDivElement>(null);
+  // The server renders one address per diagram; the page points it at the drawing for its theme.
+  useEffect(() => {
+    for (const img of root.current?.querySelectorAll<HTMLImageElement>('img[src^="/api/me/svg/"]') ?? []) {
+      const src = themedSrc(img.getAttribute('src')!, dark);
+      if (img.getAttribute('src') !== src) img.setAttribute('src', src);
+    }
+  }, [html, dark]);
   const onClick = (e: React.MouseEvent) => {
     const img = (e.target as HTMLElement).closest('img');
     if (!img) return;
@@ -123,7 +152,7 @@ export function Rendered({ html, className }: { html: string; className?: string
   };
   return (
     <>
-      <div className={`rendered ${className ?? ''}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+      <div ref={root} className={`rendered ${className ?? ''}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
       {open && <Viewer visual={open} onClose={() => setOpen(null)} />}
     </>
   );
@@ -132,9 +161,10 @@ export function Rendered({ html, className }: { html: string; className?: string
 /** The first visual of a card as a thumbnail, fitted to the width and never cropped. */
 export function Thumb({ visual }: { visual: NonNullable<MeCard['first_visual']> }) {
   const [open, setOpen] = useState(false);
+  const dark = useDark();
   return (
     <figure className="thumb">
-      <img src={visual.src} alt={visual.caption} loading="lazy" onClick={() => setOpen(true)} />
+      <img src={themedSrc(visual.src, dark)} alt={visual.caption} loading="lazy" onClick={() => setOpen(true)} />
       {visual.caption && <figcaption>{visual.caption}</figcaption>}
       {open && <Viewer visual={visual} onClose={() => setOpen(false)} />}
     </figure>
@@ -142,7 +172,9 @@ export function Thumb({ visual }: { visual: NonNullable<MeCard['first_visual']> 
 }
 
 /** Full-screen, native size first, pinch or wheel to zoom, drag to pan; the fence source behind a disclosure. */
-export function Viewer({ visual, onClose }: { visual: Visual; onClose: () => void }) {
+export function Viewer({ visual: given, onClose }: { visual: Visual; onClose: () => void }) {
+  const dark = useDark();
+  const visual = { ...given, src: themedSrc(given.src, dark) };
   const stage = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -386,37 +418,68 @@ export function useDeferred() {
   return { schedule, toast, pending: !!pending };
 }
 
-/** A horizontal swipe on touch or pen (not a mouse drag, which selects text): left or right past 80 px. */
+/**
+ * A horizontal swipe on a touch screen (a finger, or a pencil, which iOS reports as touch; never a mouse drag, which
+ * selects text): left or right past 80 px. Built on touch events rather than pointer events: iOS Safari cancels a
+ * touch's pointer stream as soon as it suspects a scroll, so a swipe that drifts a little vertically never ended.
+ * Once a gesture is clearly sideways (after 8 px) the card owns it and stops the page from scrolling; a vertical
+ * one stays the browser's. A touch that starts on a control (a link, a button, an option) is that control's.
+ */
 export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
-  const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const [dx, setDx] = useState(0);
-  return {
-    dx,
-    handlers: {
-      onPointerDown: (e: ReactPointerEvent) => {
-        if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button, a, input, textarea, label, summary, img')) return;
-        start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-      },
-      onPointerMove: (e: ReactPointerEvent) => {
-        const s = start.current;
-        if (!s || s.id !== e.pointerId) return;
-        const x = e.clientX - s.x;
-        if (Math.abs(x) > Math.abs(e.clientY - s.y)) setDx(x);
-      },
-      onPointerUp: (e: ReactPointerEvent) => {
-        const s = start.current;
-        start.current = null;
-        setDx(0);
-        if (!s || s.id !== e.pointerId) return;
-        const x = e.clientX - s.x;
-        if (Math.abs(x) >= 80 && Math.abs(x) > 2 * Math.abs(e.clientY - s.y)) onSwipe(x > 0 ? 'right' : 'left');
-      },
-      onPointerCancel: () => {
-        start.current = null;
-        setDx(0);
-      },
-    },
-  };
+  const latest = useRef(onSwipe);
+  latest.current = onSwipe;
+  const detach = useRef<(() => void) | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    detach.current?.();
+    detach.current = null;
+    if (!el) return;
+    let start: { x: number; y: number } | null = null;
+    let axis: 'x' | 'y' | null = null;
+    let x = 0;
+    const reset = () => {
+      start = null;
+      axis = null;
+      x = 0;
+      setDx(0);
+    };
+    const down = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (e.touches.length !== 1 || !t || (e.target as Element).closest('button, a, input, textarea, label, summary, img, [role="radio"]')) return reset();
+      start = { x: t.clientX, y: t.clientY };
+      axis = null;
+      x = 0;
+    };
+    const move = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!start || !t) return;
+      const mx = t.clientX - start.x;
+      const my = t.clientY - start.y;
+      if (!axis) {
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+      }
+      if (axis !== 'x') return;
+      e.preventDefault(); // sideways: the card's gesture, not a scroll
+      x = mx;
+      setDx(mx);
+    };
+    const end = () => {
+      if (start && axis === 'x' && Math.abs(x) >= 80) latest.current(x > 0 ? 'right' : 'left');
+      reset();
+    };
+    el.addEventListener('touchstart', down, { passive: true });
+    el.addEventListener('touchmove', move, { passive: false });
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', reset);
+    detach.current = () => {
+      el.removeEventListener('touchstart', down);
+      el.removeEventListener('touchmove', move);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', reset);
+    };
+  }, []);
+  return { dx, ref };
 }
 
 // --- deciding (§4.3, §4.4) ------------------------------------------------------------------

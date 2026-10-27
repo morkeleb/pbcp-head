@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { cutSummary, inlineLead } from './lead';
 
 describe('presenting a lead', () => {
-  it('keeps a body lead on one line: block markers escaped only when they are markers', () => {
-    expect(inlineLead('- **From:** Jonas\nDate: today')).toBe('\\- **From:** Jonas Date: today');
+  it('keeps a body lead on one line, a list item or quotation without its marker', () => {
+    expect(inlineLead('- **From:** Jonas\nDate: today')).toBe('**From:** Jonas Date: today');
+    expect(inlineLead('* item')).toBe('item');
+    expect(inlineLead('+ item')).toBe('item');
+    expect(inlineLead('12. twelfth')).toBe('twelfth');
+    expect(inlineLead('3) third')).toBe('third');
+    expect(inlineLead('> quoted')).toBe('quoted');
+    expect(inlineLead('>> twice quoted')).toBe('twice quoted');
     expect(inlineLead('**Done** (accepted)')).toBe('**Done** (accepted)'); // bold, not a list item
-    expect(inlineLead('> quoted')).toBe('\\> quoted');
-    expect(inlineLead('12. twelfth')).toBe('12\\. twelfth');
     expect(inlineLead('2026.10.27 release')).toBe('2026.10.27 release');
+    expect(inlineLead('-5 degrees tonight')).toBe('-5 degrees tonight'); // no space: not a marker
+    expect(inlineLead('| a | b |')).toBe('\\| a | b |');
   });
 
   it('cuts a summary at 280 characters, at a word, with an ellipsis', () => {

@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cards } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
+import { submitCard } from '../../lib/protocol';
 import { TEST_CRON_SECRET } from '../env';
 import { card, cardPath } from './cards';
 import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
@@ -85,6 +86,30 @@ describe('GET /api/cron/brief', () => {
     expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }] });
     const days = await testDb().select({ id: cards.id }).from(cards).where(and(eq(cards.headId, OWNER), eq(cards.namespace, 'daily')));
     expect(days.map((d) => d.id).sort()).toEqual(['head:daily:2026-10-06', 'head:daily:2026-10-07', 'head:daily:2026-10-08']);
+  });
+
+  it('opens the brief with the live paragraph while today’s card is from an older fold, and with the card once it is current', async () => {
+    const owner = await ownerSession();
+    await clock('2026-10-07T09:00:00Z');
+    await call('PUT', cardPath('hermes:gmail:1'), { auth: hermes, body: card('hermes:gmail:1', { summary: 'Anna asks about the invoice.' }) });
+    // Today's card as the older fold left it: the counts as its summary, and no x-pbcp-fold stamp.
+    const old = {
+      protocol: 'pbcp/1', id: 'head:daily:2026-10-07', kind: 'artifact', to_person: OWNER, producer: 'head', thread: 'daily', urgency: 'brief',
+      title: 'Brief for Wednesday 7 October', summary: '1 open decision · 0 cards yesterday from 0 producers', body: '- **hermes** · Reply to Anna', emitted_at: '2026-10-07T03:30:00Z',
+    };
+    await submitCard(testDb(), { headId: OWNER, root: 'head', ceiling: 'brief' }, JSON.stringify(old), encodeURIComponent(old.id));
+    let b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
+    expect(b.daily.id).toBe('head:daily:2026-10-07');
+    expect(b.daily_paragraph.so_far).toBe(true);
+    expect(b.daily_paragraph.html).toMatch(/^1 decision: <a href="\/card\/hermes%3Agmail%3A1">Anna asks about the invoice<\/a>\.$/);
+    expect(b.daily_paragraph.html).not.toContain('open decision ·');
+
+    // Folded again by the current fold (stamped), the card's own lead opens the day.
+    await testDb().delete(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, old.id)));
+    expect((await cron()).body.minted).toEqual([{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }]);
+    b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
+    expect(b.daily['x-pbcp-fold']).toBe(2);
+    expect(b.daily_paragraph).toMatchObject({ so_far: false, html: b.daily.rendered_lead });
   });
 
   it('mints no card on a day with nothing open and nothing new', async () => {

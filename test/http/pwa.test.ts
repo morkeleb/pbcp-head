@@ -151,7 +151,7 @@ describe('offline', () => {
     await wait(1500);
     expect(await page.$('.as-of')).not.toBeNull();
     // A card opened online is there too; one never opened says so instead of failing.
-    await page.goto(`${headUrl()}/day/2000-01-02`, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+    await page.goto(`${headUrl()}/card/${encodeURIComponent('goalpath:never:opened')}`, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
     expect(await page.evaluate(() => document.body.innerText)).toContain('This page has not been opened on this device yet');
     expect(errors).toEqual([]);
     await setOffline(false, worker);

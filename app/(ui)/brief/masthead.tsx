@@ -102,7 +102,7 @@ function SearchDialog({ cards }: { cards: MeCard[] }) {
   );
 }
 
-function PagesMenu({ today }: { today: string }) {
+function PagesMenu() {
   const signOut = async () => {
     if (loadTokens()) await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     saveTokens(null);
@@ -117,7 +117,6 @@ function PagesMenu({ today }: { today: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild><Link href="/orders">Orders</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href={`/day/${today}`}>Day view</Link></DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -165,7 +164,7 @@ export function Masthead({ today, timezone, density, onDensity, cards, cachedAt,
       )}
       <SearchDialog cards={cards} />
       <ThemeToggle />
-      <PagesMenu today={today} />
+      <PagesMenu />
     </div>
   );
   return (

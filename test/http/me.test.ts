@@ -183,6 +183,25 @@ describe('GET /api/me/svg/{hash}', () => {
   });
 });
 
+describe('GET /api/me/svg/{hash}?theme=dark', () => {
+  const svg = (fill: string) => `<svg id="d" width="100%" viewBox="0 0 100 50" style="max-width: 100px;" xmlns="http://www.w3.org/2000/svg"><rect fill="${fill}"/></svg>`;
+  it('serves the drawing for a dark page, or the light one on white (briefly cached) until it exists', async () => {
+    const [both, light] = ['b'.repeat(64), 'c'.repeat(64)];
+    await testDb().insert(diagrams).values([{ hash: both, type: 'pie', svg: svg('black'), svgDark: svg('white') }, { hash: light, type: 'pie', svg: svg('black') }]);
+    const get = async (hash: string, q = '') => {
+      const r = await fetch(`${headUrl()}/api/me/svg/${hash}${q}`);
+      return { body: await r.text(), cache: r.headers.get('cache-control'), theme: r.headers.get('x-pbcp-theme') };
+    };
+    expect((await get(both)).body).toContain('fill="black"');
+    expect(await get(both, '?theme=dark')).toMatchObject({ cache: 'public, max-age=31536000, immutable', theme: null });
+    expect((await get(both, '?theme=dark')).body).toContain('fill="white"');
+    const fallback = await get(light, '?theme=dark');
+    expect(fallback).toMatchObject({ cache: 'public, max-age=60', theme: 'light' });
+    expect(fallback.body).toMatch(/^<svg width="100" height="50" id="d" viewBox="0 0 100 50" style="max-width: 100px;background-color:#fff"/);
+    expect(fallback.body.match(/ style="/g)).toHaveLength(1); // one style attribute, not a second one the browser ignores
+  });
+});
+
 describe('timezone and settings', () => {
   const zone = (auth: string, tz: string, path = '/api/me') => call('GET', path, { auth, headers: { 'x-timezone': tz } });
   const settings = async () => (await me('GET', '/api/me/settings')).body;
@@ -200,7 +219,7 @@ describe('timezone and settings', () => {
     await zone(owner.auth, 'Europe/Stockholm', '/api/me/brief');
     await call('GET', '/api/me', { auth: phone.auth });
     expect((await settings()).timezone).toBe('Europe/Stockholm');
-    // The brief, the day view and the card read all use it: 09:05Z is 11:05 on the 7th in Stockholm.
+    // The brief, a day's cards and the card read all use it: 09:05Z is 11:05 on the 7th in Stockholm.
     expect((await me('GET', '/api/me/brief')).body).toMatchObject({ date: '2026-10-07', timezone: 'Europe/Stockholm' });
     expect((await me('GET', '/api/me/cards?date=2026-10-07')).body.timezone).toBe('Europe/Stockholm');
     // A signed-out device no longer counts.

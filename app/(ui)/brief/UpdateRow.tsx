@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
+import { announce, NOT_SENT, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
 import { clock, type Density } from './DecisionCard';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
@@ -53,6 +53,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState(false);
   const online = useOnline();
+  const dark = useDark();
   const deferred = useDeferred();
   const swipe = useSwipe(() => {
     if (!acked && online && !deferred.pending) deferred.schedule(`Acknowledge: ${c.title}`, () => void ack());
@@ -92,7 +93,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
       tabIndex={-1}
       className={cn('update-row relative touch-pan-y outline-none transition-transform duration-150', ledger ? 'py-2' : 'py-3', focused && 'ring-2 ring-ring rounded-md')}
       style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
-      {...swipe.handlers}
+      ref={swipe.ref}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
@@ -120,7 +121,13 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
         <figure className="mt-2">
           <button className="block w-full cursor-zoom-in" onClick={() => setViewing(true)} aria-label={`Open ${c.first_visual.caption || 'the visual'} full-screen`}>
             {/* A fixed box, so the page does not move when the image arrives; contained, so it is never cropped. */}
-            <img src={c.first_visual.src} alt={c.first_visual.caption} loading="lazy" className="block h-44 w-full rounded-sm border bg-white object-contain" />
+            <img
+              src={themedSrc(c.first_visual.src, dark)}
+              alt={c.first_visual.caption}
+              loading="lazy"
+              // A light drawing gets white behind it; a dark one carries its own ground (the dark card colour).
+              className={cn('block h-44 w-full rounded-sm border object-contain', dark && c.first_visual.kind === 'diagram' ? 'bg-card' : 'bg-white')}
+            />
           </button>
           {c.first_visual.caption && <figcaption className="mt-1 text-meta text-muted-foreground">{c.first_visual.caption}</figcaption>}
           {viewing && <Viewer visual={{ src: c.first_visual.src, caption: c.first_visual.caption }} onClose={() => setViewing(false)} />}

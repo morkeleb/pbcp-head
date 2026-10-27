@@ -366,16 +366,61 @@ describe('the brief: days, week strip, layouts', () => {
     expect(await after.evaluate((e) => e.textContent)).toContain('When should M4 ship?');
   });
 
-  it('remembers Ledger density on the device: one line per decision, expandable', async () => {
+  it('remembers Ledger density on the device: a decision folded to its title and actions, expandable', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await (await page.$('xpath/.//button[starts-with(@aria-label, "Density")]'))!.click();
     await (await page.waitForSelector('xpath/.//*[@role="menuitemradio" and contains(., "Ledger")]'))!.click();
     await page.reload({ waitUntil: 'networkidle0' });
     const article = (await decisionCard('When should M4 ship?'))!;
-    expect(await article.$('.lead')).toBeNull(); // one line
+    expect(await article.$('.lead')).toBeNull(); // folded
     await (await article.$('button[aria-expanded="false"]'))!.click();
-    await article.waitForSelector('.decide-row');
+    await article.waitForSelector('.lead');
   });
+
+  it('ledger on a phone: the title whole on its own line, the actions on the next, choice lists inline with no "Choose…"', async () => {
+    const long = 'Approve the revised Q4 budget for the platform team, including the two new contractor positions';
+    const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
+    await call('PUT', cardPath('goalpath:item:9:budget'), { auth: goalpath, body: card('goalpath:item:9:budget', { title: long }) });
+    await page.setViewport({ width: 360, height: 780 });
+    await page.goto(`${headUrl()}/signin`);
+    await page.evaluate(() => localStorage.setItem('pbcp.density', 'ledger'));
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+
+    const budget = (await decisionCard('Approve the revised Q4 budget'))!;
+    const layout = await budget.evaluate((e) => {
+      const title = e.querySelector('.ledger-title')!;
+      const text = [...title.querySelectorAll('span')].find((s) => s.textContent?.startsWith('Approve'))!;
+      const row = e.querySelector('.decide-row')!.getBoundingClientRect();
+      return {
+        shown: text.textContent,
+        clipped: text.scrollWidth > text.clientWidth + 1 || getComputedStyle(text).textOverflow === 'ellipsis' || !!title.querySelector('.truncate'),
+        below: row.top >= title.getBoundingClientRect().bottom - 1,
+      };
+    });
+    expect(layout).toEqual({ shown: long, clipped: false, below: true });
+
+    // A choice list with option bodies: its options inline, the default filled, no "Choose…" in front of them (§4.5).
+    const ship = (await decisionCard('When should M4 ship?'))!;
+    expect(await ship.$$eval('.decide-row button', (bs) => bs.map((b) => [b.textContent, b.getAttribute('data-variant')]))).toEqual([
+      ['Ship Friday', 'default'], ['Ship next sprint', 'outline'], ['Dismiss', 'ghost'],
+    ]);
+    expect(await ship.$('xpath/.//button[contains(., "Choose")]')).toBeNull();
+    await (await ship.$('xpath/.//button[.="Ship next sprint"]'))!.click();
+    await until(async () => (await row('goalpath:item:1:ship')).decision === 'ship-next');
+    expect(errors).toEqual([]);
+  });
+
+  it('shows the swipe hint once per device, and takes it down after a few seconds', async () => {
+    await page.goto(`${headUrl()}/signin`);
+    await page.evaluate(() => localStorage.removeItem('pbcp.swipe-hint'));
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const footer = () => page.$eval('footer', (f) => f.textContent ?? '');
+    expect(await footer()).toContain('Swipe right for the default');
+    await page.waitForFunction(() => !document.querySelector('footer')!.textContent!.includes('Swipe right'), { timeout: 12_000 });
+    await page.reload({ waitUntil: 'networkidle0' });
+    expect(await footer()).not.toContain('Swipe right');
+  });
+
 
   it('broadsheet: two columns, j/k move, d dismisses the focused decision after the undo window', async () => {
     await page.setViewport({ width: 1100, height: 900 });
