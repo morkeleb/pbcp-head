@@ -62,21 +62,43 @@ beforeEach(async () => {
 });
 
 describe('web brief', () => {
-  it('puts the source on the card’s header line, "label ↗", in a new tab; none without a followable source, and not in the menu', async () => {
+  /** What a card's source link shows: the label and host that are on its line (not clipped), left to right. */
+  const shownSource = (sel: string) =>
+    page.$eval(`${sel} [data-source]`, (a) => {
+      const box = a.getBoundingClientRect();
+      const visible = (e: Element | null) => {
+        if (!e) return null;
+        const r = e.getBoundingClientRect();
+        return r.top >= box.top - 1 && r.bottom <= box.bottom + 1 && r.width > 0 ? { text: e.textContent!.replace(/\s*·\s*$/, ''), left: r.left } : null;
+      };
+      const label = visible(a.querySelector('[data-source-label]'));
+      const host = visible(a.querySelector('[data-source-host]'));
+      return {
+        shown: [label, host].filter((x): x is { text: string; left: number } => x !== null).sort((x, y) => x.left - y.left).map((x) => x.text),
+        href: a.getAttribute('href'), target: a.getAttribute('target'), rel: a.getAttribute('rel'),
+        lineHeight: a.parentElement!.getBoundingClientRect().height,
+      };
+    });
+
+  it('puts the source on the card’s header line as "label · host ↗", in a new tab; none without a followable source, and not in the menu', async () => {
     const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
     const put = (id: string, extra: Record<string, unknown>) => call('PUT', cardPath(id), { auth: goalpath, body: card(id, extra) });
-    await put('goalpath:item:2:src', { title: 'Accept GP-2?', source: { url: 'https://goalpath.example/items/GP-2', label: 'GP-2 in GoalPath' } });
+    await put('goalpath:item:2:src', { title: 'Accept GP-2?', source: { url: 'https://goalpath.example/items/GP-2', label: 'GP-2' } });
     await put('goalpath:report:2', { kind: 'artifact', title: 'Velocity', source: { url: 'https://reports.example/velocity' } });
+    await put('goalpath:report:4', { kind: 'artifact', title: 'Same', source: { url: 'https://www.same.example/x', label: 'same.example' } });
     await put('goalpath:report:3', { kind: 'signal', title: 'Odd link', source: { url: 'javascript:alert(1)', label: 'Click me' } });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
 
-    const source = (sel: string) => page.$eval(`${sel} [data-source]`, (a) => ({ text: a.textContent, href: a.getAttribute('href'), target: a.getAttribute('target'), rel: a.getAttribute('rel'), title: a.getAttribute('title') }));
     const decision = (await decisionCard('Accept GP-2?'))!;
-    expect(await source(`article[data-card="${'goalpath:item:2:src'}"]`)).toEqual({ text: 'GP-2 in GoalPath', href: 'https://goalpath.example/items/GP-2', target: '_blank', rel: 'noopener', title: 'goalpath.example' });
+    expect(await shownSource('article[data-card="goalpath:item:2:src"]')).toEqual({
+      shown: ['GP-2', 'goalpath.example'], href: 'https://goalpath.example/items/GP-2', target: '_blank', rel: 'noopener', lineHeight: expect.any(Number),
+    });
     // The header is one line: the source sits beside the producer.
-    expect(await decision.$eval('[data-source]', (a) => a.parentElement!.textContent)).toMatch(/^goalpath.*·\s*GP-2 in GoalPath$/i);
-    expect(await decision.$eval('[data-source]', (a) => a.parentElement!.getBoundingClientRect().height)).toBeLessThan(24);
-    expect(await source(`article[data-card="${'goalpath:report:2'}"]`)).toMatchObject({ text: 'reports.example', href: 'https://reports.example/velocity' }); // no label: the host
+    expect(await decision.$eval('[data-source]', (a) => a.parentElement!.textContent)).toMatch(/^goalpath/i);
+    expect(await decision.$eval('[data-source]', (a) => a.getAttribute('aria-label'))).toBe('GP-2, goalpath.example (opens in a new tab)');
+    expect((await shownSource('article[data-card="goalpath:item:2:src"]')).lineHeight).toBeLessThan(24);
+    expect((await shownSource('article[data-card="goalpath:report:2"]')).shown).toEqual(['reports.example']); // no label: the host
+    expect((await shownSource('article[data-card="goalpath:report:4"]')).shown).toEqual(['www.same.example']); // the label is the host: once
 
     // No source, or one that is not http(s)/mailto (§3.1 Links): no link.
     expect(await page.$('article[data-card="goalpath:item:1:ship"] [data-source]')).toBeNull();
@@ -89,22 +111,21 @@ describe('web brief', () => {
     expect(await page.$eval('[role="menu"]', (m) => m.textContent)).not.toMatch(/Open source/);
   });
 
-  it('keeps the header on one line at 360 px, truncating the source’s label before the title', async () => {
+  it('at 360 px keeps the header on one line by dropping the source’s label, never its host, and never touching the title', async () => {
     const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
     const label = 'A very long label for the upstream issue tracker entry, longer than any phone';
     await call('PUT', cardPath('goalpath:item:3:long'), { auth: goalpath, body: card('goalpath:item:3:long', { title: 'Ship the export?', source: { url: 'https://goalpath.example/3', label } }) });
     await page.setViewport({ width: 360, height: 780 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const article = (await decisionCard('Ship the export?'))!;
-    const box = await article.$eval('[data-source]', (a) => {
-      const line = a.parentElement!;
-      const text = a.querySelector('span')!;
-      return { lineHeight: line.getBoundingClientRect().height, truncated: text.scrollWidth > text.clientWidth, right: a.getBoundingClientRect().right, lineRight: line.getBoundingClientRect().right };
-    });
-    expect(box.lineHeight).toBeLessThan(24); // one line
-    expect(box.truncated).toBe(true);
-    expect(box.right).toBeLessThanOrEqual(box.lineRight + 1);
+    const shown = await shownSource('article[data-card="goalpath:item:3:long"]');
+    expect(shown.shown).toEqual(['goalpath.example']);
+    expect(shown.lineHeight).toBeLessThan(24); // one line
+    expect(await article.$eval('[data-source]', (a) => a.getBoundingClientRect().right <= a.parentElement!.getBoundingClientRect().right + 1)).toBe(true);
     expect(await article.$eval('h3', (h) => h.textContent)).toBe('Ship the export?'); // the title whole
+    // Wide enough, both again.
+    await page.setViewport({ width: 1280, height: 800 });
+    await until(async () => (await shownSource('article[data-card="goalpath:item:3:long"]')).shown.length === 2);
   });
 
   it('runs no script from inside rendered card HTML: the page CSP allows its own nonce only', async () => {

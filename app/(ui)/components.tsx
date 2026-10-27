@@ -131,8 +131,11 @@ interface Visual {
 /** Server-rendered, sanitised card HTML. Tapping a visual opens it full-screen (§3.1 Presentation). */
 // --- source: the card's way out to the thing it is about (RFC 0.6 §4.1) ----------------------
 
-/** A followable source (§3.1 Links: http, https or mailto only), its label (or the URL's host) and its host. */
-export function sourceLink(source: MeCard['source']): { href: string; label: string; host: string } | null {
+/**
+ * A followable source (§3.1 Links: http, https or mailto only): its host, and its label when the label says something
+ * the host does not (no label, or a label that is the host, gives the host alone).
+ */
+export function sourceLink(source: MeCard['source']): { href: string; label: string | null; host: string } | null {
   if (!source?.url) return null;
   let url: URL;
   try {
@@ -142,13 +145,18 @@ export function sourceLink(source: MeCard['source']): { href: string; label: str
   }
   if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) return null;
   const host = url.protocol === 'mailto:' ? url.pathname.split('@').pop() || url.pathname : url.host;
-  return { href: url.href, label: source.label?.trim() || host, host };
+  const label = source.label?.trim() ?? '';
+  const same = (s: string) => s.toLowerCase().replace(/^www\./, '').replace(/\/$/, '');
+  return { href: url.href, label: label && same(label) !== same(host) ? label : null, host };
 }
 
 /**
- * The source on a card's header line, "label ↗", opening in a new tab. The label is the producer's display text
- * (§12: untrusted, it says nothing about where the link goes), so the host is in the link's title and accessible
- * name. It truncates before anything else on the line does. Nothing when the card has no followable source.
+ * The source on a card's header line, "label · host ↗", opening in a new tab. The label is the producer's display
+ * text; the host is where the link goes, which the producer does not control (§12: a head SHOULD show the destination
+ * hostname beside a link and treat source.label as untrusted). When the line is too narrow for both, the label goes
+ * and the host stays, never the other way round: the host comes first in the DOM, the row is laid out reversed, and
+ * whatever wraps (the label) falls onto a clipped second line. A host too long for the line truncates. Nothing when
+ * the card has no followable source.
  */
 export function SourceLink({ source, className }: { source: MeCard['source']; className?: string }) {
   const link = sourceLink(source);
@@ -159,12 +167,19 @@ export function SourceLink({ source, className }: { source: MeCard['source']; cl
       target="_blank"
       rel="noopener"
       title={link.host}
-      aria-label={`${link.label} (${link.host}, opens in a new tab)`}
+      aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`}
       data-source
-      className={`inline-flex min-w-0 items-center gap-0.5 normal-case tracking-normal hover:text-foreground hover:underline ${className ?? ''}`}
+      className={`flex h-[1lh] min-w-0 flex-row-reverse flex-wrap items-center justify-end overflow-hidden normal-case tracking-normal hover:text-foreground hover:underline ${className ?? ''}`}
     >
-      <span className="truncate">{link.label}</span>
-      <ArrowUpRight className="size-3 flex-none" aria-hidden />
+      <span className="flex min-w-0 items-center gap-0.5" data-source-host>
+        <span className="truncate">{link.host}</span>
+        <ArrowUpRight className="size-3 flex-none" aria-hidden />
+      </span>
+      {link.label && (
+        <span className="flex-none whitespace-nowrap pr-1" data-source-label>
+          {link.label} <span aria-hidden>·</span>
+        </span>
+      )}
     </a>
   );
 }
