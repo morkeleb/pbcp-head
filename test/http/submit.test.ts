@@ -55,18 +55,18 @@ describe('PUT /api/cards/{id} (§7.1)', () => {
     expect((await put('hermes:gmail:7', card('hermes:gmail:7'), hermes.replace('Bearer', 'Session'))).status).toBe(401);
   });
 
-  it('stores the producer document unchanged but clamps delivery urgency to the ceiling (§4.1, §9)', async () => {
+  it('keeps urgency as sent and clamps delivery to the ceiling (§4.2, §9)', async () => {
     const r = await put('hermes:gmail:8', card('hermes:gmail:8', { urgency: 'immediate' }));
-    expect(r.body.urgency).toBe('immediate');
+    expect(r.body).toMatchObject({ urgency: 'immediate', delivery: 'brief' });
     const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'hermes:gmail:8')));
-    expect(row!.urgency).toBe('brief');
+    expect(row).toMatchObject({ urgency: 'immediate', delivery: 'brief' });
     expect((row!.producerDoc as { urgency: string }).urgency).toBe('immediate');
 
     const loud = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal', ceiling: 'immediate' })}`;
     await put('cal:event:1', card('cal:event:1', { urgency: 'immediate' }), loud);
     await put('cal:event:2', card('cal:event:2', { urgency: 'log' }), loud);
-    const rows = await testDb().select({ id: cards.id, urgency: cards.urgency }).from(cards).where(eq(cards.producer, 'cal'));
-    expect(Object.fromEntries(rows.map((x) => [x.id, x.urgency]))).toEqual({ 'cal:event:1': 'immediate', 'cal:event:2': 'log' });
+    const rows = await testDb().select({ id: cards.id, delivery: cards.delivery }).from(cards).where(eq(cards.producer, 'cal'));
+    expect(Object.fromEntries(rows.map((x) => [x.id, x.delivery]))).toEqual({ 'cal:event:1': 'immediate', 'cal:event:2': 'log' });
   });
 
   it('supersedes atomically: predecessor takes the lower change_seq, successor the next one (§7.2, §8)', async () => {
@@ -74,7 +74,7 @@ describe('PUT /api/cards/{id} (§7.1)', () => {
     const r = await put('hermes:gmail:9:v2', card('hermes:gmail:9:v2', { supersedes: 'hermes:gmail:9' }));
     expect(r).toMatchObject({ status: 201, body: { change_seq: 3 } });
     const [old] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'hermes:gmail:9')));
-    expect(old).toMatchObject({ state: 'superseded', changeSeq: 2, urgency: 'brief' });
+    expect(old).toMatchObject({ state: 'superseded', changeSeq: 2, urgency: null, delivery: 'brief' });
   });
 
   it('reports supersession refusals with their codes', async () => {

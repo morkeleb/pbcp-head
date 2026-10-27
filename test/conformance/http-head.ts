@@ -1,10 +1,14 @@
 // HeadUnderTest (from @pbcp/core/conformance) over HTTP, against a running head in test mode.
 //
 //   reset       truncate every table, recreate head `morten`, sign in one owner device, reset the test hooks
-//   token       mint a producer token for the root, as `pnpm mint-token` does
+//   token       mint a producer token for the root, as `pnpm mint-token` does (see `token` for the ceiling)
+//   describe    GET /                          Bearer, or none
 //   put         PUT /api/cards/{id}            Bearer   (JSON, or text/markdown for the file form)
-//   changes     GET /api/changes?after=        Bearer
+//   changes     GET /api/changes?after=        Bearer   (`after` sent as given, so malformed cursors reach the head)
 //   decide      POST /api/me/cards/{id}/decision  Session
+//   decideWithToken  POST /api/cards/{id}/decision with the producer's Bearer token (§7.3: must be 401)
+//   order       POST /api/me/orders            Session  (the owner gives an order; A.1)
+//   claim       POST /api/cards/{id}/claim     Bearer   { lease_seconds } (A.2)
 //   seen        POST /api/me/cards/{id}/seen      Session
 //   acknowledge POST /api/me/cards/{id}/ack       Session
 //   clock.set   queued, then POSTed to /api/test before the next request (the interface's set() is synchronous)
@@ -33,13 +37,13 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
   let session = '';
   let pendingClock: string | undefined;
 
-  async function request(method: string, path: string, auth: string, body?: unknown): Promise<Response> {
+  async function request(method: string, path: string, auth: string | null, body?: unknown): Promise<Response> {
     if (pendingClock !== undefined) {
       const at = pendingClock;
       pendingClock = undefined;
       await hooks({ clock: at });
     }
-    const headers: Record<string, string> = { authorization: auth };
+    const headers: Record<string, string> = auth === null ? {} : { authorization: auth };
     let payload: string | undefined;
     if (body !== undefined) {
       payload = typeof body === 'string' ? body : JSON.stringify(body);
@@ -72,16 +76,37 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
       await hooks({ clock: opts.startClock ?? '2026-10-07T00:00:00Z', syncPageSize: opts.pageSize ?? null });
     },
 
+    /**
+     * The fixtures' "no ceiling" (C28 step 6 expects an unclamped `delivery`) is minted as `immediate`, the
+     * ceiling that clamps nothing. Left to itself `pnpm mint-token` gives a new producer `brief`, as §9's
+     * SHOULD asks; that tension is reported, not resolved here.
+     */
     async token(root, o) {
-      return mintProducerToken(opts.db, { headId: owner, root, ...(o?.executor ? { executor: true } : {}), ...(o?.ceiling ? { ceiling: o.ceiling } : {}) });
+      return mintProducerToken(opts.db, { headId: owner, root, ...(o?.executor ? { executor: true } : {}), ceiling: o?.ceiling ?? 'immediate' });
+    },
+
+    async describe(token) {
+      return request('GET', '/', bearer(token));
     },
 
     async put(token, input) {
-      return request('PUT', `/api/cards/${encodeURIComponent(urlId(input))}`, `Bearer ${token}`, input);
+      return request('PUT', `/api/cards/${encodeURIComponent(urlId(input))}`, bearer(token), input);
     },
 
     async changes(token, after) {
-      return request('GET', `/api/changes?after=${after}`, `Bearer ${token}`);
+      return request('GET', `/api/changes?after=${encodeURIComponent(String(after))}`, bearer(token));
+    },
+
+    async order(input) {
+      return request('POST', '/api/me/orders', session, input);
+    },
+
+    async claim(token, id, lease) {
+      return request('POST', `/api/cards/${encodeURIComponent(id)}/claim`, `Bearer ${token}`, { lease_seconds: lease });
+    },
+
+    async decideWithToken(token, id, d: Decision) {
+      return request('POST', `/api/cards/${encodeURIComponent(id)}/decision`, `Bearer ${token}`, d);
     },
 
     async decide(id, d: Decision) {
@@ -103,6 +128,8 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
     },
   };
 }
+
+const bearer = (token: string | null) => (token === null ? null : `Bearer ${token}`);
 
 /**
  * The id to put in the URL. The fixtures hand the adapter a card, not a URL, so the adapter names the id the

@@ -3,14 +3,14 @@
 import { PROTOCOL, type HeadDescription } from '@pbcp/core';
 import { RENDERED_TIERS } from './render/mermaid';
 
-export function describeHead(owner: string): HeadDescription {
+/** `seq` is the head's counter: the highest change_seq assigned, 0 before the first (§7.5). */
+export function describeHead(owner: string, seq: number): HeadDescription {
   return {
     protocol: PROTOCOL,
     owner,
-    // The orders extension is milestone H3.
-    extensions: [],
+    seq,
+    extensions: ['orders'],
     // §3.1: core and extended are drawn; other types fall back.
     render: { mermaid: [...RENDERED_TIERS] },
-    // TODO(pbcp-0.4): @pbcp/core 0.4 adds `seq` to the description (the head's current change_seq).
   };
 }

@@ -4,15 +4,22 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, cardHref, when } from '../../client';
 import { DecisionControls, DecisionSummary, Rendered, type MeCard } from '../../components';
+import { CancelOrder, ExecBadge } from '../../orders/orders-view';
 
 interface Summary {
   id: string;
   title: string;
   kind: string;
+  producer: string;
   state: string;
   received_at: string;
   decision?: string;
+  exec_state?: string;
+  order_outcome?: 'applied' | 'stale';
 }
+
+/** Progress in an order's thread is folded: the order, the latest few updates, the rest behind a disclosure (§8). */
+const SHOWN = 3;
 
 interface Detail {
   timezone: string;
@@ -74,15 +81,29 @@ export function CardView() {
         <Rendered html={card.rendered_html} />
       </section>
 
+      {card.kind === 'order' && (
+        <section className="card">
+          <div className="meta">
+            <ExecBadge order={{ exec_state: card.exec_state! }} />
+            <span>to {card.to_producer === '*' ? 'any executor' : card.to_producer}</span>
+            {card.claimed_by && <span>· held by {card.claimed_by} until {when(card.claim_expires_at!, timezone)} (claim {card.claim_seq})</span>}
+          </div>
+          {card.state === 'open' && (card.exec_state === 'open' || card.exec_state === 'claimed') && (
+            <div className="row"><CancelOrder order={card} onCancelled={(c) => update(c)} /></div>
+          )}
+        </section>
+      )}
+      {card.order_outcome === 'stale' && <p className="muted">This result came late or from an earlier lease; it did not change the order.</p>}
+
       <DecisionSummary card={card} timezone={timezone} />
       <DecisionControls card={card} onDecided={(c) => update(c)} />
 
-      {card.state === 'open' && card.kind !== 'decision' && (
+      {card.state === 'open' && card.kind !== 'decision' && card.kind !== 'order' && (
         <div className="row">
           <button onClick={() => post('ack')} disabled={!!card.acknowledged_at}>{card.acknowledged_at ? 'Acknowledged' : 'Acknowledge'}</button>
         </div>
       )}
-      {card.state === 'open' && (
+      {card.state === 'open' && card.kind !== 'order' && (
         <div className="row">
           <span className="muted" style={{ alignSelf: 'center' }}>Snooze:</span>
           <button onClick={() => post('snooze', { preset: 'tonight' })}>Tonight</button>
@@ -120,13 +141,30 @@ export function CardView() {
       )}
       {detail.thread.length > 1 && (
         <>
-          <h2>Thread · {card.thread}</h2>
-          {detail.thread.map((t) => (
-            <p key={t.id} style={{ margin: '4px 0' }}>
-              {t.id === card.id ? <strong>{t.title}</strong> : <Link href={cardHref(t.id)}>{t.title}</Link>}{' '}
-              <span className="muted">{when(t.received_at, timezone)}</span> {t.decision && <span className="badge decided">{t.decision}</span>}
-            </p>
-          ))}
+          <h2>{detail.thread[0]!.kind === 'order' ? 'Order and progress' : `Thread · ${card.thread}`}</h2>
+          {(() => {
+            const row = (t: Summary) => (
+              <p key={t.id} style={{ margin: '4px 0' }}>
+                {t.id === card.id ? <strong>{t.title}</strong> : <Link href={cardHref(t.id)}>{t.title}</Link>}{' '}
+                <span className="muted">{t.producer} · {when(t.received_at, timezone)}</span>{' '}
+                {t.exec_state && <span className="badge">{t.exec_state}</span>}
+                {t.decision && <span className="badge decided">{t.decision}</span>}
+                {t.order_outcome === 'stale' && <span className="badge">late</span>}
+              </p>
+            );
+            const [head, ...rest] = detail.thread;
+            if (head!.kind !== 'order' || rest.length <= SHOWN) return detail.thread.map(row);
+            return (
+              <>
+                {row(head!)}
+                <details>
+                  <summary className="muted">{rest.length - SHOWN} earlier updates</summary>
+                  {rest.slice(0, -SHOWN).map(row)}
+                </details>
+                {rest.slice(-SHOWN).map(row)}
+              </>
+            );
+          })()}
         </>
       )}
     </main>

@@ -41,7 +41,8 @@ export const cards = pgTable(
     producer: text('producer').notNull(), // denormalised from the id's root
     namespace: text('namespace').notNull(), // the id's second segment
     producerDoc: jsonb('producer_doc').notNull(), // the ProducerCard exactly as accepted; equality is computed on this
-    urgency: text('urgency').notNull(), // the card's urgency clamped to its token's ceiling at receipt (§9); producer_doc keeps what was sent
+    urgency: text('urgency'), // the producer's urgency as sent (null when absent), denormalised from producer_doc
+    delivery: text('delivery').notNull(), // §4.2, §9: urgency clamped to the producer's ceiling when the content was stored
     state: text('state').notNull(), // open | decided | superseded
     changeSeq: bigint('change_seq', { mode: 'number' }).notNull(),
     receivedAt: tstz('received_at').notNull(),
@@ -60,18 +61,23 @@ export const cards = pgTable(
     renderedActions: jsonb('rendered_actions'), // { [action id]: html } for choice options with a markdown body (§4.4)
     renderedMeta: jsonb('rendered_meta'), // { firstVisual, fences: [{ type, class }] }
     renderedFrom: text('rendered_from'), // hash of what was rendered (pipeline version, body, option bodies); stale when it differs
-    // Orders extension (A.1), milestone H3. Present so the columns exist when it lands; nothing writes them yet.
+    // Orders extension (A.1). Head-owned fields of an order card; wildcard_eligible is the head-private
+    // snapshot of executors eligible when a `*` order was minted, never returned to anyone.
     toProducer: text('to_producer'),
     execState: text('exec_state'),
     claimedBy: text('claimed_by'),
     claimExpiresAt: tstz('claim_expires_at'),
     claimSeq: integer('claim_seq'),
     wildcardEligible: text('wildcard_eligible').array(),
+    // On a card that is an order's outcome (A.3): `applied` when it moved exec_state, `stale` when it came
+    // from an old or lapsed lease or after the order ended. Head-private; the brief surfaces stale ones.
+    outcome: text('outcome'),
   },
   (t) => [
     primaryKey({ columns: [t.headId, t.id] }),
     index('cards_sync').on(t.headId, t.changeSeq),
     index('cards_thread').on(t.headId, t.producer, sql`(${t.producerDoc}->>'thread')`),
+    index('cards_orders').on(t.headId, t.toProducer, t.changeSeq),
   ],
 );
 

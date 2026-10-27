@@ -9,7 +9,7 @@ describe('GET / (§7.5)', () => {
   it('describes the only head without credentials', async () => {
     const r = await call('GET', '/');
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ protocol: 'pbcp/1', owner: OWNER, extensions: [], render: { mermaid: ['core', 'extended'] } });
+    expect(r.body).toEqual({ protocol: 'pbcp/1', owner: OWNER, seq: 0, extensions: ['orders'], render: { mermaid: ['core', 'extended'] } });
   });
 
   it('is also served at /api, for a HeadClient whose baseUrl ends in /api', async () => {
