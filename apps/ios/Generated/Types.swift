@@ -47,9 +47,9 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/me/visit`.
     /// - Remark: Generated from `#/paths//api/me/visit/post(postVisit)`.
     func postVisit(_ input: Operations.PostVisit.Input) async throws -> Operations.PostVisit.Output
-    /// Cards received in a local day or between two instants
+    /// Cards received in a local day, a run of local days, or between two instants
     ///
-    /// Ordered by `change_seq`, paginated with `after` and `next`.
+    /// Ordered by `change_seq`, paginated with `after` and `next`. With `from`/`to`, `before` names the latest earlier day that has a card, so a client can page back through the timeline without fetching empty weeks.
     ///
     /// - Remark: HTTP `GET /api/me/cards`.
     /// - Remark: Generated from `#/paths//api/me/cards/get(listCards)`.
@@ -190,9 +190,9 @@ extension APIProtocol {
             body: body
         ))
     }
-    /// Cards received in a local day or between two instants
+    /// Cards received in a local day, a run of local days, or between two instants
     ///
-    /// Ordered by `change_seq`, paginated with `after` and `next`.
+    /// Ordered by `change_seq`, paginated with `after` and `next`. With `from`/`to`, `before` names the latest earlier day that has a card, so a client can page back through the timeline without fetching empty weeks.
     ///
     /// - Remark: HTTP `GET /api/me/cards`.
     /// - Remark: Generated from `#/paths//api/me/cards/get(listCards)`.

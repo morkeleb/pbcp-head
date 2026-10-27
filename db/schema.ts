@@ -79,6 +79,7 @@ export const cards = pgTable(
   (t) => [
     primaryKey({ columns: [t.headId, t.id] }),
     index('cards_sync').on(t.headId, t.changeSeq),
+    index('cards_received').on(t.headId, t.receivedAt), // the timeline by day, and where it begins
     index('cards_thread').on(t.headId, t.producer, sql`(${t.producerDoc}->>'thread')`),
     index('cards_orders').on(t.headId, t.toProducer, t.changeSeq),
   ],

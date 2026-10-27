@@ -5,9 +5,20 @@
 //
 //   1  (unstamped) counts as the summary, entries as "producer · title — lead"
 //   2  the daily paragraph of leads, each linked; no summary
+//   3  snoozed decisions left out of the paragraph and counted apart ("4 decisions, 1 snoozed")
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 2;
+export const FOLD_VERSION = 3;
+/** The first fold whose lead is the daily paragraph. */
+const PARAGRAPH_SINCE = 2;
 
-/** The card was folded by the current fold. */
-export const currentFold = (card: object): boolean => (card as Record<string, unknown>)[FOLD_FIELD] === FOLD_VERSION;
+const foldOf = (card: object): number => {
+  const v = (card as Record<string, unknown>)[FOLD_FIELD];
+  return typeof v === 'number' ? v : 1;
+};
+
+/** The card was folded by the current fold: it may open today's brief. */
+export const currentFold = (card: object): boolean => foldOf(card) === FOLD_VERSION;
+
+/** The card's lead is a daily paragraph (fold 2 on): it opens its own day on the timeline, as it was written then. */
+export const hasParagraph = (card: object): boolean => foldOf(card) >= PARAGRAPH_SINCE;

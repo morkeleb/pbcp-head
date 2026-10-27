@@ -1,0 +1,1 @@
+CREATE INDEX "cards_received" ON "cards" USING btree ("head_id","received_at");

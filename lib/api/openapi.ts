@@ -91,10 +91,14 @@ const PATHS: Record<string, Record<string, Json>> = {
   },
   '/api/me/cards': {
     get: operation('listCards', {
-      summary: 'Cards received in a local day or between two instants',
-      description: 'Ordered by `change_seq`, paginated with `after` and `next`.',
+      summary: 'Cards received in a local day, a run of local days, or between two instants',
+      description:
+        'Ordered by `change_seq`, paginated with `after` and `next`. With `from`/`to`, `before` names the latest earlier ' +
+        'day that has a card, so a client can page back through the timeline without fetching empty weeks.',
       parameters: [
         { name: 'date', in: 'query', description: 'A local day, YYYY-MM-DD, in the effective timezone', schema: { type: 'string' } },
+        { name: 'from', in: 'query', description: 'First local day, YYYY-MM-DD, inclusive; with `to`, not with `date`', schema: { type: 'string' } },
+        { name: 'to', in: 'query', description: 'Last local day, YYYY-MM-DD, inclusive', schema: { type: 'string' } },
         { name: 'since', in: 'query', description: 'Received at or after, RFC 3339', schema: { type: 'string' } },
         { name: 'until', in: 'query', description: 'Received before, RFC 3339', schema: { type: 'string' } },
         { name: 'state', in: 'query', schema: { type: 'string', enum: ['open', 'decided', 'superseded'] } },

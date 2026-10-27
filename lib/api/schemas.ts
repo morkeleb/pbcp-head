@@ -92,6 +92,11 @@ export const CardList = z.object({
   cards: z.array(MeCard),
   next: Seq.nullable().describe('Pass as `after` for the next page; null on the last'),
   timezone: Zone,
+  before: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('With `from`: the latest local day before `from` that has a card, YYYY-MM-DD; null when there is none'),
 }).register(responses, { id: 'CardList' });
 
 // --- the brief ------------------------------------------------------------------------------------------
@@ -111,6 +116,7 @@ export const Brief = z.object({
   timezone: Zone.describe('The effective timezone (see X-Timezone)'),
   seq: Seq.describe('The head’s change counter now; post it to /api/me/visit when the owner leaves'),
   last_visit: LastVisit,
+  first_day: z.string().nullable().describe('The local day of the head’s oldest card, YYYY-MM-DD; how far back the timeline goes'),
   daily: MeCard.nullable().describe('The latest `head:daily` card'),
   daily_paragraph: z
     .object({

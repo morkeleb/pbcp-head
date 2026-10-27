@@ -34,7 +34,21 @@ describe('GET /api/me/brief', () => {
     expect(ids(b.decisions)).toEqual(['hermes:gmail:new', 'hermes:gmail:old']);
     expect(b.snoozed).toBe(1);
     expect(b.decisions[0].rendered_html).toContain('<h2>Proposal</h2>');
-    expect(b).toMatchObject({ date: '2026-10-07', timezone: 'UTC', daily: null, last_visit: { seq: 0, at: null } });
+    expect(b).toMatchObject({ date: '2026-10-07', timezone: 'UTC', daily: null, last_visit: { seq: 0, at: null }, first_day: '2026-10-07' });
+  });
+
+  it('counts a snoozed decision apart in the paragraph and leaves it out of the list there', async () => {
+    for (const n of [1, 2, 3, 4, 5]) await put(`hermes:gmail:${n}`, { summary: `Question ${n}` });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:3')}/snooze`, { preset: 'tomorrow' });
+    const b = (await me('GET', '/api/me/brief')).body;
+    expect(b.decisions).toHaveLength(4);
+    expect(b.daily_paragraph.so_far).toBe(true);
+    expect(b.daily_paragraph.html).toMatch(/^4 decisions, 1 snoozed: <a /);
+    expect(b.daily_paragraph.html).not.toContain('Question 3');
+    expect(b.daily_paragraph.html.match(/<a /g)).toHaveLength(4);
+    // Once the snooze runs out, the decision is counted and listed again.
+    await clock('2026-10-08T12:00:00Z');
+    expect((await me('GET', '/api/me/brief')).body.daily_paragraph.html).toMatch(/^5 decisions: /);
   });
 
   it("folds today's artifacts and signals by thread, immediate first, leaving log and yesterday's out", async () => {
@@ -87,6 +101,36 @@ describe('GET /api/me/cards', () => {
     expect(ids(page2.cards)).toEqual(['hermes:gmail:d3']);
     expect(page2.next).toBeNull();
     expect(ids((await me('GET', '/api/me/cards?date=2026-10-06')).body.cards)).toEqual(['hermes:gmail:late']);
+  });
+
+  it('lists a run of local days, and names the latest earlier day with a card, so the timeline can go back to the first', async () => {
+    expect((await me('PATCH', '/api/me/settings', { timezone: 'Europe/Copenhagen' })).body.timezone).toBe('Europe/Copenhagen');
+    await clock('2026-06-02T10:00:00Z');
+    await put('hermes:gmail:june');
+    await clock('2026-09-29T21:30:00Z'); // 23:30 on 29 September in Copenhagen
+    await put('hermes:gmail:sep29');
+    await clock('2026-09-29T22:30:00Z'); // 00:30 on the 30th
+    await put('hermes:gmail:sep30');
+    await clock('2026-10-06T10:00:00Z');
+    await put('hermes:gmail:oct6');
+    await clock('2026-10-07T09:00:00Z');
+    await put('hermes:gmail:today');
+
+    const week = (await me('GET', '/api/me/cards?from=2026-09-30&to=2026-10-06')).body;
+    expect(ids(week.cards)).toEqual(['hermes:gmail:sep30', 'hermes:gmail:oct6']);
+    expect(week.before).toBe('2026-09-29'); // a local day, not the UTC one
+    const next = (await me('GET', '/api/me/cards?from=2026-09-23&to=2026-09-29')).body;
+    expect(ids(next.cards)).toEqual(['hermes:gmail:sep29']);
+    expect(next.before).toBe('2026-06-02'); // the empty summer is skipped
+    const first = (await me('GET', '/api/me/cards?from=2026-05-27&to=2026-06-02')).body;
+    expect(ids(first.cards)).toEqual(['hermes:gmail:june']);
+    expect(first.before).toBeNull(); // the head's first card: the timeline ends here
+    expect((await me('GET', '/api/me/cards?date=2026-10-07')).body).not.toHaveProperty('before');
+    expect((await me('GET', '/api/me/brief')).body.first_day).toBe('2026-06-02');
+
+    for (const q of ['from=2026-10-01', 'to=2026-10-01', 'from=2026-10-02&to=2026-10-01', 'from=2026-10-01&to=yesterday', 'date=2026-10-01&from=2026-10-01&to=2026-10-01']) {
+      expect((await me('GET', `/api/me/cards?${q}`)).status).toBe(400);
+    }
   });
 
   it('filters by state and refuses malformed queries', async () => {

@@ -44,7 +44,7 @@ pnpm dev                         # then open /signin from the enroll link, and /
 The human API's contract is `packages/api-types/openapi.json`, generated from `lib/api/schemas.ts` (`pnpm api:generate`). The phone's Swift client in `apps/ios/Generated/` is generated from it; see `packages/api-types/README.md`. Every `/api/me` request may send `X-Timezone`, and the head follows the owner's active device unless `/api/me/settings` pins a zone.
 
 **The web app is installable.** "Add to Home Screen" in iOS Safari, or Install in Chrome, gives a standalone app that opens on `/brief`.
-- **Cached reads.** A service worker (`lib/pwa/service-worker.ts`) keeps the app shell, plus the brief, the day and card pages and their data. With no network the brief opens from that copy, marked "as of" the time it was fetched; online, the copy is shown first and replaced as soon as the network answers.
+- **Cached reads.** A service worker (`lib/pwa/service-worker.ts`) keeps the app shell, plus the brief, the card pages and their data. With no network the brief opens from that copy, marked "as of" the time it was fetched; online, the copy is shown first and replaced as soon as the network answers.
 - **Diagrams and images** are cached by their URL.
 - **Writes need a connection.** Deciding, acknowledging, snoozing and giving orders are never saved to send later: offline, those controls are disabled and say why. A decision whose undo window closes after the connection dropped is dropped too.
 - **No push yet.**
