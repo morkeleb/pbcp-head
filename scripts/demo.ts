@@ -91,13 +91,13 @@ async function seed() {
         '| 16:30–17:00 | Call with Anna | Video |',
         '', '```mermaid', 'gantt', `  title ${day(today)}`, '  dateFormat HH:mm', '  axisFormat %H:%M',
         '  Standup :09:15, 09:30', '  Q4 review budget and plan :11:00, 12:00', '  Dentist :14:00, 14:45', '  Anna re invoice timing :16:30, 17:00', '```',
-        '', DEMO_MARK,
+        
       ].join('\n'),
     });
     await put('cal', `cal:demo:3f9a0c1d2e4b5a69-${today.replace(/-/g, '')}T1600Z:moved`, {
       kind: 'signal', urgency: 'immediate', thread: `day-${today}`,
       title: 'Moved: Call with Anna now at 16:00',
-      body: `**Call with Anna** now starts at 16:00–16:30 (was 16:30).\n\nWhere: Video\n\n${DEMO_MARK}`,
+      body: `**Call with Anna** now starts at 16:00–16:30 (was 16:30).\n\nWhere: Video`,
     });
 
     // --- goalpath: a milestone that slipped (superseding its on-track card), an approval, a red build, the digest
@@ -105,7 +105,7 @@ async function seed() {
     await put('goalpath', `goalpath:demo:${milestone}.20261112:on-track`, {
       kind: 'signal', urgency: 'brief', thread: milestone, source: { url: 'https://goalpath.example/m/4', label: 'GoalPath milestone' },
       title: 'Billing revamp: on track, forecast 12 Nov (deadline 13 Nov)',
-      body: `The forecast is 2026-11-12, on or before the deadline 2026-11-13.\n\n${DEMO_MARK}`,
+      body: `The forecast is 2026-11-12, on or before the deadline 2026-11-13.`,
     });
     await put('goalpath', `goalpath:demo:${milestone}.20261124:risk`, {
       kind: 'signal', urgency: 'brief', thread: milestone, supersedes: `goalpath:demo:${milestone}.20261112:on-track`,
@@ -119,19 +119,20 @@ async function seed() {
         '**Options**',
         '- Cut scope: move items out of Billing revamp until the forecast meets 2026-11-13.',
         '- Move the deadline to 2026-11-24 and re-plan what depends on it.',
-        '- Add capacity to the milestone.', '', DEMO_MARK,
+        '- Add capacity to the milestone.', 
       ].join('\n'),
     });
     await put('goalpath', 'goalpath:demo:approval-3c9b7f10', {
       kind: 'decision', urgency: 'brief', thread: milestone, source: { url: 'https://goalpath.example/i/12', label: 'GoalPath item' },
       title: 'Accept GP-12 Export invoices as CSV?',
-      body: '**GP-12 Export invoices as CSV** is Finished and waiting for your acceptance.\n\n- Milestone: Billing revamp\n\n## Proposal\n\nAccept GP-12. Accepting or rejecting here sets its status in GoalPath.\n\n' + DEMO_MARK,
+      summary: 'GP-12 is finished and waiting for you; accepting or rejecting sets it in GoalPath.',
+      body: '**GP-12 Export invoices as CSV** is Finished and waiting for your acceptance.\n\n- Milestone: Billing revamp\n\n## Proposal\n\nAccept GP-12. Accepting or rejecting here sets its status in GoalPath.',
       actions: [{ id: 'accept', label: 'Accept', body: 'Sets GP-12 to Accepted.' }, { id: 'reject', label: 'Reject', body: 'Sets GP-12 to Rejected.' }],
     });
     await put('goalpath', 'goalpath:demo:build-gh-run-118842', {
       kind: 'signal', urgency: 'immediate', thread: milestone, source: { url: 'https://git.example/acme/billing/actions/runs/118842', label: 'Build run' },
       title: 'Build failed: ci / test on #91 (GP-14)',
-      body: '**ci / test** ended `failure` on [#91](https://git.example/acme/billing/pull/91) Retry declined cards twice, linked to **GP-14 Retry failed card payments** in Billing revamp.\n\n' + DEMO_MARK,
+      body: '**ci / test** ended `failure` on [#91](https://git.example/acme/billing/pull/91) Retry declined cards twice, linked to **GP-14 Retry failed card payments** in Billing revamp.',
     });
     await put('goalpath', `goalpath:demo:digest-${yesterday}`, {
       kind: 'artifact', urgency: 'brief', thread: 'p-demo',
@@ -141,7 +142,7 @@ async function seed() {
         '  Billing revamp :crit, 2026-09-28, 2026-11-24', '  Mobile beta :2026-10-12, 2026-12-04', '  Rollout :crit, 2026-12-01, 2027-01-22', '```', '',
         '**Done** (accepted in the last 24 hours)', '- GP-10 Invoice PDF layout', '',
         '**Blocked**', '- GP-14 Retry failed card payments', '',
-        '**Unplanned work.** 25% of completed work last week; the weeks before, newest first: 40%, 20%, 10%.', '', DEMO_MARK,
+        '**Unplanned work.** 25% of completed work last week; the weeks before, newest first: 40%, 20%, 10%.', 
       ].join('\n'),
     });
 
@@ -149,20 +150,23 @@ async function seed() {
     await put('hermes', 'hermes:demo:gmail-19c3a8e05f72:reply', {
       kind: 'decision', urgency: 'brief', thread: 'gmail-19c3a8e05f72', source: { url: 'https://mail.google.com/mail/u/0/#inbox/19c3a8e05f72', label: 'Gmail thread' },
       title: 'Reply to Anna re invoice timing',
-      body: 'Anna asks whether the September invoice can be paid on the 20th instead of the 15th. Cash flow for October covers it either way.\n\n## Proposed reply\n\n> Hi Anna, the 20th is fine. Thanks for letting us know in advance.\n\n' + DEMO_MARK,
+      summary: 'Anna wants to pay the September invoice on the 20th instead of the 15th; Hermes proposes saying yes.',
+      body: 'Anna asks whether the September invoice can be paid on the 20th instead of the 15th. Cash flow for October covers it either way.\n\n## Proposed reply\n\n> Hi Anna, the 20th is fine. Thanks for letting us know in advance.',
       actions: ['approve', 'reject', 'edit'],
     });
 
     // --- imap: two unread messages in one thread (decisions), one from another folder (artifact) ----------
-    const mailBody = (from: string, date: string, quote: string) => `- **From:** ${from}\n- **Date:** ${date}\n\n${quote.split('\n').map((l) => `> ${l}`).join('\n')}\n\n${DEMO_MARK}`;
+    const mailBody = (from: string, date: string, quote: string) => `- **From:** ${from}\n- **Date:** ${date}\n\n${quote.split('\n').map((l) => `> ${l}`).join('\n')}`;
     await put('mail', 'mail:demo:5d41402abc4b2a76b9719d91', {
       kind: 'decision', thread: 'thr-1781234567890123456', actions: ['archive', 'keep'],
       title: 'Offsite on the 14th: are you in?',
+      summary: 'Jonas is booking the offsite venue and needs to know by Friday whether you join both days.',
       body: mailBody('Jonas Holm <jonas@acme.example>', `${today}T07:41:00.000Z`, 'Hi Morten,\nwe are booking the venue for the offsite on the 14th.\nCan you confirm by Friday whether you join for both days?'),
     });
     await put('mail', 'mail:demo:7215ee9c7d9dc229d2921a40', {
       kind: 'decision', thread: 'thr-1781234567890123456', actions: ['archive', 'keep'],
       title: 'Re: Offsite on the 14th: are you in?',
+      summary: 'The train leaves at 07:10; Jonas has seats in car 4.',
       body: mailBody('Jonas Holm <jonas@acme.example>', `${today}T08:05:00.000Z`, 'Forgot to say: the train leaves 07:10, we have seats in car 4.'),
     });
     await put('mail', 'mail:demo:9f86d081884c7d659a2feaa0', {
@@ -178,7 +182,8 @@ async function seed() {
     await put('n8n', 'n8n:demo:monitoring-db-1-disk', {
       kind: 'decision', urgency: 'immediate', thread: 'monitoring-db-1',
       title: 'db-1 disk at 91%: what should the workflow do?',
-      body: 'The **db-1** data volume is at **91%** and grew 4% in the last 24 hours. At this rate it is full in about two days.\n\n```mermaid\nxychart-beta\n  title "db-1 disk used (%)"\n  x-axis [Mon, Tue, Wed, Thu, Fri, Sat, Today]\n  y-axis 0 --> 100\n  line [71, 74, 78, 80, 83, 87, 91]\n```\n\n' + DEMO_MARK,
+      summary: 'db-1 will be full in about two days at the current rate; pick what the workflow does now.',
+      body: 'The **db-1** data volume is at **91%** and grew 4% in the last 24 hours. At this rate it is full in about two days.\n\n```mermaid\nxychart-beta\n  title "db-1 disk used (%)"\n  x-axis [Mon, Tue, Wed, Thu, Fri, Sat, Today]\n  y-axis 0 --> 100\n  line [71, 74, 78, 80, 83, 87, 91]\n```',
       actions: [
         { id: 'expand', label: 'Grow the volume by 100 GB', body: 'Runs the **expand-volume** workflow now. About €9/month more.', default: true },
         { id: 'prune', label: 'Prune old WAL archives', body: 'Deletes WAL archives older than 14 days; frees about 60 GB.' },
@@ -191,7 +196,7 @@ async function seed() {
     await put('obsidian', `obsidian:demo:${yesterday}`, {
       kind: 'artifact', urgency: 'log', thread: `${yesterday.slice(0, 4)}-W${String(isoWeek(yesterday)).padStart(2, '0')}`,
       title: `Daily note ${yesterday}`,
-      body: '## Done\n\n- Reviewed the billing forecast with Sara\n- Sketched the brief layout for the phone\n\n## Notes\n\nThe offsite is on the 14th; Jonas is booking. Ask about the train.\n\n## Tomorrow\n\n- [ ] Accept or reject GP-12\n- [ ] Reply to Anna\n\n' + DEMO_MARK,
+      body: '## Done\n\n- Reviewed the billing forecast with Sara\n- Sketched the brief layout for the phone\n\n## Notes\n\nThe offsite is on the 14th; Jonas is booking. Ask about the train.\n\n## Tomorrow\n\n- [ ] Accept or reject GP-12\n- [ ] Reply to Anna',
     });
 
     // --- the owner decides one mail, and gives two orders; hermes and todoist carry them out -----------------
