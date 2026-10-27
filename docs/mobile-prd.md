@@ -29,6 +29,8 @@ Three screens, and a deliberate list of what the phone does not do.
 | `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists) and the day's paragraph: its decisions as title — lead, then one sentence of yesterday's threads the same way, each title linked to its card (`daily_paragraph`) | — |
 | `WeekStrip` | Seven days, the selected one filled, a dot under days with open decisions | Jumps the timeline to a day |
 
+**The nightly card's day.** The `head:daily` card dated D is the morning paper for D and reports on D−1; the timeline shows it at the top of D.
+
 Under 900 px the brief is a timeline with a rail of times; from 900 px a broadsheet with decisions on the left (60 %) and updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.
 
 **Visuals** (RFC §3.1 Presentation). Diagrams and images in a card are thumbnails fitted to the card width, captioned, in reading order; the Brief shows at most the first visual of a folded card. Tap opens a full-screen viewer with pinch-zoom and pan on the cached SVG or image at native size, a share action, and the fence source behind a disclosure. The viewer is the same component for mermaid output and for producer images, so there is one zoom experience to get right.
