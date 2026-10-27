@@ -7,7 +7,9 @@ import { jwtVerify, SignJWT } from 'jose';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Db } from '../../db/client';
 import { devices } from '../../db/schema';
+import { now } from '../clock';
 import { HttpError } from '../http';
+import { canonicalZone, TIMEZONE_HEADER } from '../timezone';
 
 export const ACCESS_TTL_SECONDS = 15 * 60;
 export const REFRESH_TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -142,6 +144,10 @@ export function sessionToken(req: Request): string | null {
 /**
  * `Authorization: Session <jwt>`: a valid access token for a device that is still signed in. Anything else,
  * a producer's `Bearer` token included, is 401 `unauthorized`.
+ *
+ * Any /api/me request may also carry `X-Timezone: <IANA zone>`, the zone the device is in now. It is checked
+ * after the credential (an unknown zone is 400 `invalid_request`) and stored on the device with `tz_seen_at`;
+ * the head follows the zone of the device most recently seen (lib/timezone.ts).
  */
 export async function authenticateSession(db: Db, req: Request): Promise<Session> {
   const token = sessionToken(req);
@@ -150,10 +156,16 @@ export async function authenticateSession(db: Db, req: Request): Promise<Session
   if (!claims || typeof claims.sub !== 'string' || typeof claims.did !== 'string') {
     throw new HttpError(401, 'unauthorized', 'the session is not valid or has expired');
   }
-  const [device] = await db
-    .select({ id: devices.id })
-    .from(devices)
-    .where(and(eq(devices.id, claims.did), eq(devices.headId, claims.sub), isNull(devices.revokedAt)));
+  const live = and(eq(devices.id, claims.did), eq(devices.headId, claims.sub), isNull(devices.revokedAt));
+  const header = req.headers.get(TIMEZONE_HEADER);
+  const [device] =
+    header === null
+      ? await db.select({ id: devices.id }).from(devices).where(live)
+      : await db
+          .update(devices)
+          .set({ timezone: canonicalZone(header, 'X-Timezone'), tzSeenAt: new Date(now()) })
+          .where(live)
+          .returning({ id: devices.id });
   if (!device) throw new HttpError(401, 'unauthorized', 'this device has been signed out');
   return { headId: claims.sub, deviceId: claims.did };
 }

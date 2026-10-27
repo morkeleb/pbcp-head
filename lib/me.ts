@@ -12,6 +12,7 @@ import { expireDueOrders } from './orders';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { toCard } from './store';
+import { effectiveTimezone } from './timezone';
 import { dayRange, isDate, localDate } from './time';
 
 type Row = typeof cards.$inferSelect;
@@ -82,10 +83,12 @@ export async function orderProgress(db: Db, headId: string, orders: Card[]) {
   );
 }
 
+/** The head's row, with `timezone` the effective zone (lib/timezone.ts) and `zone` how it was chosen. */
 export async function headSettings(db: Db, headId: string) {
   const [head] = await db.select().from(heads).where(eq(heads.id, headId));
   if (!head) throw new HttpError(404, 'not_found', 'no such head');
-  return head;
+  const zone = await effectiveTimezone(db, headId, head.timezone);
+  return { ...head, timezone: zone.timezone, zone };
 }
 
 async function counter(db: Db, headId: string): Promise<number> {
@@ -111,7 +114,7 @@ export interface Fold {
  * signals folded by thread, and the last-visit cursor. One call paints the Brief screen.
  *
  * - Open decisions are listed whatever their urgency (§9: a decision stays reachable until decided).
- * - Artifacts and signals are today's (head timezone), open, delivered at `brief` or `immediate` after the
+ * - Artifacts and signals are today's (the effective timezone), open, delivered at `brief` or `immediate` after the
  *   ceiling; `log` cards are for the day view only (§9). Immediate threads come first.
  * - Snoozed cards are left out until their time; `snoozed` counts them.
  * - `new` lists the ids changed since the last visit; `seq` is the head's counter now, which the client
@@ -384,6 +387,8 @@ export async function listDevices(db: Db, headId: string, current: string) {
     platform: d.platform,
     created_at: iso(d.createdAt),
     last_seen_at: d.lastSeenAt ? iso(d.lastSeenAt) : null,
+    timezone: d.timezone,
+    timezone_seen_at: d.tzSeenAt ? iso(d.tzSeenAt) : null,
     current: d.id === current,
   }));
 }

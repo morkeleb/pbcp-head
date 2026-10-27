@@ -13,9 +13,12 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () =>
 const tstz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
 export const heads = pgTable('heads', {
-  id: text('id').primaryKey(), // the owner's person id, e.g. 'morten'; also what GET / reports as `owner`
+  id: text('id').primaryKey(), // the owner's person id, e.g. 'morten': stable; what GET / reports as `owner`, and `to_person`
+  displayName: text('display_name'), // how the owner is shown in a hosted deployment; never used in the protocol
   createdAt: tstz('created_at').notNull().defaultNow(),
-  timezone: text('timezone').notNull().default('UTC'), // IANA zone: the owner's day, for the brief, day view and nightly card
+  // The owner's explicit IANA zone. Null: the head follows the device most recently seen (devices.timezone),
+  // and UTC when no device has sent one (lib/timezone.ts).
+  timezone: text('timezone'),
   // The global "since last visit" cursor (RFC §14 open question; global, per head): the change_seq the
   // owner had seen when they last left the brief.
   lastVisitSeq: bigint('last_visit_seq', { mode: 'number' }).notNull().default(0),
@@ -136,6 +139,8 @@ export const devices = pgTable(
     previousRefreshHash: bytea('previous_refresh_hash'), // the token rotated out last; presenting it again revokes the device
     refreshExpiresAt: tstz('refresh_expires_at'),
     pushToken: text('push_token'),
+    timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
+    tzSeenAt: tstz('tz_seen_at'), // when it last sent one: the most recent of these is the active device
     createdAt: tstz('created_at').notNull().defaultNow(),
     lastSeenAt: tstz('last_seen_at'),
     revokedAt: tstz('revoked_at'),

@@ -75,7 +75,7 @@ describe('GET /api/me/brief', () => {
 
 describe('GET /api/me/cards', () => {
   it("lists a local day in the head's timezone, in change_seq order, paginated", async () => {
-    expect((await me('PATCH', '/api/me', { timezone: 'Europe/Copenhagen' })).body.timezone).toBe('Europe/Copenhagen');
+    expect((await me('PATCH', '/api/me/settings', { timezone: 'Europe/Copenhagen' })).body.timezone).toBe('Europe/Copenhagen');
     await clock('2026-10-06T21:30:00Z'); // 23:30 on the 6th in Copenhagen
     await put('hermes:gmail:late');
     await clock('2026-10-06T22:30:00Z'); // 00:30 on the 7th
@@ -124,7 +124,7 @@ describe('GET /api/me/cards/{id}', () => {
 
 describe('POST /api/me/cards/{id}/snooze', () => {
   it("snoozes to a preset in the head's timezone, bumps change_seq, and unsnoozes with null", async () => {
-    await me('PATCH', '/api/me', { timezone: 'Europe/Copenhagen' });
+    await me('PATCH', '/api/me/settings', { timezone: 'Europe/Copenhagen' });
     const { body: c } = await put('hermes:gmail:1');
     const r = await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:1')}/snooze`, { preset: 'tomorrow' });
     expect(r.body).toMatchObject({ state: 'open', snoozed_until: '2026-10-08T03:30:00Z' });
@@ -169,6 +169,62 @@ describe('POST /api/me/cards/{id}/snooze', () => {
     expect(await me('POST', `/api/me/cards/${id}/snooze`, { preset: 'tonight' })).toMatchObject({ status: 409, body: { id: 'hermes:gmail:1', state: 'decided' } });
     expect(await me('POST', `/api/me/cards/${id}/unsnooze`)).toMatchObject({ status: 409, body: { state: 'decided' } });
     expect(await me('POST', `/api/me/cards/${id}/snooze`, { until: null })).toMatchObject({ status: 409, body: { state: 'decided' } });
+  });
+});
+
+describe('timezone and settings', () => {
+  const zone = (auth: string, tz: string, path = '/api/me') => call('GET', path, { auth, headers: { 'x-timezone': tz } });
+  const settings = async () => (await me('GET', '/api/me/settings')).body;
+
+  it('takes the zone from the device most recently seen; UTC before any device has said', async () => {
+    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null });
+    const phone = await ownerSession(OWNER, 'phone');
+    expect((await zone(phone.auth, 'america/denver')).status).toBe(200); // stored in its canonical spelling
+    expect(await settings()).toMatchObject({
+      timezone: 'America/Denver', timezone_source: 'device', timezone_override: null,
+      device_timezone: { device_id: phone.deviceId, timezone: 'America/Denver', seen_at: '2026-10-07T09:00:00Z' },
+    });
+    // Another device is used later: it is the active one now. Requests without the header change nothing.
+    await call('POST', '/api/test', { body: { clock: '2026-10-07T09:05:00Z' } });
+    await zone(owner.auth, 'Europe/Stockholm', '/api/me/brief');
+    await call('GET', '/api/me', { auth: phone.auth });
+    expect((await settings()).timezone).toBe('Europe/Stockholm');
+    // The brief, the day view and the card read all use it: 09:05Z is 11:05 on the 7th in Stockholm.
+    expect((await me('GET', '/api/me/brief')).body).toMatchObject({ date: '2026-10-07', timezone: 'Europe/Stockholm' });
+    expect((await me('GET', '/api/me/cards?date=2026-10-07')).body.timezone).toBe('Europe/Stockholm');
+    // A signed-out device no longer counts.
+    await me('DELETE', `/api/me/devices/${owner.deviceId}`);
+    owner = phone;
+    expect((await settings()).timezone).toBe('America/Denver');
+  });
+
+  it('an override set in settings wins over the devices until it is cleared', async () => {
+    await zone(owner.auth, 'America/Denver');
+    const set = await me('PATCH', '/api/me/settings', { timezone: 'Europe/Copenhagen' });
+    expect(set.body).toMatchObject({ timezone: 'Europe/Copenhagen', timezone_source: 'override', timezone_override: 'Europe/Copenhagen', device_timezone: { timezone: 'America/Denver' } });
+    await zone(owner.auth, 'Asia/Tokyo');
+    expect((await settings()).timezone).toBe('Europe/Copenhagen');
+    expect((await me('GET', '/api/me/brief')).body.timezone).toBe('Europe/Copenhagen');
+    const cleared = await me('PATCH', '/api/me/settings', { timezone: null });
+    expect(cleared.body).toMatchObject({ timezone: 'Asia/Tokyo', timezone_source: 'device', timezone_override: null });
+  });
+
+  it('refuses an unknown X-Timezone with 400, after the credential, and stores nothing', async () => {
+    for (const tz of ['Mars/Olympus', '+02:00', '', 'Europe/Copenhagen; drop table']) {
+      expect(await zone(owner.auth, tz), JSON.stringify(tz)).toMatchObject({ status: 400, body: { error: 'invalid_request' } });
+    }
+    expect((await call('GET', '/api/me', { headers: { 'x-timezone': 'Mars/Olympus' } })).status).toBe(401);
+    expect((await call('GET', '/api/me', { auth: hermes, headers: { 'x-timezone': 'Mars/Olympus' } })).status).toBe(401);
+    expect((await settings()).device_timezone).toBeNull();
+    for (const timezone of ['Mars/Olympus', '+02:00', 3]) expect((await me('PATCH', '/api/me/settings', { timezone })).status).toBe(400);
+  });
+
+  it('sets and clears the display name; the head id producers address does not change', async () => {
+    expect((await me('PATCH', '/api/me/settings', { display_name: '  Morten Nielsen ' })).body).toMatchObject({ head: OWNER, display_name: 'Morten Nielsen' });
+    expect((await me('GET', '/api/me')).body).toMatchObject({ head: OWNER, display_name: 'Morten Nielsen' });
+    for (const display_name of ['', '   ', 'two\nlines', 'x'.repeat(101), 7]) expect((await me('PATCH', '/api/me/settings', { display_name })).status, JSON.stringify(display_name)).toBe(400);
+    expect((await me('PATCH', '/api/me/settings', { display_name: null })).body.display_name).toBeNull();
+    expect((await call('GET', '/')).body.owner).toBe(OWNER);
   });
 });
 

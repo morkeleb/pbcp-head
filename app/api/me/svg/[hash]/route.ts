@@ -6,14 +6,17 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../../../../db/client';
 import { diagrams } from '../../../../../db/schema';
+import { json } from '../../../../../lib/http';
+
+const notFound = () => json({ error: 'not_found', message: 'no such diagram' }, 404);
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ hash: string }> }): Promise<Response> {
   const { hash } = await params;
-  if (!/^[0-9a-f]{64}$/.test(hash)) return new Response('not found', { status: 404 });
+  if (!/^[0-9a-f]{64}$/.test(hash)) return notFound();
   const [row] = await db().select({ svg: diagrams.svg }).from(diagrams).where(eq(diagrams.hash, hash));
-  if (!row?.svg) return new Response('not found', { status: 404 });
+  if (!row?.svg) return notFound();
   return new Response(row.svg, {
     headers: {
       'content-type': 'image/svg+xml; charset=utf-8',

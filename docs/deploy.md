@@ -74,22 +74,25 @@ With Fluid compute, Vercel may take a function's memory from the project's **Fun
 
 Build on Vercel, not locally. The serverless Chromium in `@sparticuz/chromium` is x86_64 only, and a `vercel build` on an arm64 machine (an Apple Silicon Mac) marks every function arm64. `vercel deploy --prebuilt` from such a machine would therefore ship a draw function that cannot start its browser. Vercel's own builders are x86_64.
 
-#### The nightly brief on Hobby and on paid plans
+#### The nightly brief, and Hobby versus Pro
 
-`vercel.json` schedules `/api/cron/brief` once a day at `0 5 * * *` (UTC). That fits Hobby, which allows one run a day and fires it at some point within the scheduled hour.
+`vercel.json` runs `/api/cron/brief` every hour at half past (`30 * * * *`). Each run checks every head: once it is 05:30 or later in the head's **effective timezone**, and that local date has no `head:daily:<date>` card yet, it mints one. The effective timezone is:
 
-The route mints each head's card once the head's local time is past **05:30**, and only for that local date. So the daily run has to land after 05:30 local and before midnight local, all year round:
+1. the owner's override, set with `PATCH /api/me/settings { "timezone": "Europe/Copenhagen" }` (or `pnpm seed --timezone`), when set;
+2. otherwise the zone of the owner's device most recently seen: every `/api/me` request may send `X-Timezone`, and the web app always does;
+3. otherwise UTC.
 
-- For Europe/Copenhagen, 05:00–05:59 UTC is 06:00–07:59 local, in both summer and winter time, so the default works.
-- For other timezones, pick the hour accordingly. For example, America/New_York needs `0 11 * * *`: 11:00 UTC is 06:00 or 07:00 local.
+So the card follows the owner when they travel.
+- **Never doubled.** The card's id is the local date, and a date that already has its card is skipped, so a zone change mid-day doesn't mint the day twice.
+- **Not skipped once reached.** A date gets its card at the first hourly run after its 05:30 in the zone the owner is in.
+- **Some dates never happen.** A flight east across midnight can skip over a date's 05:30 altogether, and that date then has no card.
+- **On time.** Running at :30, the card lands at 05:30 in whole-hour zones, 06:00 in half-hour zones (e.g. India), and 06:15 in Nepal.
 
-On a paid plan, run it every half hour so the card appears soon after 05:30 in any timezone:
+**Hobby allows only daily cron jobs.** An hourly expression fails the deployment with "Hobby accounts are limited to daily cron jobs". On Hobby, change the schedule to one daily run that lands after 05:30 local all year (Europe/Copenhagen: `0 5 * * *`). That brings two limits:
+- the card for a travelling owner comes at whatever local hour that run falls on;
+- Hobby fires a daily job anywhere within its hour.
 
-```json
-"crons": [{ "path": "/api/cron/brief", "schedule": "0,30 * * * *" }]
-```
-
-A missed or extra run is harmless: a run mints nothing for a head that already has today's card (`lib/brief/nightly.ts`).
+Hobby allows 100 cron jobs per project, so 24 daily entries (`30 0 * * *` … `30 23 * * *`, each with a distinct path such as `/api/cron/brief?h=0`) give hourly coverage within its rules. A missed or extra run is harmless either way.
 
 ### 5. Migrate and seed
 
@@ -101,12 +104,14 @@ vercel env pull .env.production --environment=production
 set -a; . ./.env.production; set +a
 
 pnpm db:migrate                                     # uses DATABASE_URL_UNPOOLED
-pnpm seed morten --timezone Europe/Copenhagen       # creates the head, prints the enrolment link
+pnpm seed morten --name "Morten"                    # creates the head, prints the enrolment link
 ```
 
 `pnpm seed` prints a link to `WEBAUTHN_ORIGIN/signin?enroll=…`, valid for one hour and signed with the deployment's `SESSION_SECRET`.
 - Open it on the device that should hold the owner's passkey and register.
 - Run `pnpm seed morten` again for a fresh link. On an existing head it changes nothing else.
+
+`morten` is the head id: the person id producers address as `to_person`. It never changes. `--name` is only how the owner is shown, and can be changed later in `PATCH /api/me/settings`. Without `--timezone` the head follows the zone of the owner's active device (see the nightly brief above); `--timezone` pins it.
 
 Run `pnpm db:migrate` again whenever a release adds a migration (`db/migrations`), before or right after deploying it. To have every deployment migrate by itself, set the build command to `pnpm db:migrate && pnpm build`. Only do this with Neon preview branching on, otherwise preview builds migrate the production database.
 

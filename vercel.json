@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [{ "path": "/api/cron/brief", "schedule": "0 5 * * *" }],
+  "crons": [{ "path": "/api/cron/brief", "schedule": "30 * * * *" }],
   "functions": {
     "app/api/render/draw/route.ts": { "memory": 2048, "maxDuration": 60 },
     "app/api/cron/brief/route.ts": { "maxDuration": 300 }

@@ -20,7 +20,8 @@
     "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts",
     "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
-    "test:gate": "vitest run"
+    "test:gate": "vitest run",
+    "api:generate": "tsx scripts/api-generate.ts"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
@@ -59,6 +60,7 @@
     "@types/node": "26.6.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "ajv": "8.17.1",
     "drizzle-kit": "0.31.11",
     "tsx": "4.23.15",
     "typescript": "7.0.2",

@@ -34,7 +34,7 @@ pnpm dev                         # then open /signin from the enroll link, and /
 | `POST /api/me/cards/{id}/decision`, `/seen`, `/ack` | `Session` | §7.3, §4.2 |
 | `POST /api/auth/passkey/{register,login}[/options]`, `/api/auth/apple`, `/api/auth/refresh`, `/api/auth/logout` | — | mobile PRD |
 | `GET /api/me/brief`, `GET /api/me/cards?date=`, `GET /api/me/cards/{id}`, `POST /api/me/cards/{id}/snooze`, `POST /api/me/cards/{id}/unsnooze`, `POST /api/me/visit` | `Session` | mobile PRD, §8, §9 |
-| `GET/PATCH /api/me`, `GET /api/me/producers`, `PATCH /api/me/producers/{root}`, `GET /api/me/devices`, `DELETE /api/me/devices/{id}` | `Session` | §9, §12 |
+| `GET /api/me`, `GET/PATCH /api/me/settings`, `GET /api/me/producers`, `PATCH /api/me/producers/{root}`, `GET /api/me/devices`, `DELETE /api/me/devices/{id}` | `Session` | §9, §12 |
 | `GET /api/me/svg/{hash}`, `GET /api/me/img?u=&s=` | content hash / signed URL | §3.1 |
 | `GET /api/cron/brief` | `CRON_SECRET` | nightly `head:daily` card |
 | `POST /api/render/draw` | key derived from `SESSION_SECRET` | internal: draws one mermaid fence (the only route with Chromium) |

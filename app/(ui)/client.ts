@@ -1,7 +1,8 @@
 'use client';
 
 // The web head's one data path: /api/me with `Authorization: Session`, the same calls the phone makes
-// (mobile PRD). Tokens from sign-in live in localStorage; an expired access token is refreshed once.
+// (mobile PRD). Tokens from sign-in live in localStorage; an expired access token is refreshed once. Every
+// call says which zone the browser is in (X-Timezone), so the head follows the owner when they travel.
 
 export interface Tokens {
   access_token: string;
@@ -50,6 +51,16 @@ export function signInAgain(): never {
   throw new Error('signed out');
 }
 
+/** The browser's IANA zone as `X-Timezone`, or nothing when it does not know one. */
+function browserZone(): Record<string, string> {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone ? { 'x-timezone': zone } : {};
+  } catch {
+    return {};
+  }
+}
+
 export interface ApiResult<T> {
   status: number;
   body: T;
@@ -62,7 +73,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     const res = await fetch(path, {
       method: init.method ?? 'GET',
       keepalive: init.keepalive,
-      headers: { authorization: `Session ${tokens!.access_token}`, ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      headers: { authorization: `Session ${tokens!.access_token}`, ...browserZone(), ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
     if (res.status === 401 && attempt === 0) {

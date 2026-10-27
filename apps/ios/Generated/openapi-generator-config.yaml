@@ -1,0 +1,7 @@
+# swift-openapi-generator: the phone's client and types for packages/api-types/openapi.json.
+# Regenerate with `pnpm api:generate` (it needs the generator; see packages/api-types/README.md).
+generate:
+  - types
+  - client
+accessModifier: public
+namingStrategy: idiomatic
