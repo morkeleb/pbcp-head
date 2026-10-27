@@ -10,13 +10,14 @@ import type { Db } from '../../db/client';
 import { cards, diagrams } from '../../db/schema';
 import { drawSvg } from './drawer';
 import { DiagramError } from './errors';
+import { presentLead, type PresentedLead } from './lead';
 import { renderMarkdown, type DiagramOutcome, type Rendered, type Visual } from './markdown';
 import { diagramType } from './mermaid';
 import { proxiedImageSrc } from './proxy';
 import { sanitiseSvg } from './svg';
 
 /** Bump when the pipeline's output changes, so stored renders are redone on next read. */
-export const RENDER_VERSION = 'h2.1';
+export const RENDER_VERSION = 'h2.2'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body
 
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -52,6 +53,8 @@ export function renderBody(db: Db, body: string): Promise<Rendered> {
 
 export interface RenderMeta {
   firstVisual: Visual | null;
+  /** The card's lead (§3.1): core's leadOf, presented (lib/render/lead.ts). Absent on renders before h2.2. */
+  lead?: PresentedLead;
   fences: Array<{ type: string; class: string }>;
 }
 
@@ -65,14 +68,15 @@ const optionBodies = (card: Card): Array<[string, string]> =>
   (card.actions ?? []).flatMap((a) => (typeof a === 'object' && typeof a.body === 'string' ? [[actionId(a), a.body] as [string, string]] : []));
 
 /** What a stored render was made from; a different value means it is stale. */
-export const renderSource = (card: Card): string => sha256(JSON.stringify([RENDER_VERSION, card.body, optionBodies(card)]));
+export const renderSource = (card: Card): string => sha256(JSON.stringify([RENDER_VERSION, card.body, optionBodies(card), card.summary ?? null]));
 
 /** Renders a card's body and option bodies and stores them beside it. */
 export async function renderCard(db: Db, headId: string, card: Card): Promise<CardRender> {
   const body = await renderBody(db, card.body);
   const actions: Record<string, string> = {};
   for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(db, md)).html;
-  const meta: RenderMeta = { firstVisual: body.firstVisual, fences: body.result.fences.map((f) => ({ type: f.type, class: f.class })) };
+  const lead = await presentLead(card, async (md) => (await renderBody(db, md)).html);
+  const meta: RenderMeta = { firstVisual: body.firstVisual, lead, fences: body.result.fences.map((f) => ({ type: f.type, class: f.class })) };
   await db
     .update(cards)
     .set({ renderedHtml: body.html, renderedActions: actions, renderedMeta: meta, renderedFrom: renderSource(card) })

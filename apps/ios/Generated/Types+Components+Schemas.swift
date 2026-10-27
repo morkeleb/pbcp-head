@@ -87,6 +87,8 @@ extension Components {
             public var producer: Swift.String
             /// - Remark: Generated from `#/components/schemas/Card/title`.
             public var title: Swift.String
+            /// - Remark: Generated from `#/components/schemas/Card/summary`.
+            public var summary: Swift.String?
             /// - Remark: Generated from `#/components/schemas/Card/body`.
             public var body: Swift.String
             /// - Remark: Generated from `#/components/schemas/Card/urgency`.
@@ -380,6 +382,7 @@ extension Components {
             ///   - toPerson: The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)
             ///   - producer:
             ///   - title:
+            ///   - summary:
             ///   - body:
             ///   - urgency:
             ///   - thread:
@@ -416,6 +419,7 @@ extension Components {
                 toPerson: Swift.String? = nil,
                 producer: Swift.String,
                 title: Swift.String,
+                summary: Swift.String? = nil,
                 body: Swift.String,
                 urgency: Components.Schemas.Card.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
@@ -452,6 +456,7 @@ extension Components {
                 self.toPerson = toPerson
                 self.producer = producer
                 self.title = title
+                self.summary = summary
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
@@ -489,6 +494,7 @@ extension Components {
                 case toPerson = "to_person"
                 case producer
                 case title
+                case summary
                 case body
                 case urgency
                 case thread
@@ -543,6 +549,10 @@ extension Components {
                 self.title = try container.decode(
                     Swift.String.self,
                     forKey: .title
+                )
+                self.summary = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .summary
                 )
                 self.body = try container.decode(
                     Swift.String.self,
@@ -663,6 +673,7 @@ extension Components {
                     "to_person",
                     "producer",
                     "title",
+                    "summary",
                     "body",
                     "urgency",
                     "thread",
@@ -718,6 +729,10 @@ extension Components {
                 try container.encode(
                     self.title,
                     forKey: .title
+                )
+                try container.encodeIfPresent(
+                    self.summary,
+                    forKey: .summary
                 )
                 try container.encode(
                     self.body,
@@ -917,6 +932,8 @@ extension Components {
             public var producer: Swift.String
             /// - Remark: Generated from `#/components/schemas/MeCard/title`.
             public var title: Swift.String
+            /// - Remark: Generated from `#/components/schemas/MeCard/summary`.
+            public var summary: Swift.String?
             /// - Remark: Generated from `#/components/schemas/MeCard/body`.
             public var body: Swift.String
             /// - Remark: Generated from `#/components/schemas/MeCard/urgency`.
@@ -1203,10 +1220,25 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/rendered_html`.
             public var renderedHtml: Swift.String
-            /// The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            /// The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/lead`.
             public var lead: Swift.String
+            /// Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/lead_source`.
+            @frozen public enum LeadSourcePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case summary = "summary"
+                case body = "body"
+            }
+            /// Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/lead_source`.
+            public var leadSource: Components.Schemas.MeCard.LeadSourcePayload
+            /// The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/rendered_lead`.
+            public var renderedLead: Swift.String
             /// Rendered bodies of choice options (§4.4), by action id
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/rendered_actions`.
@@ -1257,6 +1289,7 @@ extension Components {
             ///   - toPerson: The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)
             ///   - producer:
             ///   - title:
+            ///   - summary:
             ///   - body:
             ///   - urgency:
             ///   - thread:
@@ -1286,7 +1319,9 @@ extension Components {
             ///   - orders_claimSeq: On an executor’s outcome card: the claim it reports on (A.3)
             ///   - orders_result: On an executor’s outcome card: how the run ended (A.3)
             ///   - renderedHtml: The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.
-            ///   - lead: The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            ///   - lead: The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.
+            ///   - leadSource: Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///   - renderedLead: The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
@@ -1298,6 +1333,7 @@ extension Components {
                 toPerson: Swift.String? = nil,
                 producer: Swift.String,
                 title: Swift.String,
+                summary: Swift.String? = nil,
                 body: Swift.String,
                 urgency: Components.Schemas.MeCard.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
@@ -1328,6 +1364,8 @@ extension Components {
                 orders_result: Components.Schemas.MeCard.Orders_resultPayload? = nil,
                 renderedHtml: Swift.String,
                 lead: Swift.String,
+                leadSource: Components.Schemas.MeCard.LeadSourcePayload,
+                renderedLead: Swift.String,
                 renderedActions: Components.Schemas.MeCard.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.MeCard.OrderOutcomePayload? = nil,
@@ -1339,6 +1377,7 @@ extension Components {
                 self.toPerson = toPerson
                 self.producer = producer
                 self.title = title
+                self.summary = summary
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
@@ -1369,6 +1408,8 @@ extension Components {
                 self.orders_result = orders_result
                 self.renderedHtml = renderedHtml
                 self.lead = lead
+                self.leadSource = leadSource
+                self.renderedLead = renderedLead
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
@@ -1381,6 +1422,7 @@ extension Components {
                 case toPerson = "to_person"
                 case producer
                 case title
+                case summary
                 case body
                 case urgency
                 case thread
@@ -1411,6 +1453,8 @@ extension Components {
                 case orders_result = "orders.result"
                 case renderedHtml = "rendered_html"
                 case lead
+                case leadSource = "lead_source"
+                case renderedLead = "rendered_lead"
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
@@ -1440,6 +1484,10 @@ extension Components {
                 self.title = try container.decode(
                     Swift.String.self,
                     forKey: .title
+                )
+                self.summary = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .summary
                 )
                 self.body = try container.decode(
                     Swift.String.self,
@@ -1561,6 +1609,14 @@ extension Components {
                     Swift.String.self,
                     forKey: .lead
                 )
+                self.leadSource = try container.decode(
+                    Components.Schemas.MeCard.LeadSourcePayload.self,
+                    forKey: .leadSource
+                )
+                self.renderedLead = try container.decode(
+                    Swift.String.self,
+                    forKey: .renderedLead
+                )
                 self.renderedActions = try container.decodeIfPresent(
                     Components.Schemas.MeCard.RenderedActionsPayload.self,
                     forKey: .renderedActions
@@ -1580,6 +1636,7 @@ extension Components {
                     "to_person",
                     "producer",
                     "title",
+                    "summary",
                     "body",
                     "urgency",
                     "thread",
@@ -1610,6 +1667,8 @@ extension Components {
                     "orders.result",
                     "rendered_html",
                     "lead",
+                    "lead_source",
+                    "rendered_lead",
                     "rendered_actions",
                     "first_visual",
                     "order_outcome"
@@ -1640,6 +1699,10 @@ extension Components {
                 try container.encode(
                     self.title,
                     forKey: .title
+                )
+                try container.encodeIfPresent(
+                    self.summary,
+                    forKey: .summary
                 )
                 try container.encode(
                     self.body,
@@ -1760,6 +1823,14 @@ extension Components {
                 try container.encode(
                     self.lead,
                     forKey: .lead
+                )
+                try container.encode(
+                    self.leadSource,
+                    forKey: .leadSource
+                )
+                try container.encode(
+                    self.renderedLead,
+                    forKey: .renderedLead
                 )
                 try container.encodeIfPresent(
                     self.renderedActions,
@@ -2474,6 +2545,8 @@ extension Components {
             public var producer: Swift.String
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/title`.
             public var title: Swift.String
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/summary`.
+            public var summary: Swift.String?
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/body`.
             public var body: Swift.String
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/urgency`.
@@ -2760,10 +2833,25 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/rendered_html`.
             public var renderedHtml: Swift.String
-            /// The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            /// The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/lead`.
             public var lead: Swift.String
+            /// Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/lead_source`.
+            @frozen public enum LeadSourcePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case summary = "summary"
+                case body = "body"
+            }
+            /// Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/lead_source`.
+            public var leadSource: Components.Schemas.OrderWithProgress.LeadSourcePayload
+            /// The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/rendered_lead`.
+            public var renderedLead: Swift.String
             /// Rendered bodies of choice options (§4.4), by action id
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/rendered_actions`.
@@ -2854,6 +2942,7 @@ extension Components {
             ///   - toPerson: The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)
             ///   - producer:
             ///   - title:
+            ///   - summary:
             ///   - body:
             ///   - urgency:
             ///   - thread:
@@ -2883,7 +2972,9 @@ extension Components {
             ///   - orders_claimSeq: On an executor’s outcome card: the claim it reports on (A.3)
             ///   - orders_result: On an executor’s outcome card: how the run ended (A.3)
             ///   - renderedHtml: The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.
-            ///   - lead: The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.
+            ///   - lead: The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.
+            ///   - leadSource: Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+            ///   - renderedLead: The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
@@ -2896,6 +2987,7 @@ extension Components {
                 toPerson: Swift.String? = nil,
                 producer: Swift.String,
                 title: Swift.String,
+                summary: Swift.String? = nil,
                 body: Swift.String,
                 urgency: Components.Schemas.OrderWithProgress.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
@@ -2926,6 +3018,8 @@ extension Components {
                 orders_result: Components.Schemas.OrderWithProgress.Orders_resultPayload? = nil,
                 renderedHtml: Swift.String,
                 lead: Swift.String,
+                leadSource: Components.Schemas.OrderWithProgress.LeadSourcePayload,
+                renderedLead: Swift.String,
                 renderedActions: Components.Schemas.OrderWithProgress.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.OrderWithProgress.OrderOutcomePayload? = nil,
@@ -2938,6 +3032,7 @@ extension Components {
                 self.toPerson = toPerson
                 self.producer = producer
                 self.title = title
+                self.summary = summary
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
@@ -2968,6 +3063,8 @@ extension Components {
                 self.orders_result = orders_result
                 self.renderedHtml = renderedHtml
                 self.lead = lead
+                self.leadSource = leadSource
+                self.renderedLead = renderedLead
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
@@ -2981,6 +3078,7 @@ extension Components {
                 case toPerson = "to_person"
                 case producer
                 case title
+                case summary
                 case body
                 case urgency
                 case thread
@@ -3011,6 +3109,8 @@ extension Components {
                 case orders_result = "orders.result"
                 case renderedHtml = "rendered_html"
                 case lead
+                case leadSource = "lead_source"
+                case renderedLead = "rendered_lead"
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
@@ -3041,6 +3141,10 @@ extension Components {
                 self.title = try container.decode(
                     Swift.String.self,
                     forKey: .title
+                )
+                self.summary = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .summary
                 )
                 self.body = try container.decode(
                     Swift.String.self,
@@ -3162,6 +3266,14 @@ extension Components {
                     Swift.String.self,
                     forKey: .lead
                 )
+                self.leadSource = try container.decode(
+                    Components.Schemas.OrderWithProgress.LeadSourcePayload.self,
+                    forKey: .leadSource
+                )
+                self.renderedLead = try container.decode(
+                    Swift.String.self,
+                    forKey: .renderedLead
+                )
                 self.renderedActions = try container.decodeIfPresent(
                     Components.Schemas.OrderWithProgress.RenderedActionsPayload.self,
                     forKey: .renderedActions
@@ -3185,6 +3297,7 @@ extension Components {
                     "to_person",
                     "producer",
                     "title",
+                    "summary",
                     "body",
                     "urgency",
                     "thread",
@@ -3215,6 +3328,8 @@ extension Components {
                     "orders.result",
                     "rendered_html",
                     "lead",
+                    "lead_source",
+                    "rendered_lead",
                     "rendered_actions",
                     "first_visual",
                     "order_outcome",
@@ -3246,6 +3361,10 @@ extension Components {
                 try container.encode(
                     self.title,
                     forKey: .title
+                )
+                try container.encodeIfPresent(
+                    self.summary,
+                    forKey: .summary
                 )
                 try container.encode(
                     self.body,
@@ -3366,6 +3485,14 @@ extension Components {
                 try container.encode(
                     self.lead,
                     forKey: .lead
+                )
+                try container.encode(
+                    self.leadSource,
+                    forKey: .leadSource
+                )
+                try container.encode(
+                    self.renderedLead,
+                    forKey: .renderedLead
                 )
                 try container.encodeIfPresent(
                     self.renderedActions,

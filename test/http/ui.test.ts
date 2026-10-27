@@ -189,6 +189,21 @@ describe('the brief: lead, proposal, More', () => {
     expect(errors).toEqual([]);
   });
 
+  it('takes the proposal from the first H2 beginning "Proposal" or "Proposed" only', async () => {
+    const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
+    await call('PUT', cardPath('goalpath:item:2:plan'), { auth: goalpath, body: card('goalpath:item:2:plan', {
+      title: 'Move the review?', body: 'The review clashes with the offsite.\n\n### Proposed plan\n\nMove it to Monday.\n\n## proposal\n\nMove it to Tuesday.\n\n### Detail\n\nRoom 3 is free.\n\n## Evidence\n\nThe calendar.',
+    }) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const plan = (await article('Move the review?'))!;
+    const proposal = await plan.$eval('.proposal', (e) => e.textContent);
+    expect(proposal).toContain('Move it to Tuesday.'); // the H2, case-insensitive, to the next H1 or H2
+    expect(proposal).toContain('Room 3 is free.'); // an H3 inside it stays in it
+    expect(proposal).not.toContain('Move it to Monday.'); // an H3 "Proposed …" is not the proposal
+    expect(proposal).not.toContain('The calendar.');
+    expect(await plan.$eval('details.more', (d) => d.textContent)).toContain('Move it to Monday.');
+  });
+
   it('leads with the summary, as text, when the producer gives one', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const mail = (await article('Invoice question'))!;
@@ -197,15 +212,16 @@ describe('the brief: lead, proposal, More', () => {
     expect(await mail.$eval('details.more', (d) => d.textContent)).toContain('The full mail, quoted.');
   });
 
-  it('puts a bare-string list on the card as buttons, default or first primary, Dismiss quiet, no Edit… unless offered', async () => {
+  it('puts a bare-string list on the card as buttons: a filled primary only for a default, Dismiss quiet, no Edit… unless offered', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const mail = (await article('Offsite on the 14th'))!;
     const buttons = await mail.$$eval('.row.decide button', (bs) => bs.map((b) => [b.textContent, b.className]));
-    expect(buttons).toEqual([['archive', 'primary'], ['keep', ''], ['Dismiss', 'quiet']]);
+    expect(buttons).toEqual([['archive', ''], ['keep', ''], ['Dismiss', 'quiet']]); // no default: equal weight (§4.5)
     const reply = (await article('Reply to Anna'))!;
-    expect(await reply.$$eval('.row.decide button', (bs) => bs.map((b) => b.textContent))).toEqual(['approve', 'reject', 'Edit…', 'Dismiss']);
+    expect(await reply.$$eval('.row.decide button', (bs) => bs.map((b) => [b.textContent, b.className]))).toEqual([['approve', 'primary'], ['reject', ''], ['Edit…', ''], ['Dismiss', 'quiet']]);
     await (await mail.$('xpath/.//button[.="archive"]'))!.click();
     await mail.waitForSelector('.decided-line');
+    expect(await page.$('.toast')).toBeNull(); // a tap commits at once: no undo window
     await until(async () => (await row('mail:inbox:1')).decision === 'archive');
     expect(errors).toEqual([]);
   });
@@ -229,9 +245,43 @@ describe('the brief: lead, proposal, More', () => {
     const top = (await page.$('main section.card.daily'))!;
     expect(await top.$eval('h3', (e) => e.textContent)).toBe('So far today');
     const text = await top.evaluate((e) => e.textContent);
-    expect(text).toContain('hermes · Reply to Anna re invoice timing — Anna asks whether the September invoice can be paid on the 20th.');
-    expect(text).toContain('mail · Invoice question — Anna asks to pay on the **20th**.');
+    expect(text).toContain('Reply to Anna re invoice timing — Anna asks whether the September invoice can be paid on the 20th.');
+    expect(text).toContain('Invoice question — Anna asks to pay on the **20th**.');
     expect(text).toMatch(/4 open decisions · \d+ cards? today from \d+ producers?/);
+  });
+
+  it('commits a swipe after a 4 s undo window: right the default, Undo cancels before anything is sent, left without reject does nothing', async () => {
+    await page.setViewport({ width: 390, height: 844, hasTouch: true, isMobile: true });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const swipe = async (title: string, dx: number) => {
+      const el = (await article(title))!;
+      await el.scrollIntoView();
+      const box = (await (await el.$('.meta'))!.boundingBox())!;
+      const [x, y] = [box.x + 150, box.y + box.height / 2];
+      await page.touchscreen.touchStart(x, y);
+      for (let i = 1; i <= 6; i++) await page.touchscreen.touchMove(x + (dx * i) / 6, y);
+      await page.touchscreen.touchEnd();
+      return el;
+    };
+    // Swipe right with Undo: nothing is sent.
+    let reply = await swipe('Reply to Anna', 140);
+    await reply.waitForSelector('.toast');
+    expect(await reply.$eval('.toast', (t) => t.textContent)).toContain('approve: Reply to Anna re invoice timing');
+    await (await reply.$('xpath/.//div[contains(@class,"toast")]//button[.="Undo"]'))!.click();
+    await new Promise((r) => setTimeout(r, 4500));
+    expect((await row('hermes:gmail:anna:reply')).state).toBe('open');
+    // Swipe right, left alone: the default, after the window.
+    reply = await swipe('Reply to Anna', 140);
+    await reply.waitForSelector('.toast');
+    expect((await row('hermes:gmail:anna:reply')).state).toBe('open'); // not yet
+    await until(async () => (await row('hermes:gmail:anna:reply')).decision === 'approve', 8000);
+    await reply.waitForSelector('.decided-line');
+    // Swipe left on a card that offers no reject: nothing at all.
+    const mail = await swipe('Offsite on the 14th', -140);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await mail.$('.toast')).toBeNull();
+    expect((await row('mail:inbox:1')).state).toBe('open');
+    expect(errors).toEqual([]);
   });
 
   it('opens a diagram full-screen at least as wide as the screen, never smaller than its thumbnail', async () => {

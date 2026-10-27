@@ -41,10 +41,13 @@ export interface MeCard {
   /** On an outcome (A.3): the claim it reports on, and how that run ended. */
   'orders.claim_seq'?: number;
   'orders.result'?: 'done' | 'failed';
-  /** RFC 0.6: one or two plain-text sentences from the producer; the card's lead when present. */
+  /** RFC 0.6 §4.1: one or two plain-text sentences from the producer; the card's lead when present. */
   summary?: string;
-  /** The lead as plain text (lib/lead.ts): `summary`, else the body's first paragraph. */
+  /** RFC 0.6 §3.1, core's leadOf: the summary, or the body's first paragraph as markdown. */
   lead?: string;
+  lead_source?: 'summary' | 'body';
+  /** The lead as safe inline HTML, rendered by the head (a summary escaped and cut at 280 characters). */
+  rendered_lead?: string;
 }
 
 // --- offline ---------------------------------------------------------------------------
@@ -255,75 +258,58 @@ export function Announcer() {
   return <div className="sr-only" role="status" aria-live="polite">{message}</div>;
 }
 
-// --- the lead, the proposal, and the rest (§4.4; RFC 0.6 `summary`) ---------------------
+// --- the lead, the proposal, and the rest (RFC 0.6 §3.1 Lead, §4.5) ---------------------
 
-const PROPOSAL = /^propos(al|ed)\b/i;
+const PROPOSAL = /^propos(al|ed)/i;
 
 interface BodyParts {
-  /** The first paragraph of the rendered body, when there is no summary to lead with. */
-  lead: string;
-  /** A section whose heading starts with "Proposal" or "Proposed": the heading and what follows, to the next heading of its level or above. */
+  /** The first H2 beginning "Proposal" or "Proposed" and what follows, to the next H1 or H2. */
   proposal: string;
-  /** Everything else, in order. */
+  /** Everything else, in order, without the paragraph that is already the lead. */
   rest: string;
 }
 
 /**
- * Splits a card's rendered (server-sanitised) HTML for the card view: the lead rule is lib/lead.ts's, applied
- * to the rendered body so the lead keeps its emphasis and links. Runs in the browser only, on HTML the head
- * rendered; it re-serialises those nodes and renders nothing of its own.
+ * Splits a card's rendered (server-sanitised) HTML around its proposal, and drops the lead's paragraph from the
+ * rest. The lead itself is the head's (`rendered_lead`, from core's leadOf); in the rendered body it is the first
+ * block after any headings, rules and diagrams (§3.1), when that block is a paragraph. Runs in the browser only, on
+ * HTML the head rendered: it re-serialises those nodes and renders nothing of its own.
  */
-function splitBody(html: string, hasSummary: boolean): BodyParts {
+function splitBody(html: string, leadFromBody: boolean): BodyParts {
   const t = document.createElement('template');
   t.innerHTML = html;
   const nodes = [...t.content.childNodes].filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()));
-  const level = (n: Node) => (n instanceof HTMLElement && /^H[1-6]$/.test(n.tagName) ? Number(n.tagName[1]) : 0);
-  let from = -1;
-  let to = -1;
-  for (let i = 0; i < nodes.length && from < 0; i++) {
-    if (level(nodes[i]!) && PROPOSAL.test(nodes[i]!.textContent?.trim() ?? '')) {
-      from = i;
-      to = nodes.findIndex((n, j) => j > i && level(n) > 0 && level(n) <= level(nodes[i]!));
-      if (to < 0) to = nodes.length;
-    }
-  }
+  const tag = (n: Node) => (n instanceof HTMLElement ? n.tagName : '');
+  const level = (n: Node) => (/^H[1-6]$/.test(tag(n)) ? Number(tag(n)[1]) : 0);
+  const from = nodes.findIndex((n) => tag(n) === 'H2' && PROPOSAL.test(n.textContent?.trim() ?? ''));
+  let to = from < 0 ? -1 : nodes.findIndex((n, j) => j > from && level(n) > 0 && level(n) <= 2);
+  if (from >= 0 && to < 0) to = nodes.length;
   const inProposal = (i: number) => from >= 0 && i >= from && i < to;
-  const isBlock = (n: Node, tags: string[]) => n instanceof HTMLElement && tags.includes(n.tagName) && !!n.textContent?.trim();
-  let lead = -1;
-  if (!hasSummary) {
-    lead = nodes.findIndex((n, i) => !inProposal(i) && isBlock(n, ['P']));
-    if (lead < 0) lead = nodes.findIndex((n, i) => !inProposal(i) && isBlock(n, ['UL', 'OL', 'BLOCKQUOTE']));
-  }
-  const html_ = (n: Node) => (n instanceof Element ? n.outerHTML : (n.textContent ?? '').replace(/[&<>]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt' } as Record<string, string>)[c]};`));
+  // §3.1 step 1 skips headings, thematic breaks and fences (drawn diagrams, code, collapsed fences).
+  const skipped = (n: Node) => level(n) > 0 || ['HR', 'FIGURE', 'PRE', 'DETAILS'].includes(tag(n));
+  const first = nodes.findIndex((n) => !skipped(n));
+  const lead = leadFromBody && first >= 0 && tag(nodes[first]!) === 'P' ? first : -1;
+  const out = (n: Node) => (n instanceof Element ? n.outerHTML : (n.textContent ?? '').replace(/[&<>]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt' } as Record<string, string>)[c]};`));
   return {
-    lead: lead >= 0 ? html_(nodes[lead]!) : '',
-    proposal: nodes.filter((_, i) => inProposal(i)).map(html_).join(''),
-    rest: nodes.filter((_, i) => i !== lead && !inProposal(i)).map(html_).join(''),
+    proposal: nodes.filter((_, i) => inProposal(i)).map(out).join(''),
+    rest: nodes.filter((_, i) => i !== lead && !inProposal(i)).map(out).join(''),
   };
 }
 
-/** The card's own `summary` (RFC 0.6): plain text, never markdown. */
-export const summaryOf = (card: MeCard): string | undefined => (typeof card.summary === 'string' && card.summary.trim() ? card.summary.trim() : undefined);
-
-/** The lead, always visible: `summary` as text, else the rendered first paragraph. */
+/** The lead, never behind a gesture (§3.1): the head's rendered lead, inline. */
 export function Lead({ card }: { card: MeCard }) {
-  const summary = summaryOf(card);
-  const [parts, setParts] = useState<BodyParts | null>(null);
-  useEffect(() => setParts(splitBody(card.rendered_html, !!summary)), [card.rendered_html, summary]);
-  if (summary) return <p className="lead">{summary}</p>;
-  return parts?.lead ? <Rendered className="lead" html={parts.lead} /> : null;
+  if (!card.rendered_lead) return null;
+  return <p className="lead" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />;
 }
 
 /**
- * A card's body on the brief: the lead and any "Proposal" / "Proposed …" section are visible; everything else
- * is behind one "More". Expanding it is what presents the card (§4.2 seen_at); the lead alone is not.
+ * A card's body on the brief (§4.5 "Enough to decide"): the lead and the proposal are visible; the rest is behind
+ * one "More". Expanding it is what presents the card (§4.2 seen_at); the lead alone is not.
  */
 export function CardBody({ card }: { card: MeCard }) {
-  const summary = summaryOf(card);
   const [parts, setParts] = useState<BodyParts | null>(null);
   const [opened, setOpened] = useState(false);
-  useEffect(() => setParts(splitBody(card.rendered_html, !!summary)), [card.rendered_html, summary]);
-  if (!parts) return null;
+  useEffect(() => setParts(splitBody(card.rendered_html, card.lead_source === 'body')), [card.rendered_html, card.lead_source]);
   const toggle = (e: React.SyntheticEvent<HTMLDetailsElement>) => {
     if (!e.currentTarget.open || opened) return;
     setOpened(true);
@@ -331,9 +317,9 @@ export function CardBody({ card }: { card: MeCard }) {
   };
   return (
     <>
-      {summary ? <p className="lead">{summary}</p> : parts.lead && <Rendered className="lead" html={parts.lead} />}
-      {parts.proposal && <Rendered className="proposal" html={parts.proposal} />}
-      {parts.rest.trim() && (
+      <Lead card={card} />
+      {parts?.proposal && <Rendered className="proposal" html={parts.proposal} />}
+      {parts?.rest.trim() && (
         <details className="more" onToggle={toggle}>
           <summary>More</summary>
           <Rendered html={parts.rest} />
@@ -341,6 +327,85 @@ export function CardBody({ card }: { card: MeCard }) {
       )}
     </>
   );
+}
+
+// --- swipes: deferred, with undo (docs/mobile-prd.md gesture table) --------------------------
+
+/** How long a swiped decision or acknowledgement waits, undoable, before it is sent. A tap does not wait. */
+export const SWIPE_UNDO_MS = 4000;
+
+/**
+ * A swipe commits after SWIPE_UNDO_MS behind an undo toast; Undo cancels it before anything is sent. Only one
+ * swipe waits at a time; a second commits the first at once.
+ */
+export function useDeferred() {
+  const [pending, setPending] = useState<{ label: string; run: () => void } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flush = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const schedule = (label: string, run: () => void) => {
+    flush.current?.();
+    const go = () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      flush.current = null;
+      setPending(null);
+      run();
+    };
+    flush.current = go;
+    setPending({ label, run });
+    timer.current = setTimeout(go, SWIPE_UNDO_MS);
+    announce(`${label}. Undo within four seconds.`);
+  };
+  const undo = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    flush.current = null;
+    setPending(null);
+    announce('Undone');
+  };
+  const toast = pending && (
+    <div className="toast" role="status">
+      <span>{pending.label}</span>
+      <button onClick={undo}>Undo</button>
+    </div>
+  );
+  return { schedule, toast, pending: !!pending };
+}
+
+/** A horizontal swipe on touch or pen (not a mouse drag, which selects text): left or right past 80 px. */
+export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const [dx, setDx] = useState(0);
+  return {
+    dx,
+    handlers: {
+      onPointerDown: (e: ReactPointerEvent) => {
+        if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button, a, input, textarea, label, summary, img')) return;
+        start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      },
+      onPointerMove: (e: ReactPointerEvent) => {
+        const s = start.current;
+        if (!s || s.id !== e.pointerId) return;
+        const x = e.clientX - s.x;
+        if (Math.abs(x) > Math.abs(e.clientY - s.y)) setDx(x);
+      },
+      onPointerUp: (e: ReactPointerEvent) => {
+        const s = start.current;
+        start.current = null;
+        setDx(0);
+        if (!s || s.id !== e.pointerId) return;
+        const x = e.clientX - s.x;
+        if (Math.abs(x) >= 80 && Math.abs(x) > 2 * Math.abs(e.clientY - s.y)) onSwipe(x > 0 ? 'right' : 'left');
+      },
+      onPointerCancel: () => {
+        start.current = null;
+        setDx(0);
+      },
+    },
+  };
 }
 
 // --- deciding (§4.3, §4.4) ------------------------------------------------------------------
@@ -352,13 +417,29 @@ interface Option {
   hasBody: boolean;
 }
 
-function options(card: MeCard): { list: Option[]; edit: boolean } {
+function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Option | null } {
   const actions = card.actions ?? ['approve', 'reject'];
   const list = actions
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
     .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
   const edit = actions.some((a) => (typeof a === 'string' ? a : a.id) === 'edit');
-  return { list, edit };
+  // §4.4: the default is the option marked so; on the plain string list it is `approve` (the bare approve
+  // gesture). With neither, there is no default, and no option is drawn above the others.
+  const plain = actions.every((a) => typeof a === 'string');
+  const byDefault = list.find((o) => o.isDefault) ?? (plain ? (list.find((o) => o.id === 'approve') ?? null) : null);
+  return { list, edit, byDefault };
+}
+
+/** What a swipe chooses (docs/mobile-prd.md): right the default, left `reject` when offered; otherwise nothing. */
+export function swipeChoice(card: MeCard, direction: 'left' | 'right'): { decision: string; label: string } | null {
+  const { list, byDefault } = options(card);
+  const o = direction === 'right' ? byDefault : list.find((x) => x.id === 'reject');
+  return o ? { decision: o.id, label: o.label } : null;
+}
+
+/** Lets a swipe on the card commit through the controls' own path (their comment included). */
+export interface DecisionHandle {
+  decide(d: { decision: string }): void;
 }
 
 /** What a recorded decision reads as: the option's label, or the protocol decision's name (§4.3). */
@@ -371,16 +452,15 @@ export function decisionLabel(card: MeCard): string {
 type DecisionBody = { decision: string; edited_proposal?: string; comment?: string };
 
 /**
- * The card's actions, on the card (§4.4): a row of buttons in the producer's order, the default (else the
- * first) primary; or, for options with a `body`, a vertical group with each body under its label and the
- * default pre-selected. `Dismiss` is always there, quietly; "Edit…" only when `actions` offers `edit`. A
- * comment is behind "Add a comment". Deciding updates the card at once and posts; a failure puts the
- * controls back with the error. The head offers no undo, so none is shown.
+ * The card's actions, on the card (§4.4, §4.5): a row of buttons in the producer's order, filled primary only
+ * for the default (with no default, all of equal weight); or, for options with a `body`, a vertical group with
+ * each body under its label and the default pre-selected. `Dismiss` is always there, quietly; "Edit…" only when
+ * `actions` offers `edit`. A comment is behind "Add a comment". A tap commits at once: the card updates and the
+ * decision is posted; a failure puts the controls back with the error. Only a swipe waits, behind an undo.
  */
-export function DecisionControls({ card, onChange, showDecided = false }: { card: MeCard; onChange: (c: MeCard) => void; showDecided?: boolean }) {
-  const { list, edit } = options(card);
+export function DecisionControls({ card, onChange, showDecided = false, handle }: { card: MeCard; onChange: (c: MeCard) => void; showDecided?: boolean; handle?: React.RefObject<DecisionHandle | null> }) {
+  const { list, edit, byDefault } = options(card);
   const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
-  const primary = list.find((o) => o.isDefault) ?? list[0];
   const online = useOnline();
   const [selected, setSelected] = useState<string | null>(list.find((o) => o.isDefault)?.id ?? null);
   const [editing, setEditing] = useState(false);
@@ -409,6 +489,14 @@ export function DecisionControls({ card, onChange, showDecided = false }: { card
       else failed(NOT_SENT);
     }
   };
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.current = { decide: (d) => void decide(d) };
+    return () => {
+      handle.current = null;
+    };
+  });
 
   if (card.kind !== 'decision') return null;
   if (card.state === 'decided') {
@@ -451,10 +539,11 @@ export function DecisionControls({ card, onChange, showDecided = false }: { card
             <button onClick={() => setEditing(false)}>Back</button>
           </>
         ) : grouped ? (
-          <button className="primary" disabled={off || !chosen} onClick={() => chosen && decide({ decision: chosen.id })}>{chosen ? chosen.label : 'Pick an option'}</button>
+          // Filled only when the card has a default (§4.5): without one, nothing is pushed forward.
+          <button className={byDefault ? 'primary' : undefined} disabled={off || !chosen} onClick={() => chosen && decide({ decision: chosen.id })}>{chosen ? chosen.label : 'Pick an option'}</button>
         ) : (
           list.map((o) => (
-            <button key={o.id} className={o === primary ? 'primary' : undefined} disabled={off} onClick={() => decide({ decision: o.id })}>{o.label}</button>
+            <button key={o.id} className={o === byDefault ? 'primary' : undefined} disabled={off} onClick={() => decide({ decision: o.id })}>{o.label}</button>
           ))
         )}
         {!editing && edit && <button disabled={off} onClick={() => setEditing(true)}>Edit…</button>}

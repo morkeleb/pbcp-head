@@ -6,19 +6,18 @@ Oct 26, 2026 · @Morten Nielsen
 
 The head is a morning-on-the-phone product. The brief is read in bed, in the car, between meetings; a decision is a swipe, not a session. A web app in a mobile browser will not build that habit, so a native app is the thing that turns the protocol into a product people keep.
 
-The app adds nothing to the protocol. It is one more human-facing client of the head, and the protocol was designed so that this is true: decision cards with a default map onto a swipe, choice lists onto a sheet, snooze onto a long-press, the day view onto a scroll. The one thing that is mobile-only is a push notification on `urgency: immediate`, and that is a hosted-head feature, not a protocol one.
+The app adds nothing to the protocol. It is one more human-facing client of the head, and the protocol was designed so that this is true: decision cards with a default map onto a swipe, choice lists onto controls on the card, snooze onto a long-press, the day view onto a scroll. The one thing that is mobile-only is a push notification on `urgency: immediate`, and that is a hosted-head feature, not a protocol one.
 
 Success looks like: the person opens the app once in the morning, clears every decision in under two minutes, and does not open a mail client until lunch.
 
 ## Scope
 
-Five screens, and a deliberate list of what the phone does not do.
+Four screens, and a deliberate list of what the phone does not do.
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
-| **Brief** | The nightly `head:daily` card rendered at the top; below it, open decisions newest first, then today's artifacts and signals folded by thread | Swipe, tap, pull to refresh; marks the last-visit cursor on close |
+| **Brief** | The nightly `head:daily` card at the top (or the same fold, live, "so far today"); below it, open decisions newest first, each with its lead, proposal and actions on the card; then today's artifacts and signals folded by thread, each with its lead | Tap an action, swipe, pull to refresh; marks the last-visit cursor on close |
 | **Card** | One card in full: markdown body, `mermaid` rendered, source link, thread history collapsed below | Decide, snooze, open source, see thread |
-| **Decide sheet** | The card's `actions` as a choice list with the default highlighted, `body` beside each option, free-text field when `edit` is offered | Choose one; optional comment |
 | **Day** | Any date: every card received that day with its decision, in order — the decision log as a timeline | Scroll, jump to date, open a card |
 | **Orders** | Open orders with `exec_state`, grouped by executor; progress cards inline | Dictate a new order (text or voice); cancel |
 
@@ -32,17 +31,21 @@ Plus a settings screen for producers (name, ceiling, revoke) and notification pr
 
 The RFC's decision semantics map one to one onto touch, and the mapping is the product.
 
-| Gesture on a decision card | Records | RFC |
-| --- | --- | --- |
-| Swipe right | The `default` option; `approve` when `actions` is the plain default list | §4.4 — a bare approve gesture chooses the default |
-| Swipe left | `reject` when offered; otherwise opens the sheet | §4.3 |
-| Tap | Opens the card | — |
-| Long-press | Snooze picker: tonight, tomorrow's brief, next week | `snoozed_until`, not a state |
-| Sheet → pick option | That option's `id` as `decision` | §4.4 |
-| Sheet → "Other…" | `edited` + `edited_proposal` from the text field | §4.3 |
-| Sheet → comment field | `comment` alongside any decision | §4.2 |
+| Gesture on a decision card | Records | When | RFC |
+| --- | --- | --- | --- |
+| Tap an action button | That option's `id` as `decision` | At once | §4.4, §4.5 |
+| Tap a choice, then its button (options with a `body`) | That option's `id`; the default is pre-selected | At once | §4.4 |
+| Tap "Edit…" (only when `actions` lists `edit`), write, send | `edited` + `edited_proposal` | At once | §4.3, §4.4 |
+| Tap "Dismiss" | `dismissed` | At once | §4.3 |
+| "Add a comment" (a disclosure, never a required field) | `comment` alongside the decision | With it | §4.2, §4.5 |
+| Swipe right | The `default` option; `approve` when `actions` is a plain list with `approve`. Nothing when there is no default | After a 4 s undo window | §4.4 |
+| Swipe left | `reject` when offered; otherwise nothing | After a 4 s undo window | §4.3 |
+| Tap the title | Opens the card | — | — |
+| Long-press | Snooze picker: tonight, tomorrow's brief, next week | At once | `snoozed_until`, not a state |
 
-A card with no default has no swipe-right; the swipe opens the sheet instead, so a closed choice is never taken by accident. Every decision is confirmed with a brief undo toast; after the toast, the decision is posted and locked, matching the protocol's one-way state. Artifacts and signals are acknowledged by swipe, which sets `acknowledged_at` and nothing else.
+The actions are the controls (§4.5): they sit on the card, in the card's order, with the lead and the proposal above them, and nothing gathers them behind a "decide" control. Only a default is drawn as the primary control; a card without a default shows its options with equal weight, so a closed choice is never nudged.
+
+**Taps commit; swipes wait.** A tap is a deliberate choice and is recorded at once: the card shows the decision in place ("Decided: approve · 09:14") and dims, and the protocol's one-way state follows. A swipe is easy to do by accident, so it waits 4 s behind an undo toast; Undo cancels it before anything is sent. Neither is queued offline: with no network the controls are disabled and say why. Artifacts and signals are acknowledged by a button (at once) or by a swipe either way (after the same undo window), which sets `acknowledged_at` and nothing else.
 
 **Orders** are dictated: a text field with a microphone, posted as `head:order:<ulid>` to the producer the person names or to `*`. The app does not try to parse the order; the executor does, and asks back with a decision card if it cannot.
 
@@ -97,7 +100,7 @@ The head needs one addition for this: an outbox row written in the same transact
 
 ## Build plan
 
-**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list, a card and a sheet. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase. That contract is `packages/api-types/openapi.json`, generated from the head's schemas; the Swift client in `apps/ios/Generated/` is generated from it.
+**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list and a card. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase. That contract is `packages/api-types/openapi.json`, generated from the head's schemas; the Swift client in `apps/ios/Generated/` is generated from it.
 
 **What must exist in the head first** (these are milestone-1 and milestone-2 items in the repo skeleton, pulled forward where mobile needs them):
 
@@ -111,7 +114,7 @@ The head needs one addition for this: an outbox row written in the same transact
 
 **App milestones.**
 
-1. Sign in, Brief, Card, swipe-to-default, Decide sheet with choice lists. Usable for the morning in the first build.
+1. Sign in, Brief, Card, actions on the card with choice lists, swipe-to-default with undo. Usable for the morning in the first build.
 2. Day view, snooze, acknowledgement, settings (devices, producers).
 3. Orders: dictation with voice, open-orders list, cancel.
 4. Push on `immediate`; quiet hours.

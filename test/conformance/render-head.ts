@@ -4,7 +4,9 @@
 //   reset   empty the diagram cache, zero the draw counter
 //   render  the body through the pipeline; the result is the classification the fixtures check
 //   draws   diagrams actually drawn since reset (cache misses)
+//   lead    the card's lead (§3.1): core's leadOf, which the head uses for every card it presents
 
+import { leadOf } from '@pbcp/core';
 import type { RenderUnderTest } from '@pbcp/core/conformance';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
@@ -21,6 +23,9 @@ export function pipelineRenderer(db: Db): RenderUnderTest {
     },
     async draws() {
       return drawCount();
+    },
+    async lead(card) {
+      return leadOf(card);
     },
   };
 }
