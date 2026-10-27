@@ -4,12 +4,11 @@
 // again with a page cap of 2 so §7.2 paging is exercised on every fixture.
 //
 // R01–R08 run against the head's own rendering pipeline (lib/render): markdown, sanitising, mermaid drawn
-// in headless Chromium, the Postgres diagram cache. Rendering conformance is tested from bodies, not over
+// in headless Chromium by the head's draw route (PBCP_DRAW_URL), the Postgres diagram cache. Rendering conformance is tested from bodies, not over
 // HTTP (RFC §14).
 
 import { conformanceSuite } from '@pbcp/core/conformance/vitest';
-import { afterAll, describe, inject } from 'vitest';
-import { closeBrowser } from '../../lib/render/draw';
+import { describe, inject } from 'vitest';
 import { testDb } from '../http/helpers';
 import { httpHead } from './http-head';
 import { pipelineRenderer } from './render-head';
@@ -26,5 +25,4 @@ describe('HTTP head, page cap 2', () => {
 
 describe('rendering pipeline', () => {
   conformanceSuite({ render: () => pipelineRenderer(testDb()) });
-  afterAll(() => closeBrowser());
 });

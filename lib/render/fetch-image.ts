@@ -7,7 +7,7 @@ import { isIP } from 'node:net';
 import { Agent, fetch } from 'undici';
 import { sanitiseSvg } from './svg';
 
-const MAX_BYTES = 5 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const TYPES = /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/;
 
 /** Loopback, private, link-local, CGNAT, multicast and reserved ranges, v4 and v6. */
@@ -58,18 +58,26 @@ export async function fetchImage(url: string): Promise<FetchedImage | null> {
       current = new URL(res.headers.get('location')!, u).href;
       continue;
     }
-    const type = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
-    if (!res.ok || !TYPES.test(type) || Number(res.headers.get('content-length') ?? 0) > MAX_BYTES || !res.body) return null;
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of res.body) {
-      size += chunk.length;
-      if (size > MAX_BYTES) return null;
-      chunks.push(chunk);
-    }
-    const body = Buffer.concat(chunks);
-    if (type === 'image/svg+xml') return { type, body: new Uint8Array(Buffer.from(sanitiseSvg(body.toString("utf8")))) };
-    return { type, body: new Uint8Array(body) };
+    return readImage(res);
   }
   return null;
+}
+
+/**
+ * The image in a fetched response, or null: an image type from the list above, at most MAX_IMAGE_BYTES
+ * whether or not the response declares its length (the body is read no further than the limit).
+ */
+export async function readImage(res: { ok: boolean; headers: { get(name: string): string | null }; body: AsyncIterable<Uint8Array> | null }): Promise<FetchedImage | null> {
+  const type = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+  if (!res.ok || !TYPES.test(type) || Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES || !res.body) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of res.body) {
+    size += chunk.length;
+    if (size > MAX_IMAGE_BYTES) return null;
+    chunks.push(chunk);
+  }
+  const body = Buffer.concat(chunks);
+  if (type === 'image/svg+xml') return { type, body: new Uint8Array(Buffer.from(sanitiseSvg(body.toString('utf8')))) };
+  return { type, body: new Uint8Array(body) };
 }

@@ -152,3 +152,18 @@ export const diagrams = pgTable('diagrams', {
   error: text('error'),
   createdAt: tstz('created_at').notNull().defaultNow(),
 });
+
+// Rate limits (RFC §7.1 `429`; docs/deploy.md): a fixed-window counter per bucket and key (a producer
+// token's hash, or a client address). Kept in Postgres because a serverless head has no shared memory;
+// expired windows are swept by the requests themselves (no worker).
+export const rateLimits = pgTable(
+  'rate_limits',
+  {
+    bucket: text('bucket').notNull(),
+    key: text('key').notNull(),
+    windowStart: tstz('window_start').notNull(),
+    count: integer('count').notNull().default(0),
+    expiresAt: tstz('expires_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.bucket, t.key, t.windowStart] }), index('rate_limits_expiry').on(t.expiresAt)],
+);

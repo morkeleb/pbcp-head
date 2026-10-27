@@ -8,20 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      # Ubuntu 24's AppArmor forbids Chromium's user-namespace sandbox on runners; the renderer and the UI
-      # tests run the headless browser without it here only.
-      PBCP_CHROMIUM_NO_SANDBOX: '1'
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/setup-node@v4
+      # The self-hosting image (Dockerfile): Debian, Node 22, Chromium, the head built. The gate runs in it.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
         with:
-          node-version: 22
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile
-      - run: docker compose up -d --wait
-      - run: pnpm typecheck
-      # Builds the head, then runs the unit tests, the HTTP tests and the conformance gate against it.
-      - run: pnpm test
+          context: .
+          tags: pbcp-head
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: docker compose up -d --wait postgres
+      - run: docker compose run --rm -T --no-deps head pnpm typecheck
+      # The unit tests, the HTTP tests and the conformance gate, against a head the suite starts in the image.
+      - run: docker compose run --rm -T head pnpm test:gate

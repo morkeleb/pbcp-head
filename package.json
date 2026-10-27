@@ -18,7 +18,9 @@
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test:unit": "vitest run --project unit",
     "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts",
-    "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts"
+    "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "test:gate": "vitest run"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
@@ -26,6 +28,7 @@
     "@pbcp/core": "workspace:*",
     "@simplewebauthn/browser": "14.0.0",
     "@simplewebauthn/server": "14.0.3",
+    "@sparticuz/chromium": "153.0.0",
     "dompurify": "3.4.17",
     "drizzle-orm": "0.45.4",
     "hast-util-to-html": "9.0.5",

@@ -1,4 +1,6 @@
-// Drawing a sanitised fence to SVG with the mermaid CLI's renderer in headless Chromium.
+// Drawing a sanitised fence to SVG with the mermaid CLI's renderer in headless Chromium. Only the draw
+// route (app/api/render/draw) imports this module, so Chromium is bundled into that one function; the
+// rest of the head draws through ./drawer.
 //
 // No network (§3.1 "Declarative only"): Chromium is launched with a proxy that does not exist, so any
 // request that would leave the machine fails. mermaid-cli serves its own scripts and fonts from local
@@ -9,11 +11,8 @@ import { renderMermaid } from '@mermaid-js/mermaid-cli';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
-
-/** A fence mermaid could not draw: deterministic, so it is cached and shown as the §3.1 fallback with this message. */
-export class DiagramError extends Error {
-  override readonly name = 'DiagramError';
-}
+import { chromium } from './chromium';
+import { DiagramError } from './errors';
 
 const g = globalThis as unknown as {
   __pbcpBrowser?: Promise<Browser>;
@@ -25,21 +24,24 @@ const MAX_PARALLEL = 4;
 const TIMEOUT_MS = 15_000;
 
 function browser(): Promise<Browser> {
-  g.__pbcpBrowser ??= puppeteer
-    .launch({
-      headless: true,
-      ...(process.env.PBCP_CHROMIUM_PATH ? { executablePath: process.env.PBCP_CHROMIUM_PATH } : {}),
-      args: [
-        '--proxy-server=http://127.0.0.1:9',
-        '--proxy-bypass-list=<-loopback>',
-        '--disable-background-networking',
-        '--disable-component-update',
-        '--no-first-run',
-        '--disable-sync',
-        '--disable-dev-shm-usage',
-        ...(process.env.PBCP_CHROMIUM_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
-      ],
-    })
+  g.__pbcpBrowser ??= chromium()
+    .then(({ executablePath, args, headless }) =>
+      puppeteer.launch({
+        headless,
+        ...(executablePath ? { executablePath } : {}),
+        args: [
+          ...args,
+          '--proxy-server=http://127.0.0.1:9',
+          '--proxy-bypass-list=<-loopback>',
+          '--disable-background-networking',
+          '--disable-component-update',
+          '--no-first-run',
+          '--disable-sync',
+          '--disable-dev-shm-usage',
+          ...(process.env.PBCP_CHROMIUM_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
+        ],
+      }),
+    )
     .then((b) => {
       b.on('disconnected', () => {
         g.__pbcpBrowser = undefined;

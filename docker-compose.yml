@@ -1,4 +1,10 @@
-# Postgres for local work and CI. Published on 5433 so it does not collide with a local Postgres on 5432.
+# The head and Postgres together, for self-hosting and for CI:
+#
+#   cp .env.example .env    # set SESSION_SECRET, CRON_SECRET and PBCP_OWNER
+#   docker compose up -d    # builds the image, migrates, prints the enrolment link: docker compose logs head
+#
+# For development, run only the database: `docker compose up -d --wait postgres` (localhost:5433), and the
+# head with `pnpm dev`. db/init also creates pbcp_test for the test suites.
 services:
   postgres:
     image: postgres:17
@@ -7,7 +13,7 @@ services:
       POSTGRES_PASSWORD: pbcp
       POSTGRES_DB: pbcp
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${PBCP_DB_PORT:-5433}:5432" # for development; the head reaches it inside the network
     volumes:
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
@@ -16,6 +22,43 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  head:
+    build: .
+    image: pbcp-head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://pbcp:pbcp@postgres:5432/pbcp
+      TEST_DATABASE_URL: postgres://pbcp:pbcp@postgres:5432/pbcp_test
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:3000}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
+      PBCP_OWNER: ${PBCP_OWNER:-}
+      PBCP_TIMEZONE: ${PBCP_TIMEZONE:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+    ports:
+      - "${PBCP_PORT:-3000}:3000"
+    restart: unless-stopped
+
+  # Vercel Cron's stand-in: calls the nightly-brief route every 30 minutes (lib/brief/nightly.ts mints
+  # each head's card once its local time passes 05:30, so a half-hourly call is all it needs).
+  cron:
+    image: pbcp-head
+    depends_on: [head]
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+    entrypoint: ["node", "-e"]
+    command:
+      - |
+        const run = () => fetch('http://head:3000/api/cron/brief', { headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } })
+          .then(async (r) => console.log(new Date().toISOString(), r.status, await r.text()))
+          .catch((e) => console.error(new Date().toISOString(), e.message));
+        setTimeout(run, 60_000);
+        setInterval(run, 30 * 60_000);
+    restart: unless-stopped
 
 volumes:
   pgdata:

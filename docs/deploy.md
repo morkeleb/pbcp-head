@@ -1,0 +1,245 @@
+# Deploying the head
+
+Two ways to run this head for real:
+
+- **Vercel with Neon Postgres.** One Vercel project. The draw route is its own function, carrying Chromium.
+- **Self-hosted with Docker.** One image with Chromium installed, and Postgres beside it in `docker-compose.yml`. CI runs the conformance gate in this same image.
+
+Either way you end up with a head at an https origin, its owner's passkey registered, and a producer token that `pbcp submit` can use.
+
+What the head needs from its environment is listed, with comments, in [`.env.example`](../.env.example).
+
+## Vercel and Neon
+
+### 1. Create the project
+
+1. Import `morkeleb/pbcp-head`, or your fork, as a new Vercel project.
+   - Vercel detects Next.js, and pnpm from `packageManager`.
+   - Vercel clones the `vendor/pbcp` submodule because it is public. The install step builds it (`prepare`).
+   - No build or install command needs changing.
+2. Under **Settings → Build and Deployment**, set **Node.js Version** to 22.x or 24.x. `@sparticuz/chromium` needs Node 22.17 or later.
+3. Leave **Fluid compute** on, which is the default.
+
+### 2. Add Postgres
+
+Under **Storage**, add **Neon** from the Marketplace and connect it to the project for every environment. The integration sets these variables, among others:
+
+| Variable | What it is | Used by |
+| --- | --- | --- |
+| `DATABASE_URL` | Neon's **pooled** URL (the host contains `-pooler`) | the app, at runtime |
+| `DATABASE_URL_UNPOOLED` | Neon's **direct** URL | `pnpm db:migrate` |
+
+The app connects through the pooler without prepared statements, so a transaction-mode pooler works. Migrations take the direct URL because they run in one long session.
+
+Neon's connection strings carry `sslmode=require&channel_binding=require`. `db/url.ts` adjusts them for postgres.js:
+- `channel_binding` is dropped: postgres.js does not support it and the server would refuse it as a startup parameter.
+- `sslmode=require` becomes `verify-full` for `*.neon.tech`, so Neon's certificate is checked.
+
+To give each preview deployment its own database branch instead of the production one, turn on preview branching in the Neon integration.
+
+### 3. Set the environment variables
+
+Under **Settings → Environment Variables**, for Production (and Preview, with different values if you like):
+
+| Variable | Value |
+| --- | --- |
+| `SESSION_SECRET` | `openssl rand -base64 48`; at least 32 characters |
+| `CRON_SECRET` | `openssl rand -base64 32`. Vercel Cron sends it to `/api/cron/brief` as a bearer token by itself |
+| `WEBAUTHN_ORIGIN` | `https://<your domain>`, the origin passkeys are registered for |
+| `WEBAUTHN_RP_ID` | optional; defaults to the host of `WEBAUTHN_ORIGIN` |
+| `APPLE_CLIENT_ID` | optional; Sign in with Apple's Services ID and/or bundle id |
+| `PBCP_HEAD` | optional; which head `GET /` describes when the database holds more than one |
+
+Do not set the following:
+
+- **`PBCP_TEST_MODE`.** A production deployment refuses to build or start while it is set (`lib/boot.ts`).
+- **`PBCP_CHROMIUM_PATH`.** On Vercel the head uses `@sparticuz/chromium` by itself. If you set it, set it to `@sparticuz/chromium`.
+- **`PBCP_DRAW_URL`.** The head finds its own draw route (below).
+
+Passkeys are bound to the RP id, so settle on the domain before the owner enrols. Moving to another domain later means registering passkeys again.
+
+### 4. Functions: the draw route and the cron
+
+`vercel.json` configures two functions:
+
+- **`/api/render/draw`**: 2048 MB, `maxDuration` 60 s. This is the only function that loads Chromium. The rest of the head sends each mermaid fence there over HTTPS (`lib/render/drawer.ts`), authenticated with a key derived from `SESSION_SECRET`.
+- **`/api/cron/brief`**: `maxDuration` 300 s. It mints the nightly `head:daily` card.
+
+How the head finds its draw route:
+
+- A production deployment calls its production domain (`VERCEL_PROJECT_PRODUCTION_URL`), which Deployment Protection does not cover.
+- A preview deployment calls its own URL (`VERCEL_URL`). Under Deployment Protection that needs **Settings → Deployment Protection → Protection Bypass for Automation**. Vercel then exposes `VERCEL_AUTOMATION_BYPASS_SECRET` to the functions, and the head sends it along. Without it, preview deployments store cards but leave diagrams undrawn; they are drawn on a later read once the route is reachable.
+
+With Fluid compute, Vercel may take a function's memory from the project's **Function CPU** setting rather than from `vercel.json`. The Standard size (1 vCPU, 2 GB) is what the draw route needs; do not go below it.
+
+Build on Vercel, not locally. The serverless Chromium in `@sparticuz/chromium` is x86_64 only, and a `vercel build` on an arm64 machine (an Apple Silicon Mac) marks every function arm64. `vercel deploy --prebuilt` from such a machine would therefore ship a draw function that cannot start its browser. Vercel's own builders are x86_64.
+
+#### The nightly brief on Hobby and on paid plans
+
+`vercel.json` schedules `/api/cron/brief` once a day at `0 5 * * *` (UTC). That fits Hobby, which allows one run a day and fires it at some point within the scheduled hour.
+
+The route mints each head's card once the head's local time is past **05:30**, and only for that local date. So the daily run has to land after 05:30 local and before midnight local, all year round:
+
+- For Europe/Copenhagen, 05:00–05:59 UTC is 06:00–07:59 local, in both summer and winter time, so the default works.
+- For other timezones, pick the hour accordingly. For example, America/New_York needs `0 11 * * *`: 11:00 UTC is 06:00 or 07:00 local.
+
+On a paid plan, run it every half hour so the card appears soon after 05:30 in any timezone:
+
+```json
+"crons": [{ "path": "/api/cron/brief", "schedule": "0,30 * * * *" }]
+```
+
+A missed or extra run is harmless: a run mints nothing for a head that already has today's card (`lib/brief/nightly.ts`).
+
+### 5. Migrate and seed
+
+From a checkout with dependencies installed (`git submodule update --init && pnpm install`), pull the production environment into a file and load it into the shell. Values exported this way take precedence over a local `.env`.
+
+```sh
+vercel link
+vercel env pull .env.production --environment=production
+set -a; . ./.env.production; set +a
+
+pnpm db:migrate                                     # uses DATABASE_URL_UNPOOLED
+pnpm seed morten --timezone Europe/Copenhagen       # creates the head, prints the enrolment link
+```
+
+`pnpm seed` prints a link to `WEBAUTHN_ORIGIN/signin?enroll=…`, valid for one hour and signed with the deployment's `SESSION_SECRET`.
+- Open it on the device that should hold the owner's passkey and register.
+- Run `pnpm seed morten` again for a fresh link. On an existing head it changes nothing else.
+
+Run `pnpm db:migrate` again whenever a release adds a migration (`db/migrations`), before or right after deploying it. To have every deployment migrate by itself, set the build command to `pnpm db:migrate && pnpm build`. Only do this with Neon preview branching on, otherwise preview builds migrate the production database.
+
+### 6. Deploy
+
+Push, or click **Deploy**. Then check:
+
+```sh
+curl https://<your domain>/          # {"protocol":"pbcp/1","owner":"morten","seq":0,"extensions":["orders"],…}
+```
+
+Sign in at `https://<your domain>/signin` with the enrolled passkey. The brief is at `/brief`.
+
+## Self-hosted with Docker
+
+```sh
+git clone --recurse-submodules https://github.com/morkeleb/pbcp-head && cd pbcp-head
+cp .env.example .env    # set SESSION_SECRET, CRON_SECRET, WEBAUTHN_ORIGIN and PBCP_OWNER (and PBCP_TIMEZONE)
+docker compose up -d
+docker compose logs head   # the enrolment link for PBCP_OWNER's first passkey
+```
+
+That one `up` does the following:
+- builds the image (Debian, Node 22, Chromium);
+- starts Postgres 17, with data in the `pgdata` volume;
+- migrates the database;
+- creates the `PBCP_OWNER` head on first start and prints its enrolment link;
+- serves the head on port 3000, or `PBCP_PORT`.
+
+A `cron` service calls the nightly-brief route every 30 minutes with `CRON_SECRET`, standing in for Vercel Cron.
+
+- **TLS.** Passkeys need a secure origin, so outside `localhost` put the head behind a TLS-terminating reverse proxy (Caddy, nginx, Traefik). Set `WEBAUTHN_ORIGIN` to its `https://` origin.
+- **Client addresses.** The proxy must set `X-Forwarded-For` or `X-Real-IP` to the client address. The per-address rate limit on `/api/auth/*` keys on it, so without a proxy every client shares one limit. Do not expose port 3000 directly.
+- **Postgres** is published on `127.0.0.1:5433` (`PBCP_DB_PORT`) only, for backups and development. Back up with `docker compose exec postgres pg_dump -U pbcp pbcp > backup.sql`.
+- **Upgrades.** `git pull && docker compose up -d --build`. The entrypoint migrates before starting.
+- **Chromium** runs without its own sandbox inside the container (`PBCP_CHROMIUM_NO_SANDBOX=1`), because Docker's default seccomp profile denies the user namespaces it needs. The container is the boundary, and drawing has no network either way (a dead proxy; `lib/render/draw.ts`).
+
+Other commands run inside the container:
+
+```sh
+docker compose exec head pnpm seed morten                       # a new enrolment link
+docker compose exec head pnpm mint-token morten hermes          # a producer token (below)
+docker compose run --rm head pnpm test:gate                     # the test suites and the conformance gate
+```
+
+For development, start only the database with `docker compose up -d --wait postgres` and run `pnpm dev`, as in the README.
+
+## The first producer token, and `pbcp submit`
+
+A producer token is bound to one head and one namespace root (RFC §12). It is printed once; the head stores only its sha256.
+
+```sh
+# Vercel: with the production environment loaded, as in step 5
+pnpm mint-token morten hermes                       # ceiling `brief` (§9), the default for a new producer
+pnpm mint-token morten hermes --ceiling immediate   # or allow it to interrupt
+pnpm mint-token morten todoist --executor           # a producer that may claim orders (Appendix A)
+
+# Docker
+docker compose exec head pnpm mint-token morten hermes
+```
+
+The owner can raise or lower a producer's ceiling later, or revoke it, from `PATCH /api/me/producers/{root}`.
+
+The producer routes live under `/api` (`PUT /api/cards/{id}`, `GET /api/changes`, and `GET /api` describes the head). So the head URL a producer uses is the origin plus `/api`.
+
+`@pbcp/cli` is not on npm yet. Build it from the protocol repo:
+
+```sh
+git clone https://github.com/morkeleb/pbcp && cd pbcp && pnpm install && pnpm -r --filter @pbcp/cli... build
+alias pbcp="node $PWD/packages/cli/dist/src/bin.js"
+
+export PBCP_HEAD_URL=https://<your domain>/api PBCP_TOKEN=pbcp_…
+pbcp describe
+pbcp submit card.md        # prints { status: 201, card }
+pbcp sync                  # the producer's changes, page by page
+```
+
+Here is a card to try. Its diagram is drawn by the draw route, and the card shows up in `/brief`:
+
+````markdown
+---
+protocol: pbcp/1
+id: hermes:hello:1
+kind: artifact
+to_person: morten
+producer: hermes
+title: Hello from hermes
+emitted_at: 2026-10-26T20:00:00Z
+---
+The head drew this.
+
+```mermaid
+flowchart LR
+  A[Producer] --> B[Head] --> C[Brief]
+```
+````
+
+## Hardening
+
+What is in place before the head is exposed, and where each part is tested:
+
+| | | Tested in |
+| --- | --- | --- |
+| **Rate limits** | 120 requests/min per producer token on `PUT /api/cards/{id}` and on `GET /api/changes`; 30/min per client address on `/api/auth/*`. Over the limit: `429 rate_limited` with `Retry-After`, after `401` and before `413` as §7.1 orders them. Counted in Postgres (`rate_limits`), so all serverless instances share one count (`lib/rate-limit.ts`). | `test/http/hardening.test.ts` |
+| **Body limit** | Any API request declaring a body over 1 MiB gets `413 too_large` before a byte of the body is read. A body sent without a length is cut off as it passes 1 MiB (`lib/http.ts`). Next.js's Proxy (middleware) is deliberately not used for this: Next.js buffers a request body before running a proxy on it. Vercel itself refuses request bodies over 4.5 MB before any function runs. | `test/http/hardening.test.ts` |
+| **Page CSP** | A fresh nonce per request (`proxy.ts`). Scripts run only with that nonce, so nothing in rendered card HTML can run (no inline handlers, `javascript:` URLs or injected scripts). Images only from the head itself, i.e. drawn SVG at `/api/me/svg/…` and the image proxy at `/api/me/img`, and `data:` URIs, which §3.1 requires a head to show. Also `object-src`, `frame-src` and `frame-ancestors 'none'`, `base-uri 'none'`, plus `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, COOP and HSTS. | `hardening.test.ts`, `ui.test.ts` (in a browser) |
+| **API CSP** | Every `/api` response, including those carrying `rendered_html`, is served with `default-src 'none'; frame-ancestors 'none'; sandbox`. If one is ever opened as a document, no script runs. The image routes send their own image CSP. | `test/http/hardening.test.ts` |
+| **Image proxy** | https only, public addresses only (checked at connect time), image content types only (png, jpeg, gif, webp, avif, sanitised svg), at most 2 MB, declared or streamed. | `test/hardening-unit.test.ts` |
+| **Test mode** | `PBCP_TEST_MODE` with `VERCEL_ENV=production` fails the build (`next.config.ts`) and the boot (`instrumentation.ts`). | both test files |
+
+## Function sizes and cold start
+
+Measured from a `vercel build` (CLI 50.14.1) in a linux/amd64 container, which is what Vercel's builders are. Each function directory was assembled from the build output as Vercel would upload it. Sizes are uncompressed; Vercel's limit is 250 MB.
+
+| Function | Size | Serves |
+| --- | --- | --- |
+| `api/render/draw` | 217.3 MB | the draw route only: Chromium 70 MB (brotli), mermaid's ESM build and parser bundle, mermaid-cli's fonts and stylesheets |
+| `api/auth/apple` (shared) | 129.4 MB | every other API route; Vercel groups routes with the same settings into one function |
+| `api/cron/brief` | 127.9 MB | the nightly brief (its own `maxDuration`) |
+| `brief` (shared) | 116.8 MB | the pages |
+
+About 115 MB of every function is the base Vercel's builder traces for any Next.js 16 function, chiefly Next.js's own server runtimes. Excludes in `next.config.ts` cannot reach that part. The draw function's own share is about 100 MB, which leaves it some 30 MB under the limit. A dependency upgrade that grows mermaid, its fonts or Chromium noticeably can cross 250 MB, so check the size after one.
+
+The files mermaid-cli loads at runtime are not visible to file tracing; `next.config.ts` lists them. If a draw on Vercel fails with `ERR_MODULE_NOT_FOUND` or `Failed to fetch dynamically imported module`, a file is missing from that list.
+
+The draw function's cold start was measured by running that directory in the AWS Lambda Node.js image (Amazon Linux 2023, x86_64, 2 GB, 1 CPU) under emulation on an Apple Silicon Mac, so expect a real Vercel cold start to be faster:
+
+| | Time |
+| --- | --- |
+| Loading the function (Next.js launcher, minimal mode) | 1.2–1.4 s |
+| First draw: inflating Chromium into `/tmp`, launching it, loading mermaid, drawing | 8.6–8.9 s |
+| Warm draws | 1.1–1.3 s |
+
+The whole test suite, R01–R08 included (225 tests), passes with every diagram drawn by that function.
+
+A cold draw happens only when a new card brings a fence that is not yet in the diagram cache, and a card is rendered after its PUT has been answered (`after()`). A producer never waits for it; at worst the owner sees a card a few seconds before its diagram.

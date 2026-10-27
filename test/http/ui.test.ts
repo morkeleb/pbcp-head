@@ -15,7 +15,13 @@ let browser: Browser;
 let page: Page;
 let errors: string[];
 beforeAll(async () => {
-  browser = await puppeteer.launch({ headless: true, args: process.env.PBCP_CHROMIUM_NO_SANDBOX === '1' ? ['--no-sandbox'] : [] });
+  // The browser the head draws with, when it names one (the Docker image's /usr/bin/chromium).
+  const path = process.env.PBCP_CHROMIUM_PATH;
+  browser = await puppeteer.launch({
+    headless: true,
+    ...(path && path.startsWith('/') ? { executablePath: path } : {}),
+    args: process.env.PBCP_CHROMIUM_NO_SANDBOX === '1' ? ['--no-sandbox'] : [],
+  });
 });
 afterAll(() => browser?.close());
 afterEach(() => page?.close());
@@ -48,6 +54,29 @@ beforeEach(async () => {
 });
 
 describe('web brief', () => {
+  it('runs no script from inside rendered card HTML: the page CSP allows its own nonce only', async () => {
+    await page.goto(`${headUrl()}/card/${encodeURIComponent('goalpath:report:1')}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('.rendered');
+    // Card HTML is sanitised on the server; this stands in for markup that got past it.
+    const outcome = await page.evaluate(async () => {
+      const w = window as unknown as { __ran?: number };
+      const violations: string[] = [];
+      document.addEventListener('securitypolicyviolation', (e) => violations.push(e.violatedDirective));
+      const el = document.querySelector('.rendered')!;
+      el.insertAdjacentHTML('beforeend', '<img src="data:," onerror="window.__ran = 1"><a id="js" href="javascript:window.__ran = 2">x</a>');
+      (document.getElementById('js') as HTMLAnchorElement).click();
+      const s = document.createElement('script');
+      s.textContent = 'window.__ran = 3';
+      el.appendChild(s);
+      await new Promise((r) => setTimeout(r, 300));
+      return { ran: w.__ran ?? null, violations };
+    });
+    expect(outcome.ran).toBeNull();
+    expect(outcome.violations.length).toBeGreaterThan(0);
+    expect(outcome.violations.every((d) => d.startsWith('script-src'))).toBe(true);
+    expect(errors.filter((e) => !/Content Security Policy/.test(e))).toEqual([]);
+  });
+
   it('shows decisions and today’s folds with thumbnails, behind a strict CSP', async () => {
     const res = await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     expect(res!.headers()['content-security-policy']).toContain("img-src 'self' data:");

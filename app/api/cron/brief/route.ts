@@ -1,6 +1,7 @@
-// GET /api/cron/brief — Vercel Cron (vercel.json, every 30 minutes). Mints each head's nightly card once
-// its local time passes 05:30. Authenticated by CRON_SECRET, which Vercel sends as a bearer token; it is
-// neither a producer token nor a session, and nothing else is accepted here.
+// GET /api/cron/brief — Vercel Cron (vercel.json: daily on Hobby, every 30 minutes on a paid plan; see
+// docs/deploy.md). Mints each head's nightly card once its local time passes 05:30. Authenticated by
+// CRON_SECRET, which Vercel sends as a bearer token; it is neither a producer token nor a session, and
+// nothing else is accepted here.
 
 import { timingSafeEqual } from 'node:crypto';
 import { db } from '../../../../db/client';
