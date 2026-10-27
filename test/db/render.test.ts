@@ -1,5 +1,5 @@
-// The rendering pipeline end to end: markdown, sanitising, mermaid drawn in headless Chromium, the
-// Postgres diagram cache. The conformance fixtures (R01–R08) run in test/conformance; these cover what
+// The rendering pipeline end to end: markdown, sanitising, mermaid drawn in headless Chromium (by the
+// head's draw route, as in production), the Postgres diagram cache. The conformance fixtures (R01–R08) run in test/conformance; these cover what
 // they leave open.
 
 import { sql } from 'drizzle-orm';
@@ -8,13 +8,11 @@ import { openDb } from '../../db/client';
 import { migrateDatabase } from '../../db/migrate';
 import { diagrams } from '../../db/schema';
 import { drawCount, renderBody, resetDrawCount } from '../../lib/render';
-import { closeBrowser } from '../../lib/render/draw';
 import { TEST_DATABASE_URL, TEST_SESSION_SECRET } from '../env';
 
 process.env.SESSION_SECRET = TEST_SESSION_SECRET;
 const db = openDb(TEST_DATABASE_URL, 2);
 afterAll(async () => {
-  await closeBrowser();
   await db.$client.end();
 });
 beforeEach(async () => {
@@ -82,13 +80,12 @@ describe('caching by sha256 of the sanitised fence', () => {
 
 describe('drawing failures that are not the diagram’s fault', () => {
   it('are not cached: the card is retried on the next read instead of showing a permanent fallback', async () => {
-    await closeBrowser();
-    process.env.PBCP_CHROMIUM_PATH = '/nonexistent/chromium';
+    const drawUrl = process.env.PBCP_DRAW_URL;
+    process.env.PBCP_DRAW_URL = 'http://127.0.0.1:9/api/render/draw'; // nothing listens there
     try {
       await expect(renderBody(db, fence('pie title Infra\n "a" : 1'))).rejects.toThrow();
     } finally {
-      delete process.env.PBCP_CHROMIUM_PATH;
-      await closeBrowser().catch(() => undefined);
+      process.env.PBCP_DRAW_URL = drawUrl;
     }
     expect(await db.select().from(diagrams)).toEqual([]);
     expect((await renderBody(db, fence('pie title Infra\n "a" : 1'))).result.fences[0]!.class).toBe('render');

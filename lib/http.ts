@@ -47,9 +47,38 @@ export function decodeId(raw: string): string {
   }
 }
 
+/** No request body the head accepts is larger: §3.1's hard card limit. */
+export const MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * The request body as text, read no further than `max` bytes. A declared Content-Length over the limit is
+ * refused before a byte of the body is read; a body without one (chunked) is cut off as soon as it passes
+ * the limit instead of being buffered whole. Producer routes call this after authenticating and rate
+ * limiting, which keeps §7.1's order: 401, 429, then 413.
+ */
+export async function readBody(req: Request, max = MAX_BODY_BYTES): Promise<string> {
+  const tooLarge = () => new PbcpError('too_large', `a request body may be at most ${max} bytes`);
+  if (Number(req.headers.get('content-length') ?? 0) > max) throw tooLarge();
+  if (!req.body) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = req.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks)); // as Request.text() decodes
+}
+
 /** A JSON object body for the auth routes; an empty body is `{}`. */
 export async function readObject(req: Request): Promise<Record<string, unknown>> {
-  const text = await req.text();
+  const text = await readBody(req);
   if (text.trim() === '') return {};
   try {
     const v: unknown = JSON.parse(text);
@@ -62,8 +91,9 @@ export async function readObject(req: Request): Promise<Record<string, unknown>>
 
 /** A protocol request body (§7.3): JSON, or 400 malformed_json. Shape is the core's to judge. */
 export async function readJson(req: Request): Promise<unknown> {
+  const text = await readBody(req);
   try {
-    return JSON.parse(await req.text());
+    return JSON.parse(text);
   } catch {
     throw new PbcpError('malformed_json', 'the body is not JSON');
   }

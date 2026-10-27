@@ -5,6 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { TestProject } from 'vitest/node';
 import { migrateDatabase } from '../../db/migrate';
+import { DRAW_PATH } from '../../lib/render/drawer';
 import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_CRON_SECRET, TEST_DATABASE_URL, TEST_HEAD_PORT, TEST_SESSION_SECRET } from '../env';
 
 declare module 'vitest' {
@@ -18,6 +19,9 @@ let server: ChildProcess | undefined;
 export async function setup(project: TestProject): Promise<void> {
   await migrateDatabase(TEST_DATABASE_URL);
   let url = process.env.HEAD_URL;
+  // Diagrams are drawn by a head's draw route, for the head and for the in-process R01–R08 renderer alike.
+  // Point PBCP_DRAW_URL elsewhere to draw with another build of that route (docs/deploy.md).
+  process.env.PBCP_DRAW_URL ??= `${url ?? `http://localhost:${TEST_HEAD_PORT}`}${DRAW_PATH}`;
   if (!url) {
     if (!existsSync('.next/BUILD_ID')) throw new Error('no build in .next: run `pnpm build` (or `pnpm test`, which does)');
     url = `http://localhost:${TEST_HEAD_PORT}`;

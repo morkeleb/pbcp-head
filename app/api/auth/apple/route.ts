@@ -3,9 +3,13 @@
 import { db } from '../../../../db/client';
 import { appleSignIn } from '../../../../lib/auth/apple';
 import { handle, json, readObject } from '../../../../lib/http';
+import { limitSignIn } from '../../../../lib/auth/limit';
 
 export const dynamic = 'force-dynamic';
 
 export function POST(req: Request): Promise<Response> {
-  return handle(async () => json(await appleSignIn(db(), req, await readObject(req))));
+  return handle(async () => {
+    await limitSignIn(req);
+    return json(await appleSignIn(db(), req, await readObject(req)));
+  });
 }
