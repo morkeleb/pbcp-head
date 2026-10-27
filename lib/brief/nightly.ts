@@ -5,7 +5,7 @@
 // the next: a day is neither doubled nor, once its 05:30 is reached in the zone the owner is in, skipped.
 // The card goes through the same submit path as any producer's (A.1: the head owns the `head:` root).
 
-import { and, desc, eq, gte, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { cards, heads } from '../../db/schema';
 import { now } from '../clock';
@@ -28,7 +28,8 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
   const open = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), ne(cards.producer, 'head'), sql`${cards.producerDoc}->>'kind' = 'decision'`))
+    // Received by now: a head's clock can be set back (tests), and a brief never mentions a card from after it.
+    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), ne(cards.producer, 'head'), sql`${cards.producerDoc}->>'kind' = 'decision'`, lte(cards.receivedAt, new Date(now()))))
     .orderBy(desc(cards.receivedAt));
   const yesterday = await db
     .select()

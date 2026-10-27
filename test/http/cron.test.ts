@@ -42,11 +42,11 @@ describe('GET /api/cron/brief', () => {
   });
 
   it('follows the owner from Denver to Stockholm mid-day and mints the day exactly once', async () => {
-    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     const phone = await ownerSession(OWNER, 'phone');
     const at = (zone: string) => call('GET', '/api/me', { auth: phone.auth, headers: { 'x-timezone': zone } });
     // 2026-10-07 06:00 in Denver (MDT, UTC-6): the phone is there; the day's card is minted at Denver's 05:30.
     await clock('2026-10-07T12:00:00Z');
+    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     await at('America/Denver');
     expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }] });
     // The flight lands: 2026-10-08 08:00 in Stockholm is still 2026-10-08 00:00 in Denver. Same instant, two
@@ -67,10 +67,10 @@ describe('GET /api/cron/brief', () => {
   });
 
   it('a mid-day move from Denver to Stockholm on the same date neither doubles nor skips the day', async () => {
-    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     const phone = await ownerSession(OWNER, 'phone');
     const at = (zone: string) => call('GET', '/api/me', { auth: phone.auth, headers: { 'x-timezone': zone } });
     await clock('2026-10-07T04:30:00Z'); // 22:30 on the 6th in Denver: before 05:30 on the 7th
+    await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     await at('America/Denver');
     expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-06', status: 201 }] });
     await clock('2026-10-07T11:30:00Z'); // 05:30 on the 7th in Denver

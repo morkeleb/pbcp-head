@@ -57,7 +57,8 @@ const SNOOZES = [
   { preset: 'next-week', label: 'Next week' },
 ] as const;
 
-export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(iso));
+/** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
+export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
 
 export function DecisionCard({ card, timezone, density, onChange, focused, handle }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);

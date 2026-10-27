@@ -223,9 +223,12 @@ export function BriefView() {
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
         {first && first <= reachableFrom && <p className="py-4 text-center text-lead text-muted-foreground">The brief goes back {MAX_DAYS_BACK} days; the day view has the rest.</p>}
-        {days.map((d) => (
-          <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} density={density} tz={tz} decision={decision} update={update} />
-        ))}
+        {days
+          // An earlier day with nothing on it is not shown: no header for an empty day.
+          .filter((d) => d.kind !== 'past' || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
+          .map((d) => (
+            <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} density={density} tz={tz} decision={decision} update={update} />
+          ))}
       </main>
       {todayOut && (
         <div className="fixed inset-x-0 z-30 flex justify-center" style={{ top: 'calc(var(--masthead-h, 120px) + 8px)' }}>
