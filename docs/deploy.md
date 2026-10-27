@@ -103,24 +103,54 @@ Hobby allows 100 cron jobs per project, so 24 daily entries (`30 0 * * *` … `3
 
 ### 5. Migrate and seed
 
-From a checkout with dependencies installed (`git submodule update --init && pnpm install`), pull the production environment into a file and load it into the shell. Values exported this way take precedence over a local `.env`.
+Neon's variables are **sensitive**: Vercel hands them to builds and functions, but `vercel env pull` writes them empty. The simplest way to migrate is therefore during the production build. Set **Settings → Build and Deployment → Build Command** to:
+
+```sh
+if [ "$VERCEL_ENV" = "production" ]; then pnpm db:migrate && pnpm seed morten --name "Morten" --if-new > /dev/null; fi && pnpm build
+```
+
+- **Production builds** migrate with `DATABASE_URL_UNPOOLED`, create the head if it does not exist yet, then build.
+- **Preview builds** only build, so they never migrate the production database.
+- **The seed's output is discarded,** so no enrolment link ends up in the build log.
+
+The enrolment link is signed with `SESSION_SECRET`, so to make one you need that value on your machine. Keep a copy when you create it.
+
+- **The file to keep it in.** Put that copy, and any other value you need locally, in a gitignored file that Next.js does not load, such as `.env.vercel-production`.
+- **Never `.env.production`.** Next.js reads a file with that name in every local `next build` and `next start`. A production `DATABASE_URL` in it reaches every local run, and an empty `VERCEL_GIT_COMMIT_SHA` from `vercel env pull` used to empty the build id.
 
 ```sh
 vercel link
-vercel env pull .env.production --environment=production
-set -a; . ./.env.production; set +a
+vercel env pull .env.vercel-production --environment=production   # sensitive values come back empty
+# add SESSION_SECRET (your copy), and for scripts that need the database, DATABASE_URL: Storage → the
+# Neon database → .env.local → Show secret. Use the unpooled URL; a one-off script needs no pooler.
+set -a; . ./.env.vercel-production; set +a
 
-pnpm db:migrate                                     # uses DATABASE_URL_UNPOOLED
-pnpm seed morten --name "Morten"                    # creates the head, prints the enrolment link
+pnpm enroll morten                                  # prints the enrolment link
 ```
 
-`pnpm seed` prints a link to `WEBAUTHN_ORIGIN/signin?enroll=…`, valid for one hour and signed with the deployment's `SESSION_SECRET`.
-- Open it on the device that should hold the owner's passkey and register.
-- Run `pnpm seed morten` again for a fresh link. On an existing head it changes nothing else.
+`pnpm enroll` prints a link to `WEBAUTHN_ORIGIN/signin?enroll=…`, valid for one hour.
+- Open it in the browser that should hold the owner's passkey and register. In Safari the passkey goes to iCloud Keychain and syncs to the owner's Apple devices.
+- Run `pnpm enroll morten` again for a fresh link.
 
 `morten` is the head id: the person id producers address as `to_person`. It never changes. `--name` is only how the owner is shown, and can be changed later in `PATCH /api/me/settings`. Without `--timezone` the head follows the zone of the owner's active device (see the nightly brief above); `--timezone` pins it.
 
-Run `pnpm db:migrate` again whenever a release adds a migration (`db/migrations`), before or right after deploying it. To have every deployment migrate by itself, set the build command to `pnpm db:migrate && pnpm build`. Only do this with Neon preview branching on, otherwise preview builds migrate the production database.
+With the build command above, every production deployment applies new migrations (`db/migrations`) by itself.
+
+#### Demo data
+
+`pnpm demo morten` fills the head with example cards, shaped as each connector in `morkeleb/pbcp` makes them (caldav, goalpath, hermes, imap, n8n, obsidian-daily, todoist):
+- a calendar agenda drawn as a gantt chart, and an event that moved;
+- a GoalPath risk superseding an on-track card, an approval, a red build and the daily digest;
+- a Hermes reply to approve or edit;
+- mail to archive or keep;
+- an n8n choice list with a chart;
+- a daily note;
+- three orders: two done by Hermes and Todoist, one in progress.
+
+It needs `DATABASE_URL` and `SESSION_SECRET` loaded as above.
+- **Credentials:** it uses the database only to mint producer tokens and an owner session, and revokes both when it finishes.
+- **Cards:** it sends them to the deployment over HTTPS (`--url`, default `WEBAUTHN_ORIGIN`), so the head renders them and draws their diagrams as it would real ones.
+- **Removing it:** `pnpm demo morten --remove` deletes every demo card (their ids have the namespace `demo`), the demo orders and their executors' cards.
 
 ### 6. Deploy
 
