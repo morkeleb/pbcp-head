@@ -1,8 +1,9 @@
 // The nightly card's body: a mechanical fold of the head's own records, no language model (CLAUDE.md H2).
 // Pure: the cron gathers the cards, this writes the card. RFC 0.6 §8 "What a brief contains": every open decision's
 // title and lead, then the title and lead of the newest card of each of the previous day's threads, each linked to
-// its card. The body opens with the daily paragraph, prose made of those leads and nothing else ("2 decisions: …;
-// …. Yesterday: …."; snoozed decisions are counted apart, not listed, and stay in the entries below), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
+// its card. The body opens with the daily paragraph, prose made of those titles and leads and nothing else
+// ("2 decisions: <title> — <lead>; …. Yesterday: …."; snoozed decisions are counted apart, not listed, and stay in
+// the entries below), which is therefore the card's own lead (§3.1); the entries follow, and the counts close it.
 // A day with nothing open and nothing new has no paragraph and no card.
 
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
@@ -27,7 +28,7 @@ export interface FoldLine {
   title: string;
   /** The lead as markdown for the brief: a summary escaped and cut at 280 characters, a body lead inline (§3.1). */
   lead: string;
-  /** The lead as a phrase for the daily paragraph: link-free inline markdown (it becomes a link), no closing stop; the title if the lead is empty. */
+  /** The lead as a phrase for the daily paragraph: link-free inline markdown, no closing stop; empty when the lead is empty or only repeats the title. */
   phrase: string;
   count: number;
   snoozed: boolean;
@@ -60,16 +61,20 @@ export function leadMarkdown(c: { summary?: string; body: string }): string {
   return lead.source === 'summary' ? escapeMarkdown(cutSummary(lead.text), Infinity) : inlineLead(lead.text);
 }
 
-/** A lead inside the daily paragraph, where it is itself a link: its own links and images unwrapped, no closing stop. */
+/**
+ * A lead inside the daily paragraph, after its card's linked title: its own links and images unwrapped (the paragraph's
+ * links are to cards), no closing stop. Empty when there is no lead or it says only the title again.
+ */
 function phrase(c: Card): string {
-  // The closing stop goes before escaping: an escaped one would leave a backslash that escapes the link's `]`.
+  // The closing stop goes before escaping: an escaped one would leave a backslash in front of the entry's separator.
   const stop = (s: string) => s.replace(/[\s.;:,]+$/, '').trim();
   const lead = leadOf(c);
+  if (stop(lead.text) === stop(c.title)) return '';
   const md =
     lead.source === 'summary'
       ? escapeMarkdown(stop(cutSummary(lead.text)), Infinity)
       : stop(inlineLead(lead.text).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'));
-  return md || escapeMarkdown(c.title);
+  return md;
 }
 
 const line = (c: Card, at: string, count = 1): FoldLine => ({
@@ -119,13 +124,14 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
 }
 
 /**
- * The daily paragraph (markdown): "N decisions: <lead>; <lead>." then "Yesterday: <lead>; <lead>.", each lead a
- * link to its card. Snoozed decisions are counted apart and not listed: "4 decisions, 1 snoozed: <lead>; …."; when
+ * The daily paragraph (markdown): "N decisions: <title> — <lead>; <title> — <lead>." then "Yesterday: <title> —
+ * <lead>; …." (§8: each entry its card's title and lead), each title a link to its card; an entry whose lead is empty
+ * or repeats the title is the title alone. A weak lead ("From: Jonas Holm …") still has its title beside it. Snoozed decisions are counted apart and not listed: "4 decisions, 1 snoozed: <lead>; …."; when
  * every open decision is snoozed, "0 decisions, 2 snoozed." Empty when nothing is open and nothing arrived the day
  * before: no sentence for its own sake.
  */
 export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'threads'>, cardUrl: (id: string) => string): string {
-  const link = (l: FoldLine) => `[${l.phrase}](<${cardUrl(l.id)}>)`;
+  const link = (l: FoldLine) => `[${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${l.phrase ? ` — ${l.phrase}` : ''}`;
   const sentences: string[] = [];
   const awake = lines.decisions.filter((l) => !l.snoozed);
   if (lines.decisions.length > 0) sentences.push(`${decisionCount(lines.decisions, 'decision')}${awake.length ? `: ${awake.map(link).join('; ')}` : ''}.`);

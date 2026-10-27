@@ -6,9 +6,10 @@
 //   1  (unstamped) counts as the summary, entries as "producer · title — lead"
 //   2  the daily paragraph of leads, each linked; no summary
 //   3  snoozed decisions left out of the paragraph and counted apart ("4 decisions, 1 snoozed")
+//   4  each paragraph entry is the card's title, linked, then " — " and its lead
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 3;
+export const FOLD_VERSION = 4;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

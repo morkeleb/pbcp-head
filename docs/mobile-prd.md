@@ -26,7 +26,7 @@ Three screens, and a deliberate list of what the phone does not do.
 | --- | --- | --- |
 | `DecisionCard` | Producer · time (an accent dot while unseen) and a menu (snooze, open source, delegate); title; `rendered_lead`; the proposal in an inset; the rest behind "More"; the actions in order (the default the only filled button, none filled without one), Dismiss as quiet text, Edit… only when `edit` is offered, a comment behind a disclosure; options with a body as a radio group | Decides on a tap at once (the buttons become "Approved · 09:14"); on a swipe or a key after a 4 s undo; sets `seen_at` when "More" opens. Ledger density folds it to one line |
 | `UpdateRow` | An artifact or signal thread: kind icon · producer · time, title, `rendered_lead`, the first visual fitted to the row, older cards folded to one line | Acknowledges the thread (the control becomes "Acknowledged · 09:14") |
-| `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists) and the day's paragraph: its decisions' leads, then one sentence of yesterday's, each linked (`daily_paragraph`) | — |
+| `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists) and the day's paragraph: its decisions as title — lead, then one sentence of yesterday's threads the same way, each title linked to its card (`daily_paragraph`) | — |
 | `WeekStrip` | Seven days, the selected one filled, a dot under days with open decisions | Jumps the timeline to a day |
 
 Under 900 px the brief is a timeline with a rail of times; from 900 px a broadsheet with decisions on the left (60 %) and updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.

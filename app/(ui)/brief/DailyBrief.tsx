@@ -1,8 +1,10 @@
 'use client';
 
 // DailyBrief: the paragraph each day opens with (RFC 0.6 §8; lib/brief/fold.ts), as the reference UI shows it. The iOS
-// app mirrors this component. The paragraph is made of the day's card leads, each linked to its card, and rendered by
-// the head; this renders nothing on a day with no paragraph, rather than a sentence that could be printed any day.
+// app mirrors this component. The paragraph is made of the day's cards, each as its title linked to the card, an em
+// dash and its lead ("Re: Offsite on the 14th — Jonas asks whether you join both days; …"), rendered by the head. The
+// titles carry the weight, so a card with a weak lead can still be told apart; the leads read as quieter text. This
+// renders nothing on a day with no paragraph, rather than a sentence that could be printed any day.
 
 export interface DailyBriefProps {
   /** "Today's brief", or the day's name for an earlier day. */
@@ -27,7 +29,7 @@ export function DailyBrief({ heading, html, soFar, compact }: DailyBriefProps) {
         )}
       </h2>
       <p
-        className="daily-paragraph mt-1 max-w-[68ch] text-body text-foreground [&_a]:underline [&_a]:decoration-border [&_a]:underline-offset-2 hover:[&_a]:decoration-foreground"
+        className="daily-paragraph mt-1 max-w-[68ch] text-body text-muted-foreground [&_a]:font-medium [&_a]:text-foreground [&_a]:underline [&_a]:decoration-border [&_a]:underline-offset-2 hover:[&_a]:decoration-foreground"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </section>
