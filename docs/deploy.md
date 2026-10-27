@@ -49,6 +49,13 @@ Under **Settings → Environment Variables**, for Production (and Preview, with 
 | `WEBAUTHN_RP_ID` | optional; defaults to the host of `WEBAUTHN_ORIGIN` |
 | `APPLE_CLIENT_ID` | optional; Sign in with Apple's Services ID and/or bundle id |
 | `PBCP_HEAD` | optional; which head `GET /` describes when the database holds more than one |
+| `NODE_OPTIONS` | `--experimental-require-module`, for Production and Preview. **Required** |
+
+Why `NODE_OPTIONS` is required:
+- **Vercel's runtime switches it off.** Functions run on AWS Lambda's Node runtime, which starts Node with `--no-experimental-require-module` unless `NODE_OPTIONS` contains `--experimental-require-module`.
+- **The renderer needs it.** It uses jsdom, and jsdom's dependencies are CommonJS modules that `require()` ES modules (`@exodus/bytes`, `@csstools/*`).
+- **Without it, every `/api/me` route fails** with a bodyless 500 and `ERR_REQUIRE_ESM` in the function log.
+- **Locally nothing shows.** Node 22.12 and later allow it by default, as does the Docker image, so local runs and tests pass either way.
 
 Do not set the following:
 
