@@ -3,7 +3,7 @@
 // DecisionCard: one open (or just decided) decision card, as the reference UI presents it (RFC 0.6 §4.5). The iOS app
 // mirrors this component; it is self-contained: a card in, changes out.
 //
-//   producer · time   (an accent dot while unseen)                          ⋮ snooze, open source, delegate
+//   producer · time · source ↗   (an accent dot while unseen)               ⋮ snooze, open card, delegate
 //   Title, in the serif
 //   lead (rendered_lead: the summary as text, else the first paragraph)
 //   ┌ Proposal (the first heading beginning "Proposal"/"Proposed", any level) ┐
@@ -25,7 +25,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
+  announce, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
   type MeCard,
 } from '../components';
 
@@ -120,11 +120,18 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
   };
 
   const meta = (
-    <div className="flex min-w-0 items-center gap-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
-      <span className="truncate">{card.producer}</span>
+    <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
+      {/* One line: the producer and time keep their room, the source's label truncates first (§4.1 `source`). */}
+      <span className="max-w-[45%] flex-none truncate">{card.producer}</span>
       {showTime && <span aria-hidden>·</span>}
       {!card.seen_at && !decided && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
-      {showTime && <time dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>}
+      {showTime && <time className="flex-none" dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>}
+      {sourceLink(card.source) && (
+        <>
+          <span aria-hidden>·</span>
+          <SourceLink source={card.source} />
+        </>
+      )}
     </div>
   );
 
@@ -141,13 +148,6 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
           <DropdownMenuItem key={s.preset} disabled={!online || decided} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        {card.source ? (
-          <DropdownMenuItem asChild>
-            <a href={card.source.url} target="_blank" rel="noopener noreferrer nofollow">Open source{card.source.label ? `: ${card.source.label}` : ''}</a>
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem disabled>Open source (none)</DropdownMenuItem>
-        )}
         <DropdownMenuItem asChild>
           <Link href={cardHref(card.id)}>Open card</Link>
         </DropdownMenuItem>
