@@ -577,6 +577,84 @@ describe('the brief: days, week strip, layouts', () => {
   });
 });
 
+describe('one masthead', () => {
+  /** The masthead's shared parts, with the ids Radix generates per render taken out, and its height. */
+  const shared = () =>
+    page.evaluate(() => {
+      const parts = [...document.querySelectorAll('[data-masthead-shared]')].map((e) => {
+        const c = e.cloneNode(true) as Element;
+        for (const el of [c, ...c.querySelectorAll('*')]) for (const a of ['id', 'aria-controls', 'aria-labelledby', 'aria-describedby']) el.removeAttribute(a);
+        return c.outerHTML;
+      });
+      return { parts, height: document.querySelector('[data-masthead]')!.getBoundingClientRect().height, row: document.querySelector('[data-masthead-row]')!.getBoundingClientRect() };
+    });
+
+  for (const width of [390, 1280]) {
+    it(`is the same on the brief, a card and orders at ${width} px: name, dateline, tools; only the row under the name differs`, async () => {
+      await page.setViewport({ width, height: 844 });
+      const seen: Array<Awaited<ReturnType<typeof shared>>> = [];
+      for (const path of ['/brief', `/card/${encodeURIComponent('goalpath:item:1:ship')}`, '/orders']) {
+        await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
+        await page.waitForFunction(() => document.querySelector('[data-dateline]')?.textContent);
+        seen.push(await shared());
+      }
+      expect(seen[0]!.parts).toHaveLength(3); // the name, the dateline, the tools
+      expect(seen[0]!.parts.join('')).toContain('>Brief</h1>');
+      for (const s of seen.slice(1)) {
+        expect(s.parts).toEqual(seen[0]!.parts);
+        expect(s.height).toBeCloseTo(seen[0]!.height, 0);
+        expect(s.row).toEqual(seen[0]!.row); // the row is where it is, the same size, on every route
+      }
+      // The brief's row is its week strip; the others' is the way back and the page's title.
+      await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+      expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefOrders');
+      expect(await page.$('[data-masthead-row] nav[aria-label="Week"]')).toBeNull();
+      expect(await page.$$eval('[data-masthead]', (ms) => ms.length)).toBe(1);
+    });
+  }
+
+  it('dates the masthead with the time of day in words, on the device’s clock and timezone', async () => {
+    await page.emulateTimezone('America/New_York');
+    for (const [local, word] of [['2026-10-27T08:15:00-04:00', 'morning'], ['2026-10-27T13:00:00-04:00', 'afternoon'], ['2026-10-27T19:45:00-04:00', 'evening']] as const) {
+      const context = page.browserContext();
+      const p = await context.newPage();
+      await p.emulateTimezone('America/New_York');
+      // The device's clock, fixed: new Date() and Date.now() say `local`.
+      await p.evaluateOnNewDocument((ms: number) => {
+        const Real = Date;
+        class Fixed extends Real {
+          constructor(...a: unknown[]) {
+            super(...((a.length ? a : [ms]) as [number]));
+          }
+          static override now() {
+            return ms;
+          }
+        }
+        globalThis.Date = Fixed as DateConstructor;
+      }, Date.parse(local));
+      await p.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+      await p.waitForFunction(() => document.querySelector('[data-dateline]')?.textContent);
+      expect(await p.$eval('[data-dateline]', (d) => d.textContent)).toBe(`Tue 27 Oct · ${word}`);
+      await p.close();
+    }
+  });
+});
+
+describe('the card page', () => {
+  it('shows the card as the brief does, body open, then its decision log as a table', async () => {
+    const id = 'goalpath:item:1:ship';
+    await call('POST', `/api/me/cards/${encodeURIComponent(id)}/decision`, { auth: `Session ${session.access_token}`, body: { decision: 'ship-next', comment: 'After the review.' } });
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(id)}`, { waitUntil: 'networkidle0' });
+    const article = (await page.waitForSelector(`[data-card-page] article[data-card="${id}"][data-kind="decision"]`))!;
+    expect(await article.$('.more-trigger')).toBeNull(); // no "More": the body is open
+    expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefDecision');
+    const rows = await page.$$eval('[data-decision-log] tbody tr', (rs) => rs.map((r) => [...r.querySelectorAll('td')].map((td) => td.textContent)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]![1]).toBe('ship-next“After the review.”');
+    expect(rows[0]![2]).toBe('browser'); // the device that recorded it, by name
+  });
+});
+
 describe('web orders', () => {
   it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
@@ -596,7 +674,9 @@ describe('web orders', () => {
 
     await page.goto(`${headUrl()}/card/${encodeURIComponent(order!.id)}`, { waitUntil: 'networkidle0' });
     const text = await page.$eval('main', (m) => m.textContent);
-    expect(text).toContain('held by hermes');
+    expect(await page.$$eval('[data-order-table] tr', (rs) => rs.map((r) => [r.querySelector('th')!.textContent, r.querySelector('td')!.textContent]))).toEqual(
+      expect.arrayContaining([['State', 'claimed'], ['Held by', 'hermes']]),
+    );
     expect(text).toContain('Order and progress');
     expect(text).toContain('1 earlier updates'); // four updates: one folded, the latest three shown
     await (await page.$('xpath/.//button[.="Cancel order"]'))!.click();

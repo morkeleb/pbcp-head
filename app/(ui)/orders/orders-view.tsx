@@ -1,9 +1,18 @@
 'use client';
 
+// Orders (Appendix A; mobile PRD), built from the brief's parts: each open order as a block styled like a DecisionCard,
+// with its exec_state, who holds it and the lease in a small table; and what came back (the outcome, or the latest
+// progress) as the brief's UpdateRows. Grouped open, then done. A new order is given from the form at the top.
+
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, cardHref, OfflineError, useOnline, when } from '../client';
-import { NOT_SENT, OfflineNote, type MeCard } from '../components';
+import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { clock } from '../brief/DecisionCard';
+import { UpdateRow } from '../brief/UpdateRow';
+import { PageRow, useChrome, useChromeCards } from '../chrome';
+import { api, cardHref, OfflineError, OFFLINE_REASON, useOnline, when } from '../client';
+import { NOT_SENT, useDeferred, type MeCard } from '../components';
 
 export interface Order extends MeCard {
   to_producer: string;
@@ -15,9 +24,10 @@ export interface Order extends MeCard {
 }
 
 const ACTIVE = ['open', 'claimed'];
+const isActive = (o: Pick<Order, 'exec_state' | 'state'>) => ACTIVE.includes(o.exec_state) && o.state === 'open';
 
-/** Orders (mobile PRD): open orders with exec_state, grouped by executor; give one; cancel one. */
 export function OrdersView() {
+  const { density } = useChrome();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [timezone, setTimezone] = useState<string | undefined>();
   const [producers, setProducers] = useState<string[]>([]);
@@ -25,7 +35,7 @@ export function OrdersView() {
 
   const load = useCallback(async () => {
     const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders');
-    if (r.status !== 200) return setError(`could not load orders (${r.status})`);
+    if (r.status !== 200) return setError(`Could not load orders (${r.status}).`);
     setOrders(r.body.orders);
     setTimezone(r.body.timezone);
   }, []);
@@ -35,33 +45,56 @@ export function OrdersView() {
       if (r.status === 200) setProducers(r.body.producers.filter((p) => !p.revoked).map((p) => p.root));
     });
   }, [load]);
+  useChromeCards([...(orders ?? []), ...(orders ?? []).flatMap((o) => (o.progress.latest ? [o.progress.latest] : []))]);
 
-  if (error) return <main className="legacy"><p className="error">{error}</p></main>;
-  const active = (orders ?? []).filter((o) => ACTIVE.includes(o.exec_state) && o.state === 'open');
-  const finished = (orders ?? []).filter((o) => !active.includes(o));
-  // Grouped by who has it: the lease holder, else the addressee (`*` until someone claims it).
-  const groups = new Map<string, Order[]>();
-  for (const o of active) groups.set(o.claimed_by ?? o.to_producer, [...(groups.get(o.claimed_by ?? o.to_producer) ?? []), o]);
+  const open = (orders ?? []).filter(isActive);
+  const done = (orders ?? []).filter((o) => !isActive(o));
+  const tz = timezone ?? 'UTC';
+  const outcome = (o: Order) =>
+    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest, earlier: [] }} timezone={tz} density={density} />;
 
   return (
-    <main className="legacy">
-      <h1>Orders</h1>
-      <NewOrder producers={producers} onGiven={load} />
-      {orders === null && <p className="muted">Loading…</p>}
-      {orders !== null && active.length === 0 && <p className="muted">No open orders.</p>}
-      {[...groups.entries()].map(([who, list]) => (
-        <section key={who}>
-          <h2>{who === '*' ? 'Any executor' : who} · {list.length}</h2>
-          {list.map((o) => <OrderItem key={o.id} order={o} onChanged={load} timezone={timezone} />)}
-        </section>
-      ))}
-      {finished.length > 0 && (
-        <>
-          <h2>This week</h2>
-          {finished.map((o) => <OrderItem key={o.id} order={o} onChanged={load} timezone={timezone} />)}
-        </>
-      )}
-    </main>
+    <>
+      <PageRow title="Orders" />
+      <main className="mx-auto max-w-2xl px-4 pb-24 pt-4 min-[900px]:px-6">
+        {error && <p className="text-lead text-destructive" role="alert">{error}</p>}
+        <NewOrder producers={producers} onGiven={load} />
+        {orders === null && !error && <p className="py-3 text-lead text-muted-foreground">Loading…</p>}
+
+        <Group title="Open" count={orders ? open.length : undefined}>
+          {orders !== null && open.length === 0 && <p className="text-lead text-muted-foreground">No open orders.</p>}
+          <div className="flex flex-col gap-3">
+            {open.map((o) => (
+              <div key={o.id}>
+                <OrderBlock order={o} timezone={tz} onChanged={load} />
+                {o.progress.latest && <div className="ml-4 border-l pl-3">{outcome(o)}</div>}
+              </div>
+            ))}
+          </div>
+        </Group>
+
+        {done.length > 0 && (
+          <Group title="Done" count={done.length}>
+            {/* What came back from each: the outcome as the brief shows an update; an order with none, as its block. */}
+            <div className="divide-y border-y">
+              {done.map((o) => (o.progress.latest ? <div key={o.id}>{outcome(o)}</div> : <div key={o.id} className="py-3"><OrderBlock order={o} timezone={tz} onChanged={load} /></div>))}
+            </div>
+          </Group>
+        )}
+      </main>
+    </>
+  );
+}
+
+function Group({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+  return (
+    <section className="pt-6">
+      <h3 className="pb-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground">
+        {title}
+        {count !== undefined && <span className="font-normal"> ({count})</span>}
+      </h3>
+      {children}
+    </section>
   );
 }
 
@@ -85,93 +118,86 @@ function NewOrder({ producers, onGiven }: { producers: string[]; onGiven: () => 
       return setError(NOT_SENT);
     }
     setBusy(false);
-    if (r.status !== 201) return setError(r.body.message ?? `could not give the order (${r.status})`);
+    if (r.status !== 201) return setError(r.body.message ?? `Could not give the order (${r.status}).`);
     setText('');
     onGiven();
   };
+  const field = 'w-full rounded-md border border-input bg-background p-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring';
   return (
-    <section className="card">
-      <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={'What should be done?\nDetails on the next lines.'} aria-label="Order" />
-      <div className="row" style={{ alignItems: 'center' }}>
-        <label className="muted">
-          To{' '}
-          <select value={to} onChange={(e) => setTo(e.target.value)} style={{ font: 'inherit', padding: 6 }}>
+    <section className="rounded-lg border bg-card p-4 text-card-foreground max-[899px]:p-3" aria-label="Give an order">
+      <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={'What should be done?\nDetails on the next lines.'} aria-label="Order" className={field} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-lead text-muted-foreground">
+          To
+          <select value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1 text-body text-foreground">
             <option value="*">any executor</option>
             {producers.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
-        <button className="primary" onClick={give} disabled={busy || text.trim() === '' || !online}>Give order</button>
+        <Button size="sm" className="ml-auto" onClick={give} disabled={busy || text.trim() === '' || !online}>Give order</Button>
       </div>
-      <OfflineNote />
-      {error && <p className="error">{error}</p>}
+      {!online && <p className="mt-2 text-lead text-muted-foreground" role="status">{OFFLINE_REASON}</p>}
+      {error && <p className="mt-2 text-lead text-destructive" role="alert">{error}</p>}
     </section>
   );
 }
 
-export function ExecBadge({ order }: { order: Pick<Order, 'exec_state'> }) {
-  const tone = order.exec_state === 'done' ? 'decided' : order.exec_state === 'claimed' || order.exec_state === 'open' ? 'new' : '';
-  return <span className={`badge ${tone}`}>{order.exec_state}</span>;
-}
-
-/** Cancelling is the decision `dismissed` on the order (A.1), behind the same undo toast as any decision. */
-export function CancelOrder({ order, onCancelled }: { order: Order | MeCard; onCancelled: (c: MeCard) => void }) {
-  const [pending, setPending] = useState(false);
-  const [notSent, setNotSent] = useState(false);
+/**
+ * An order as the brief styles a decision: producer line, title in the serif, then a small table of where it stands
+ * (exec_state, who holds it, the lease) and, while it is open or claimed, Cancel (the decision `dismissed`, A.1) behind
+ * the same undo as a swipe. Used here and on the card page.
+ */
+export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; timezone: string; onChanged: (c?: MeCard) => void }) {
   const online = useOnline();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-  const cancel = () => {
-    setPending(true);
-    setNotSent(false);
-    timer.current = setTimeout(async () => {
-      try {
-        const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
-        if (r.status === 200 || r.status === 409) onCancelled(r.body);
-      } catch (e) {
-        if (!(e instanceof OfflineError)) throw e;
-        setNotSent(true);
-      } finally {
-        setPending(false);
-      }
-    }, 4000);
+  const deferred = useDeferred();
+  const [error, setError] = useState<string | null>(null);
+  const cancel = async () => {
+    setError(null);
+    try {
+      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
+      if (r.status === 200 || r.status === 409) onChanged(r.body);
+      else setError(r.body?.message ?? `the head answered ${r.status}`);
+    } catch (e) {
+      setError(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
+    }
   };
+  const to = order.to_producer === '*' ? 'any executor' : order.to_producer;
+  const rows: Array<[string, React.ReactNode]> = [
+    ['State', <span key="s" data-exec-state>{order.exec_state}</span>],
+    ['To', to],
+    ['Held by', order.claimed_by ?? '—'],
+    ['Lease', order.claim_expires_at ? `until ${when(order.claim_expires_at, timezone)}${order.claim_seq ? ` (claim ${order.claim_seq})` : ''}` : '—'],
+  ];
   return (
-    <>
-      <button className="danger" onClick={cancel} disabled={pending || !online}>Cancel order</button>
-      {notSent && <p className="error">{NOT_SENT}</p>}
-      {pending && (
-        <div className="toast" role="status">
-          <span>Cancelling: {order.title}</span>
-          <button onClick={() => { if (timer.current) clearTimeout(timer.current); setPending(false); }}>Undo</button>
+    <article data-card={order.id} data-kind="order" className={cn('rounded-lg border bg-card p-4 text-card-foreground max-[899px]:p-3', !isActive(order as Order) && 'opacity-72')}>
+      <div className="flex items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
+        <span>Order</span>
+        <span aria-hidden>·</span>
+        <time dateTime={order.received_at}>{clock(order.received_at, timezone)}</time>
+      </div>
+      <h3 className="font-serif text-title font-semibold tracking-editorial">
+        <Link href={cardHref(order.id)} className="hover:underline">{order.title}</Link>
+      </h3>
+      <table className="mt-2 w-full text-lead" data-order-table>
+        <tbody className="divide-y">
+          {rows.map(([k, v]) => (
+            <tr key={k}>
+              <th scope="row" className="w-24 py-1 pr-3 text-left align-top font-normal text-muted-foreground">{k}</th>
+              <td className="py-1 align-top">{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {isActive(order as Order) && (
+        <div className="mt-3">
+          <Button size="sm" variant="outline" className="text-destructive" disabled={!online || deferred.pending}
+            onClick={() => deferred.schedule(`Cancelling: ${order.title}`, () => void cancel())}>
+            Cancel order
+          </Button>
         </div>
       )}
-    </>
-  );
-}
-
-function OrderItem({ order, onChanged, timezone }: { order: Order; onChanged: () => void; timezone?: string }) {
-  const latest = order.progress.latest;
-  return (
-    <article className="card">
-      <h3><Link href={cardHref(order.id)}>{order.title}</Link></h3>
-      <div className="meta">
-        <ExecBadge order={order} />
-        <span>to {order.to_producer === '*' ? 'any executor' : order.to_producer}</span>
-        {order.claimed_by && <span>· held by {order.claimed_by} until {when(order.claim_expires_at!, timezone)}</span>}
-        <span>· {when(order.received_at, timezone)}</span>
-      </div>
-      {latest && (
-        <p className="muted" style={{ marginBottom: 0 }}>
-          {order.progress.count > 1 ? `${order.progress.count} updates · latest: ` : ''}
-          <Link href={cardHref(latest.id)}>{latest.title}</Link>
-          {latest.order_outcome === 'stale' && <span className="badge"> late</span>}
-        </p>
-      )}
-      {ACTIVE.includes(order.exec_state) && order.state === 'open' && (
-        <div className="row"><CancelOrder order={order} onCancelled={onChanged} /></div>
-      )}
+      {error && <p className="mt-2 text-lead text-destructive" role="alert">{error}</p>}
+      {deferred.toast}
     </article>
   );
 }

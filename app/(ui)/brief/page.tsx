@@ -1,6 +1,6 @@
 import { BriefView } from './brief-view';
 
-export const metadata = { title: 'Brief' };
+// The <title> is the root layout's default, the masthead's name.
 
 export default function BriefPage() {
   return <BriefView />;

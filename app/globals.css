@@ -1,8 +1,8 @@
 /*
  * The design system, in one file: tokens as shadcn/ui CSS variables (light, and dark under `.dark`), mapped into
  * Tailwind v4 by @theme; the type scale and 8 px spacing; then the few styles that are not components: the HTML the
- * server renders for card bodies (.rendered), the full-screen viewer, and the pages that predate the reference UI
- * (.legacy). The brief itself is built from Tailwind utilities and shadcn components.
+ * server renders for card bodies (.rendered) and the full-screen viewer. Every page is built from Tailwind utilities
+ * and shadcn components on these tokens.
  *
  * Fonts: Newsreader (editorial: masthead, day headings, card titles) and Inter (interface: everything else), loaded
  * by next/font in lib/fonts.ts as --font-editorial and --font-interface.
@@ -262,57 +262,4 @@
   .viewer .caption { padding: 6px 12px; font-size: var(--text-lead); }
   .viewer details { padding: 0 12px 12px; max-height: 30vh; overflow: auto; }
   .viewer pre { white-space: pre-wrap; font-size: 12px; color: #c9d1dc; }
-}
-
-/* --- the pages that predate the reference UI (card, day, orders, sign-in), on the same tokens ---------- */
-@layer components {
-  nav.top { display: flex; gap: 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--background); z-index: 5; font-size: 15px; }
-  nav.top a { text-decoration: none; font-weight: 600; color: var(--foreground); }
-  nav.top .spacer { flex: 1; }
-  nav.top button { border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: var(--text-control); }
-
-  .legacy { max-width: 640px; margin: 0 auto; padding: 12px 16px 96px; font-size: 15px; line-height: 1.5; }
-  .legacy a { color: var(--primary); }
-  .legacy h1 { font-family: var(--font-serif); font-size: 24px; font-weight: 600; letter-spacing: var(--tracking-editorial); margin: 8px 0 4px; }
-  .legacy h2 { font-size: var(--text-meta); text-transform: uppercase; letter-spacing: var(--tracking-meta); color: var(--muted-foreground); font-weight: 600; margin: 28px 0 8px; }
-  .legacy p { margin: 8px 0; }
-  .legacy .muted { color: var(--muted-foreground); font-size: 14px; }
-  .legacy .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin: 10px 0; }
-  .legacy .card h3 { font-family: var(--font-serif); margin: 0 0 4px; font-size: 18px; font-weight: 600; line-height: 1.3; }
-  .legacy .card h3 a { color: inherit; text-decoration: none; }
-  .legacy .meta { color: var(--muted-foreground); font-size: 13px; display: flex; gap: 6px; flex-wrap: wrap; }
-  .legacy .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
-  .legacy .badge.new { border-color: var(--primary); color: var(--primary); }
-  .legacy .badge.decided { color: var(--success-foreground); border-color: var(--success-foreground); }
-  .legacy .badge.as-of { border-style: dashed; }
-  .legacy .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-  .legacy button { font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--foreground); cursor: pointer; min-height: 36px; }
-  .legacy button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
-  .legacy button.danger { color: var(--destructive); }
-  .legacy button.quiet { border-color: transparent; color: var(--muted-foreground); }
-  .legacy button:disabled { opacity: 0.5; }
-  .legacy .error { color: var(--destructive); }
-  .legacy textarea, .legacy input[type="text"], .legacy select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); }
-  .legacy .thumb { margin: 8px 0 0; }
-  .legacy .thumb img { display: block; max-width: 100%; max-height: 220px; object-fit: contain; cursor: zoom-in; background: #fff; border-radius: 4px; }
-  .legacy .thumb figcaption { font-size: 12px; color: var(--muted-foreground); }
-  .legacy .option { display: block; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 8px 0; cursor: pointer; }
-  .legacy .option.selected { border-color: var(--primary); }
-  .legacy .option .label { font-weight: 600; }
-  .legacy .option .default { font-size: 12px; color: var(--muted-foreground); margin-left: 6px; }
-  .legacy .lead { margin: 8px 0 0; }
-  .legacy .rendered.proposal { background: var(--inset); border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
-  .legacy details.more, .legacy details.comment { margin-top: 8px; }
-  .legacy details.more > summary, .legacy details.comment > summary { cursor: pointer; color: var(--muted-foreground); font-size: 14px; }
-  .legacy .decide-controls { margin-top: 10px; }
-  .legacy fieldset.choices { border: 0; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
-  .legacy fieldset.choices .option { margin: 0; display: grid; grid-template-columns: auto 1fr auto; column-gap: 8px; align-items: baseline; }
-  .legacy fieldset.choices .option .option-body { grid-column: 2 / 4; color: var(--muted-foreground); font-size: 14px; }
-  .legacy .decided-line { margin: 10px 0 0; color: var(--muted-foreground); }
-  .legacy .card.done { opacity: 0.72; }
-  .legacy .offline { font-size: 14px; }
-
-  /* The undo toast a swipe or key waits behind (used by every page). */
-  .toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 560px; margin: 0 auto; background: var(--foreground); color: var(--background); border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; z-index: 40; font-size: var(--text-lead); }
-  .toast button { margin-left: auto; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 4px 10px; font-size: var(--text-control); }
 }

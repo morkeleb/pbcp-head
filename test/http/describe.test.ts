@@ -57,7 +57,8 @@ describe('GET /: JSON for producers, the front door for a browser (Accept)', () 
       expect(r.headers.get('vary')).toMatch(/accept/i);
       expect(r.headers.get('content-security-policy')).toMatch(/script-src 'self' 'nonce-/);
       const html = r.body as string;
-      expect(html).toContain('Morning Brief');
+      expect(html).toMatch(/<h1[^>]*>Brief<\/h1>/);
+      expect(html).not.toContain('Morning Brief');
       expect(html).toContain('href="/signin"');
       expect(html).toContain('href="/brief"');
       expect(html).toContain('href="https://morkeleb.github.io/pbcp"');

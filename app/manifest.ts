@@ -1,13 +1,14 @@
 // GET /manifest.webmanifest — the web app manifest: installable, standalone, opening on the brief.
 
 import type { MetadataRoute } from 'next';
+import { NAME } from '../lib/masthead';
 
 export const THEME_COLOR = '#7047f5';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/brief',
-    name: 'PBCP head',
+    name: NAME,
     short_name: 'Brief',
     description: 'Your brief: decisions, artifacts and signals from your producers.',
     start_url: '/brief',

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import { editorialFont, interfaceFont } from '../lib/fonts';
+import { NAME } from '../lib/masthead';
 import './globals.css';
 import { THEME_COLOR } from './manifest';
 import { ServiceWorker } from './service-worker';
@@ -12,8 +13,8 @@ export const dynamic = 'force-dynamic';
 // The manifest (app/manifest.ts) is linked by Next.js. iOS Safari's "Add to Home Screen" reads the apple-*
 // tags instead: a 180×180 opaque icon, and a standalone window with the title below the icon.
 export const metadata: Metadata = {
-  title: 'head',
-  applicationName: 'PBCP head',
+  title: { default: NAME, template: `%s · ${NAME}` },
+  applicationName: NAME,
   appleWebApp: { capable: true, title: 'Brief', statusBarStyle: 'default' },
   icons: { icon: '/icon.svg', apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }] },
   formatDetection: { telephone: false },

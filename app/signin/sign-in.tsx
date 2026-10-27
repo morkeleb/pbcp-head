@@ -2,6 +2,7 @@
 
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { loadTokens, saveTokens } from '../(ui)/client';
 
 interface Tokens {
@@ -75,27 +76,29 @@ export function SignIn({ enroll, apple }: { enroll: string | null; apple: boolea
 
   if (session) {
     return (
-      <div>
-        <p data-testid="signed-in">
-          Signed in to <strong>{session.head}</strong> on device <code>{session.device_id.slice(0, 8)}</code>.
+      <div className="space-y-3 text-center">
+        <p className="text-lead text-muted-foreground" data-testid="signed-in">
+          Signed in to <strong className="font-semibold text-foreground">{session.head}</strong> on device <code>{session.device_id.slice(0, 8)}</code>.
         </p>
-        <a className="button" href="/brief">Open the brief</a>{' '}
-        <button onClick={registerPasskey} disabled={busy}>Add another passkey</button>{' '}
-        <button onClick={signOut} disabled={busy}>Sign out</button>
-        {error && <p role="alert" style={{ color: '#b00' }}>{error}</p>}
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild><a href="/brief">Open the brief</a></Button>
+          <Button variant="outline" onClick={registerPasskey} disabled={busy}>Add another passkey</Button>
+          <Button variant="ghost" className="text-muted-foreground" onClick={signOut} disabled={busy}>Sign out</Button>
+        </div>
+        {error && <p role="alert" className="text-lead text-destructive">{error}</p>}
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="flex flex-col items-center gap-3 text-center">
       {enroll ? (
-        <button onClick={registerPasskey} disabled={busy}>Create a passkey for this head</button>
+        <Button onClick={registerPasskey} disabled={busy}>Create a passkey for this head</Button>
       ) : (
-        <button onClick={signIn} disabled={busy}>Sign in with a passkey</button>
+        <Button onClick={signIn} disabled={busy}>Sign in with a passkey</Button>
       )}
-      {apple && <p style={{ color: '#666', fontSize: 14 }}>Sign in with Apple is configured for the app; its web button arrives with the web UI.</p>}
-      {error && <p role="alert" style={{ color: '#b00' }}>{error}</p>}
+      {apple && <p className="text-lead text-muted-foreground">Sign in with Apple is configured for the app; its web button arrives with the web UI.</p>}
+      {error && <p role="alert" className="text-lead text-destructive">{error}</p>}
     </div>
   );
 }

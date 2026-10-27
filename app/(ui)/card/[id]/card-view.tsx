@@ -1,10 +1,20 @@
 'use client';
 
+// One card, built from the brief's parts: the card as the brief shows it (a DecisionCard, an UpdateRow for an artifact
+// or signal, the order block for an order) with its body fully open, at the content width; then its thread as the brief
+// shows threads (time · title, the card itself in bold); then the decision log entries for it (§4.4) as a small table.
+// Supersession and references are lists in the same style: a superseded card stays reachable from its successor (§8).
+
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
-import { api, cardHref, OfflineError, useFresh, useOnline, when } from '../../client';
-import { AsOf, DecisionControls, DecisionSummary, NOT_SENT, OfflineNote, Rendered, type MeCard } from '../../components';
-import { CancelOrder, ExecBadge } from '../../orders/orders-view';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { clock, DecisionCard } from '../../brief/DecisionCard';
+import { UpdateRow } from '../../brief/UpdateRow';
+import { PageRow, useChromeCards } from '../../chrome';
+import { api, cardHref, useFresh, when } from '../../client';
+import { decisionLabel, Rendered, type MeCard } from '../../components';
+import { OrderBlock } from '../../orders/orders-view';
 
 interface Summary {
   id: string;
@@ -18,8 +28,14 @@ interface Summary {
   order_outcome?: 'applied' | 'stale';
 }
 
-/** Progress in an order's thread is folded: the order, the latest few updates, the rest behind a disclosure (§8). */
-const SHOWN = 3;
+interface LogEntry {
+  decision: string;
+  decided_at: string;
+  edited_proposal?: string;
+  comment?: string;
+  delegated_to?: string;
+  by: string;
+}
 
 interface Detail {
   timezone: string;
@@ -28,25 +44,21 @@ interface Detail {
   successors: Summary[];
   references: Array<{ id: string; card: Summary | null }>;
   thread: Summary[];
+  decisions: LogEntry[];
 }
+
+/** Progress in an order's thread is folded: the order, the latest few updates, the rest behind a disclosure (§8). */
+const SHOWN = 3;
+
+const KIND: Record<string, string> = { decision: 'Decision', artifact: 'Update', signal: 'Signal', order: 'Order' };
 
 /** The id from the raw path, decoded once, so an id with %XX in it survives (§5). */
 const idFromPath = () => decodeURIComponent(location.pathname.split('/')[2] ?? '');
-
-const host = (url: string) => {
-  try {
-    return new URL(url).host;
-  } catch {
-    return '';
-  }
-};
 
 export function CardView() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
-  const [notSent, setNotSent] = useState(false);
-  const online = useOnline();
   const [path] = useState(() => (typeof location === 'undefined' ? null : `/api/me/cards/${encodeURIComponent(idFromPath())}`));
 
   const show = useCallback((d: Detail, at: string | null) => {
@@ -64,133 +76,157 @@ export function CardView() {
   const fresh = useCallback((d: Detail) => show(d, null), [show]);
   const stale = useCallback(() => void load(true), [load]);
   useFresh(path, fresh, stale);
+  useChromeCards(detail ? [detail.card] : [], { at: cachedAt, timezone: detail?.timezone });
 
-  if (status) return <main className="legacy"><p className="error">{status}</p></main>;
-  if (!detail) return <main className="legacy"><p className="muted">Loading…</p></main>;
+  const title = detail ? (KIND[detail.card.kind] ?? 'Card') : 'Card';
+  if (status || !detail) {
+    return (
+      <>
+        <PageRow title={title} />
+        <main className="mx-auto max-w-2xl px-4 pt-4 min-[900px]:px-6">
+          <p className={status ? 'text-lead text-destructive' : 'text-lead text-muted-foreground'}>{status ?? 'Loading…'}</p>
+        </main>
+      </>
+    );
+  }
+
   const { card, timezone } = detail;
-  const update = (c: Partial<MeCard>) => setDetail((d) => d && { ...d, card: { ...d.card, ...c } });
-  const post = async (action: string, body?: unknown) => {
-    setNotSent(false);
-    try {
-      const r = await api<MeCard>(`/api/me/cards/${encodeURIComponent(card.id)}/${action}`, { method: 'POST', body });
-      if (r.status === 200) update(r.body);
-    } catch (e) {
-      if (!(e instanceof OfflineError)) throw e;
-      setNotSent(true);
-    }
-  };
+  const update = (c: MeCard) => setDetail((d) => d && { ...d, card: { ...d.card, ...c } });
+  const reload = () => void load(true);
 
   return (
-    <main className="legacy">
-      <div className="meta" style={{ marginTop: 8 }}>
-        <span>{card.producer}</span>·<span>{card.kind}</span>·<span>{when(card.received_at, timezone)}</span>
-        <span className="badge">{card.state}</span>
-        {card.snoozed_until && <span className="badge">snoozed until {when(card.snoozed_until, timezone)}</span>}
-        <AsOf at={cachedAt} timezone={timezone} />
-      </div>
-      <h1>{card.title}</h1>
-      {card.source && (
-        // source.label is the producer's words, not a statement about where the link goes (§12).
-        <p className="muted">
-          <a href={card.source.url} target="_blank" rel="noopener noreferrer nofollow">{card.source.label || 'Source'}</a> ({host(card.source.url)})
-        </p>
-      )}
-      <section className="card">
-        <Rendered html={card.rendered_html} />
-      </section>
-
-      {card.kind === 'order' && (
-        <section className="card">
-          <div className="meta">
-            <ExecBadge order={{ exec_state: card.exec_state! }} />
-            <span>to {card.to_producer === '*' ? 'any executor' : card.to_producer}</span>
-            {card.claimed_by && <span>· held by {card.claimed_by} until {when(card.claim_expires_at!, timezone)} (claim {card.claim_seq})</span>}
+    <>
+      <PageRow title={title} />
+      <main className="mx-auto max-w-2xl px-4 pb-24 pt-4 min-[900px]:px-6" data-card-page>
+        {card.kind === 'decision' ? (
+          <DecisionCard card={card} timezone={timezone} density="comfortable" onChange={update} expanded />
+        ) : card.kind === 'order' ? (
+          <OrderBlock order={card} timezone={timezone} onChanged={(c) => (c ? update(c) : reload())} />
+        ) : (
+          <div className="border-y">
+            <UpdateRow
+              thread={{ latest: card, earlier: [] }}
+              timezone={timezone}
+              density="comfortable"
+              expanded
+              onAcknowledged={(_, at) => update({ ...card, ...(at ? { acknowledged_at: at } : { acknowledged_at: undefined }) })}
+            />
           </div>
-          {card.state === 'open' && (card.exec_state === 'open' || card.exec_state === 'claimed') && (
-            <div className="row"><CancelOrder order={card} onCancelled={(c) => update(c)} /></div>
-          )}
-        </section>
-      )}
-      {card.order_outcome === 'stale' && <p className="muted">This result came late or from an earlier lease; it did not change the order.</p>}
+        )}
+        {card.kind === 'order' && <Rendered className="mt-3 text-body" html={card.rendered_html} />}
+        {card.order_outcome === 'stale' && <p className="mt-2 text-lead text-muted-foreground">This result came late or from an earlier lease; it did not change the order.</p>}
+        {card.snoozed_until && card.snoozed_until > new Date().toISOString() && (
+          <p className="mt-2 text-lead text-muted-foreground">Snoozed until {when(card.snoozed_until, timezone)}.</p>
+        )}
 
-      <DecisionSummary card={card} timezone={timezone} />
-      <DecisionControls card={card} onChange={(c) => update(c)} />
+        {detail.successors.length > 0 && (
+          <Group title="Superseded by">
+            <Rows items={detail.successors.map((s) => ({ key: s.id, at: s.received_at, title: s.title, href: cardHref(s.id), note: s.state }))} timezone={timezone} />
+          </Group>
+        )}
+        {detail.predecessors.length > 0 && (
+          <Group title="Earlier versions">
+            <Rows items={detail.predecessors.map((p) => ({ key: p.id, at: p.received_at, title: p.title, href: cardHref(p.id), note: p.decision ? decisionLabel(p) : p.state }))} timezone={timezone} />
+          </Group>
+        )}
+        {detail.thread.length > 1 && <Thread detail={detail} />}
+        {detail.references.length > 0 && (
+          <Group title="References">
+            <ul className="space-y-0.5 text-lead">
+              {detail.references.map((r) => (
+                <li key={r.id} className="truncate">
+                  {r.card ? <Link href={cardHref(r.id)} className="hover:underline">{r.card.title}</Link> : <span className="text-muted-foreground">{r.id} (not on this head)</span>}
+                </li>
+              ))}
+            </ul>
+          </Group>
+        )}
+        {detail.decisions.length > 0 && <DecisionLog entries={detail.decisions} timezone={timezone} />}
+      </main>
+    </>
+  );
+}
 
-      {card.state === 'open' && card.kind !== 'decision' && card.kind !== 'order' && (
-        <div className="row">
-          {card.acknowledged_at ? (
-            <p className="decided-line">Acknowledged {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(card.acknowledged_at))}</p>
-          ) : (
-            <button onClick={() => post('ack')} disabled={!online}>Acknowledge</button>
-          )}
-        </div>
-      )}
-      {card.state === 'open' && card.kind !== 'order' && (
-        <div className="row">
-          <span className="muted" style={{ alignSelf: 'center' }}>Snooze:</span>
-          <button disabled={!online} onClick={() => post('snooze', { preset: 'tonight' })}>Tonight</button>
-          <button disabled={!online} onClick={() => post('snooze', { preset: 'tomorrow' })}>Tomorrow’s brief</button>
-          <button disabled={!online} onClick={() => post('snooze', { preset: 'next-week' })}>Next week</button>
-          {card.snoozed_until && <button disabled={!online} onClick={() => post('unsnooze')}>Unsnooze</button>}
-        </div>
-      )}
-      {card.state === 'open' && card.kind !== 'decision' && <OfflineNote />}
-      {notSent && <p className="error">{NOT_SENT}</p>}
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="pt-6">
+      <h3 className="pb-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground">{title}</h3>
+      {children}
+    </section>
+  );
+}
 
-      {detail.successors.length > 0 && (
-        <>
-          <h2>Superseded by</h2>
-          {detail.successors.map((s) => <p key={s.id}><Link href={cardHref(s.id)}>{s.title}</Link> <span className="badge">{s.state}</span></p>)}
-        </>
-      )}
-      {detail.predecessors.length > 0 && (
-        <>
-          <h2>Earlier versions</h2>
-          {detail.predecessors.map((p) => (
-            <details key={p.id} className="card">
-              <summary>{p.title} <span className="badge">{p.decision ?? p.state}</span></summary>
-              <Rendered html={p.rendered_html} />
-              <DecisionSummary card={p} timezone={timezone} />
-            </details>
+/** Rows as the brief lists a thread's earlier cards: the time, muted, then the title linked; the current card in bold. */
+function Rows({ items, timezone }: { items: Array<{ key: string; at: string; title: string; href?: string; note?: string }>; timezone: string }) {
+  return (
+    <ul className="space-y-0.5 text-lead">
+      {items.map((i) => (
+        <li key={i.key} className="truncate">
+          <span className="text-muted-foreground tabular-nums">{clock(i.at, timezone)}</span>{' '}
+          {i.href ? <Link href={i.href} className="hover:underline">{i.title}</Link> : <strong className="font-semibold">{i.title}</strong>}
+          {i.note && <span className="text-muted-foreground"> · {i.note}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Thread({ detail }: { detail: Detail }) {
+  const { card, timezone, thread } = detail;
+  const item = (t: Summary) => ({
+    key: t.id,
+    at: t.received_at,
+    title: t.title,
+    href: t.id === card.id ? undefined : cardHref(t.id),
+    note: [t.exec_state, t.decision, t.order_outcome === 'stale' ? 'late' : undefined].filter(Boolean).join(' · ') || undefined,
+  });
+  const [first, ...rest] = thread;
+  const isOrder = first!.kind === 'order';
+  const title = isOrder ? 'Order and progress' : `Thread · ${card.thread ?? ''}`;
+  if (!isOrder || rest.length <= SHOWN) return <Group title={title}><Rows items={thread.map(item)} timezone={timezone} /></Group>;
+  return (
+    <Group title={title}>
+      <Rows items={[item(first!)]} timezone={timezone} />
+      <Collapsible>
+        <CollapsibleTrigger className="group mt-1 flex items-center gap-1 text-lead text-muted-foreground">
+          {rest.length - SHOWN} earlier updates <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Rows items={rest.slice(0, -SHOWN).map(item)} timezone={timezone} />
+        </CollapsibleContent>
+      </Collapsible>
+      <Rows items={rest.slice(-SHOWN).map(item)} timezone={timezone} />
+    </Group>
+  );
+}
+
+/** The decision log entries for this card (§4.4: the decision, and when and from which device it was recorded). */
+function DecisionLog({ entries, timezone }: { entries: LogEntry[]; timezone: string }) {
+  return (
+    <Group title="Decision log">
+      <table className="w-full text-lead" data-decision-log>
+        <thead>
+          <tr className="text-left text-meta uppercase tracking-meta text-muted-foreground">
+            <th className="pb-1 pr-3 font-normal">When</th>
+            <th className="pb-1 pr-3 font-normal">Decision</th>
+            <th className="pb-1 font-normal">By</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y border-t">
+          {entries.map((e, i) => (
+            <tr key={i} className="align-top">
+              <td className="whitespace-nowrap py-1.5 pr-3 text-muted-foreground">{when(e.decided_at, timezone)}</td>
+              <td className="py-1.5 pr-3">
+                {e.decision}
+                {e.delegated_to && <span className="text-muted-foreground"> to {e.delegated_to}</span>}
+                {e.edited_proposal && <span className="block whitespace-pre-wrap text-muted-foreground">{e.edited_proposal}</span>}
+                {e.comment && <span className="block text-muted-foreground">“{e.comment}”</span>}
+              </td>
+              <td className="py-1.5 text-muted-foreground">{e.by}</td>
+            </tr>
           ))}
-        </>
-      )}
-      {detail.references.length > 0 && (
-        <>
-          <h2>References</h2>
-          {detail.references.map((r) => (
-            <p key={r.id}>{r.card ? <Link href={cardHref(r.id)}>{r.card.title}</Link> : <span className="muted">{r.id} (not on this head)</span>}</p>
-          ))}
-        </>
-      )}
-      {detail.thread.length > 1 && (
-        <>
-          <h2>{detail.thread[0]!.kind === 'order' ? 'Order and progress' : `Thread · ${card.thread}`}</h2>
-          {(() => {
-            const row = (t: Summary) => (
-              <p key={t.id} style={{ margin: '4px 0' }}>
-                {t.id === card.id ? <strong>{t.title}</strong> : <Link href={cardHref(t.id)}>{t.title}</Link>}{' '}
-                <span className="muted">{t.producer} · {when(t.received_at, timezone)}</span>{' '}
-                {t.exec_state && <span className="badge">{t.exec_state}</span>}
-                {t.decision && <span className="badge decided">{t.decision}</span>}
-                {t.order_outcome === 'stale' && <span className="badge">late</span>}
-              </p>
-            );
-            const [head, ...rest] = detail.thread;
-            if (head!.kind !== 'order' || rest.length <= SHOWN) return detail.thread.map(row);
-            return (
-              <>
-                {row(head!)}
-                <details>
-                  <summary className="muted">{rest.length - SHOWN} earlier updates</summary>
-                  {rest.slice(0, -SHOWN).map(row)}
-                </details>
-                {rest.slice(-SHOWN).map(row)}
-              </>
-            );
-          })()}
-        </>
-      )}
-    </main>
+        </tbody>
+      </table>
+    </Group>
   );
 }
