@@ -263,7 +263,7 @@ export function Announcer() {
 const PROPOSAL = /^propos(al|ed)/i;
 
 interface BodyParts {
-  /** The first H2 beginning "Proposal" or "Proposed" and what follows, to the next H1 or H2. */
+  /** The first heading, at any level, beginning "Proposal" or "Proposed" (any case) and what follows, to the next heading of the same or a higher level (§4.5). */
   proposal: string;
   /** Everything else, in order, without the paragraph that is already the lead. */
   rest: string;
@@ -281,8 +281,8 @@ function splitBody(html: string, leadFromBody: boolean): BodyParts {
   const nodes = [...t.content.childNodes].filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()));
   const tag = (n: Node) => (n instanceof HTMLElement ? n.tagName : '');
   const level = (n: Node) => (/^H[1-6]$/.test(tag(n)) ? Number(tag(n)[1]) : 0);
-  const from = nodes.findIndex((n) => tag(n) === 'H2' && PROPOSAL.test(n.textContent?.trim() ?? ''));
-  let to = from < 0 ? -1 : nodes.findIndex((n, j) => j > from && level(n) > 0 && level(n) <= 2);
+  const from = nodes.findIndex((n) => level(n) > 0 && PROPOSAL.test(n.textContent?.trim() ?? ''));
+  let to = from < 0 ? -1 : nodes.findIndex((n, j) => j > from && level(n) > 0 && level(n) <= level(nodes[from]!));
   if (from >= 0 && to < 0) to = nodes.length;
   const inProposal = (i: number) => from >= 0 && i >= from && i < to;
   // §3.1 step 1 skips headings, thematic breaks and fences (drawn diagrams, code, collapsed fences).
@@ -430,11 +430,14 @@ function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Opti
   return { list, edit, byDefault };
 }
 
-/** What a swipe chooses (docs/mobile-prd.md): right the default, left `reject` when offered; otherwise nothing. */
+/**
+ * What a swipe chooses (docs/mobile-prd.md): right the default, nothing without one; left `dismissed`, which every
+ * decision card offers (§4.5). Never `reject`: that is one of the producer's actions, chosen by tapping it.
+ */
 export function swipeChoice(card: MeCard, direction: 'left' | 'right'): { decision: string; label: string } | null {
-  const { list, byDefault } = options(card);
-  const o = direction === 'right' ? byDefault : list.find((x) => x.id === 'reject');
-  return o ? { decision: o.id, label: o.label } : null;
+  if (direction === 'left') return { decision: 'dismissed', label: 'Dismiss' };
+  const { byDefault } = options(card);
+  return byDefault ? { decision: byDefault.id, label: byDefault.label } : null;
 }
 
 /** Lets a swipe on the card commit through the controls' own path (their comment included). */

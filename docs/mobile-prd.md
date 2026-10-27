@@ -39,7 +39,7 @@ The RFC's decision semantics map one to one onto touch, and the mapping is the p
 | Tap "Dismiss" | `dismissed` | At once | §4.3 |
 | "Add a comment" (a disclosure, never a required field) | `comment` alongside the decision | With it | §4.2, §4.5 |
 | Swipe right | The `default` option; `approve` when `actions` is a plain list with `approve`. Nothing when there is no default | After a 4 s undo window | §4.4 |
-| Swipe left | `reject` when offered; otherwise nothing | After a 4 s undo window | §4.3 |
+| Swipe left | `dismissed`, on every decision card; never `reject`, which is a producer action and taken by tapping it | After a 4 s undo window | §4.3, §4.5 |
 | Tap the title | Opens the card | — | — |
 | Long-press | Snooze picker: tonight, tomorrow's brief, next week | At once | `snoozed_until`, not a state |
 

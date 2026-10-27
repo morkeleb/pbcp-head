@@ -166,7 +166,7 @@ function DecisionItem({ card, isNew, onChange, timezone }: { card: MeCard; isNew
   const online = useOnline();
   const controls = useRef<DecisionHandle | null>(null);
   const deferred = useDeferred();
-  // Swipe right: the default; swipe left: reject, when offered. Committed after the undo window, not at once.
+  // Swipe right: the default; swipe left: dismiss. Committed after the undo window, not at once.
   const swipe = useSwipe((direction) => {
     const choice = decided || !online || deferred.pending ? null : swipeChoice(card, direction);
     if (choice) deferred.schedule(`${choice.label}: ${card.title}`, () => controls.current?.decide({ decision: choice.decision }));
