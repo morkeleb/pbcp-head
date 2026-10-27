@@ -134,9 +134,10 @@ export function Viewer({ visual, onClose }: { visual: Visual; onClose: () => voi
   const fit = useCallback(() => {
     const el = stage.current;
     if (!el || !natural) return;
-    const scale = Math.min(el.clientWidth / natural.w, el.clientHeight / natural.h, 1);
+    // A diagram is vector: fit fills the screen. A photo is not enlarged past its own pixels.
+    const scale = Math.min(el.clientWidth / natural.w, el.clientHeight / natural.h, visual.src.includes('/api/me/svg/') ? Infinity : 1);
     setView({ scale, x: (el.clientWidth - natural.w * scale) / 2, y: (el.clientHeight - natural.h * scale) / 2 });
-  }, [natural]);
+  }, [natural, visual.src]);
   useEffect(fit, [fit]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -224,13 +225,17 @@ interface Option {
   id: string;
   label: string;
   isDefault: boolean;
+  hasBody: boolean;
 }
+
+/** At most this many options are buttons on the card itself; a longer list opens the sheet. */
+const INLINE_OPTIONS = 3;
 
 function options(card: MeCard): { list: Option[]; edit: boolean; primary: Option | null; reject: Option | null } {
   const actions = card.actions ?? ['approve', 'reject'];
   const list = actions
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
-    .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true }));
+    .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
   const edit = actions.some((a) => (typeof a === 'string' ? a : a.id) === 'edit');
   const plainDefault = actions.every((a) => typeof a === 'string') && list.some((o) => o.id === 'approve');
   // §4.4: the default is the bare-approve gesture; with the plain list that is `approve`; with no default, none.
@@ -244,6 +249,12 @@ type Pending = { decision: string; edited_proposal?: string; comment?: string; l
 /** Decide buttons: the default (swipe right), reject (swipe left), and the sheet. Every decision waits behind an undo toast. */
 export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided: (c: MeCard) => void }) {
   const { list, edit, primary, reject } = options(card);
+  // A short list is decided on the card: one button per option, in the producer's order (§4.4). The sheet is
+  // for what a button cannot carry: a long list, option bodies to read, an edited proposal, a comment.
+  const inline = list.length <= INLINE_OPTIONS;
+  const shown = inline ? list : primary ? [primary] : [];
+  const more = !inline || edit || list.some((o) => o.hasBody);
+  const tone = (o: Option) => (o === primary ? 'primary' : o === reject ? 'danger' : undefined);
   const [sheet, setSheet] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -285,9 +296,10 @@ export function DecisionControls({ card, onDecided }: { card: MeCard; onDecided:
   return (
     <>
       <div className="row decide">
-        {primary && <button className="primary" disabled={!!pending || !online} onClick={() => choose({ decision: primary.id, label: primary.label })}>{primary.label}</button>}
-        {reject && <button className="danger" disabled={!!pending || !online} onClick={() => choose({ decision: reject.id, label: reject.label })}>{reject.label}</button>}
-        <button disabled={!!pending || !online} onClick={() => setSheet(true)}>{primary ? 'More…' : 'Decide…'}</button>
+        {shown.map((o) => (
+          <button key={o.id} className={tone(o)} disabled={!!pending || !online} onClick={() => choose({ decision: o.id, label: o.label })}>{o.label}</button>
+        ))}
+        {(more || shown.length === 0) && <button disabled={!!pending || !online} onClick={() => setSheet(true)}>{shown.length ? 'More…' : 'Decide…'}</button>}
       </div>
       <OfflineNote />
       {error && <p className="error">{error}</p>}

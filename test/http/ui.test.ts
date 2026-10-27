@@ -127,6 +127,48 @@ describe('web brief', () => {
   });
 });
 
+describe('deciding on the brief', () => {
+  beforeEach(async () => {
+    const mail = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'mail' })}`;
+    await call('PUT', cardPath('mail:inbox:1'), { auth: mail, body: card('mail:inbox:1', {
+      producer: 'mail', title: 'Offsite on the 14th: are you in?', actions: ['archive', 'keep'],
+      body: '- **From:** Jonas\n\n> Can you confirm by Friday whether you join for both days?',
+    }) });
+  });
+
+  it('shows a decision’s body without a click, and marks it seen once it has been on screen', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Can you confirm by Friday');
+    expect(await page.$('xpath/.//button[.="Read"]')).toBeNull();
+    await until(async () => (await row('mail:inbox:1')).seenAt !== null);
+    expect(errors).toEqual([]);
+  });
+
+  it('puts a short list of options on the card as buttons, and decides with one tap behind the undo toast', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const article = (await page.$('xpath/.//article[.//h3[contains(., "Offsite on the 14th")]]'))!;
+    const buttons = await article.$$eval('.row.decide button', (bs) => bs.map((b) => b.textContent));
+    expect(buttons).toEqual(['archive', 'keep']); // no sheet: nothing for it to add
+    await (await article.$('xpath/.//button[.="archive"]'))!.click();
+    await page.waitForSelector('.toast');
+    await until(async () => (await row('mail:inbox:1')).state === 'decided');
+    expect((await row('mail:inbox:1')).decision).toBe('archive');
+    expect(errors).toEqual([]);
+  });
+
+  it('opens a diagram full-screen larger than its thumbnail', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const thumb = (await (await page.$('.thumb img'))!.boundingBox())!;
+    await page.click('.thumb img');
+    await page.waitForSelector('.viewer .stage img');
+    await page.waitForFunction(() => (document.querySelector('.viewer .stage img') as HTMLImageElement).style.width !== '');
+    await new Promise((r) => setTimeout(r, 200));
+    const full = (await (await page.$('.viewer .stage img'))!.boundingBox())!;
+    expect(full.width).toBeGreaterThan(thumb.width);
+    expect(errors).toEqual([]);
+  });
+});
+
 describe('web orders', () => {
   it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;

@@ -1,9 +1,9 @@
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cards } from '../../db/schema';
+import { cards, diagrams } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { card, cardPath } from './cards';
-import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
 let hermes: string;
 let owner: { auth: string; deviceId: string };
@@ -169,6 +169,17 @@ describe('POST /api/me/cards/{id}/snooze', () => {
     expect(await me('POST', `/api/me/cards/${id}/snooze`, { preset: 'tonight' })).toMatchObject({ status: 409, body: { id: 'hermes:gmail:1', state: 'decided' } });
     expect(await me('POST', `/api/me/cards/${id}/unsnooze`)).toMatchObject({ status: 409, body: { state: 'decided' } });
     expect(await me('POST', `/api/me/cards/${id}/snooze`, { until: null })).toMatchObject({ status: 409, body: { state: 'decided' } });
+  });
+});
+
+describe('GET /api/me/svg/{hash}', () => {
+  it('serves a diagram with the size its viewBox gives, so a viewer can start from it', async () => {
+    const hash = 'a'.repeat(64);
+    await testDb().insert(diagrams).values({ hash, type: 'gantt', svg: '<svg id="d" width="100%" viewBox="0 0 784 196" style="max-width: 784px;" xmlns="http://www.w3.org/2000/svg"><g/></svg>' }).onConflictDoNothing();
+    const r = await fetch(`${headUrl()}/api/me/svg/${hash}`);
+    const svg = await r.text();
+    expect(svg).toMatch(/^<svg width="784" height="196" id="d" viewBox="0 0 784 196"/);
+    expect(svg).not.toContain('width="100%"');
   });
 });
 

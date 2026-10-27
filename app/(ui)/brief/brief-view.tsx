@@ -118,12 +118,34 @@ export function BriefView() {
 }
 
 function DecisionItem({ card, isNew, onDecided, timezone }: { card: MeCard; isNew: boolean; onDecided: (c: MeCard) => void; timezone: string }) {
-  const [open, setOpen] = useState(false);
-  const expand = () => {
-    setOpen((o) => !o);
-    // Showing the body is presenting the card to its owner (§4.2 seen_at); listing the title is not.
-    if (!open && !card.seen_at) void api(`/api/me/cards/${encodeURIComponent(card.id)}/seen`, { method: 'POST' });
-  };
+  // The body is on the card: a decision is made on what it says (the proposed reply, the options). A long one
+  // is cut at CLAMP and opens with "Show all".
+  const body = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    const el = body.current;
+    if (el) setLong(el.scrollHeight > el.clientHeight + 4);
+  }, [card.rendered_html]);
+  // Presenting the body is what sets seen_at (§4.2): once half of it has been on screen for a second.
+  useEffect(() => {
+    const el = body.current;
+    if (!el || card.seen_at || typeof IntersectionObserver === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const seen = new IntersectionObserver(([e]) => {
+      clearTimeout(timer);
+      if (!e!.isIntersecting) return;
+      timer = setTimeout(() => {
+        seen.disconnect();
+        api(`/api/me/cards/${encodeURIComponent(card.id)}/seen`, { method: 'POST' }).catch(() => undefined);
+      }, 1000);
+    }, { threshold: 0.5 });
+    seen.observe(el);
+    return () => {
+      clearTimeout(timer);
+      seen.disconnect();
+    };
+  }, [card.id, card.seen_at]);
   return (
     <article className="card">
       <h3><Link href={cardHref(card.id)}>{card.title}</Link></h3>
@@ -131,9 +153,10 @@ function DecisionItem({ card, isNew, onDecided, timezone }: { card: MeCard; isNe
         <span>{card.producer}</span>·<span>{when(card.received_at, timezone)}</span>
         {isNew && <span className="badge new">new</span>}
       </div>
-      {card.first_visual && !open && <Thumb visual={card.first_visual} />}
-      {open ? <Rendered html={card.rendered_html} /> : null}
-      <button onClick={expand} style={{ marginTop: 8, minHeight: 32, padding: '2px 10px', fontSize: 14 }}>{open ? 'Hide' : 'Read'}</button>
+      <div ref={body} className={all ? 'decision-body' : 'decision-body clamp'}>
+        <Rendered html={card.rendered_html} />
+      </div>
+      {long && !all && <button className="link" onClick={() => setAll(true)}>Show all</button>}
       <DecisionControls card={card} onDecided={onDecided} />
     </article>
   );
