@@ -59,7 +59,9 @@ export const Visual = z.object({
 
 export const MeCard = Card.extend({
   rendered_html: z.string().describe('The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.'),
-  lead: z.string().describe('The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with.'),
+  lead: z.string().describe('The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.'),
+  lead_source: z.enum(['summary', 'body']).describe('Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown'),
+  rendered_lead: z.string().describe('The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.'),
   rendered_actions: z.record(z.string(), z.string()).optional().describe('Rendered bodies of choice options (§4.4), by action id'),
   first_visual: Visual.optional().describe('The first diagram or image in the body, for a thumbnail'),
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),

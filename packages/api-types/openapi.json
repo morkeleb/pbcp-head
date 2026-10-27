@@ -1343,6 +1343,10 @@
             "type": "string",
             "minLength": 1
           },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
           "body": {
             "type": "string"
           },
@@ -1576,6 +1580,10 @@
             "type": "string",
             "minLength": 1
           },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
           "body": {
             "type": "string"
           },
@@ -1741,7 +1749,19 @@
           },
           "lead": {
             "type": "string",
-            "description": "The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with."
+            "description": "The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none."
+          },
+          "lead_source": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "body"
+            ],
+            "description": "Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown"
+          },
+          "rendered_lead": {
+            "type": "string",
+            "description": "The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself."
           },
           "rendered_actions": {
             "description": "Rendered bodies of choice options (§4.4), by action id",
@@ -1780,7 +1800,9 @@
           "changed_at",
           "delivery",
           "rendered_html",
-          "lead"
+          "lead",
+          "lead_source",
+          "rendered_lead"
         ],
         "additionalProperties": {}
       },
@@ -2153,6 +2175,10 @@
             "type": "string",
             "minLength": 1
           },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
           "body": {
             "type": "string"
           },
@@ -2318,7 +2344,19 @@
           },
           "lead": {
             "type": "string",
-            "description": "The card’s lead as plain text, shown on the card with its actions before any gesture: the producer’s `summary` when it has one, else the body’s first paragraph (cut at about 200 characters). Empty when the body has no text to lead with."
+            "description": "The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none."
+          },
+          "lead_source": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "body"
+            ],
+            "description": "Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown"
+          },
+          "rendered_lead": {
+            "type": "string",
+            "description": "The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself."
           },
           "rendered_actions": {
             "description": "Rendered bodies of choice options (§4.4), by action id",
@@ -2382,6 +2420,8 @@
           "delivery",
           "rendered_html",
           "lead",
+          "lead_source",
+          "rendered_lead",
           "progress"
         ],
         "additionalProperties": {}
