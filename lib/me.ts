@@ -33,8 +33,6 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       const r = await renderCard(db, row.headId, card);
       ({ html, actions, meta } = r);
     }
-    // TODO(pbcp-0.4): @pbcp/core 0.4 makes the clamped urgency a head-owned `delivery` field; once
-    // toCard emits it from cards.urgency this representation carries it without change here.
     out.push({
       ...card,
       rendered_html: html,
@@ -109,7 +107,7 @@ export async function brief(db: Db, headId: string) {
         eq(cards.headId, headId),
         eq(cards.state, 'open'),
         sql`${cards.producerDoc}->>'kind' in ('artifact', 'signal')`,
-        inArray(cards.urgency, ['brief', 'immediate']),
+        inArray(cards.delivery, ['brief', 'immediate']),
         ne(cards.producer, 'head'),
         gte(cards.receivedAt, start),
         notSnoozed(at),
@@ -145,7 +143,7 @@ export async function brief(db: Db, headId: string) {
         received_at: iso(r.receivedAt),
         ...(r.acknowledgedAt ? { acknowledged_at: iso(r.acknowledgedAt) } : {}),
       })),
-      immediate: rows.some((r) => r.urgency === 'immediate'),
+      immediate: rows.some((r) => r.delivery === 'immediate'),
       order: newest.changeSeq,
     });
   }

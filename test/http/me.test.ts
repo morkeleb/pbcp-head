@@ -151,7 +151,7 @@ describe('producers and devices', () => {
     expect((await me('PATCH', '/api/me/producers/hermes', { ceiling: 'log' })).body.ceiling).toBe('log');
     await put('hermes:gmail:2', { urgency: 'immediate' });
     const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'hermes:gmail:2')));
-    expect(row!.urgency).toBe('log');
+    expect(row).toMatchObject({ urgency: 'immediate', delivery: 'log' });
     expect((await me('PATCH', '/api/me/producers/hermes', { revoked: true })).body.revoked).toBe(true);
     expect((await put('hermes:gmail:3')).status).toBe(401);
     expect((await me('PATCH', '/api/me/producers/nobody', { ceiling: 'log' })).status).toBe(404);

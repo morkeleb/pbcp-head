@@ -63,11 +63,8 @@ export async function snoozeUntil(db: Db, headId: string, body: { until?: unknow
 /**
  * PATCH /api/me/producers/{root} { ceiling?, revoked? }: sets the ceiling on every live token of the root
  * (§9: the person sets a per-producer ceiling), or revokes them all (§12: revoking is how to silence a
- * producer). A ceiling applies to cards received from now on; stored cards keep the urgency they were
- * clamped to on receipt.
- *
- * TODO(pbcp-0.4): when 0.4 makes the clamped urgency the head-owned `delivery` field, decide whether a
- * changed ceiling re-clamps open cards (each would then take a new change_seq).
+ * producer). A ceiling applies to content stored from now on: §9 (0.4) says changing a ceiling does not
+ * revisit stored cards, so their `delivery` stays as it was clamped.
  */
 export async function updateProducer(db: Db, headId: string, root: string, body: { ceiling?: unknown; revoked?: unknown }) {
   const live = and(eq(producerTokens.headId, headId), eq(producerTokens.root, root), isNull(producerTokens.revokedAt));

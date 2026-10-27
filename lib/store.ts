@@ -11,10 +11,8 @@ import { iso } from './clock';
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Row = typeof cards.$inferSelect;
 
-/** A stored card with the head-side state that is not part of the protocol representation. */
 export interface Stored {
   card: Card;
-  urgency: string;
 }
 
 /** One transaction per protocol operation (CLAUDE.md): counter, card writes and decision log, all or nothing. */
@@ -38,12 +36,10 @@ export async function nextSeq(tx: Tx, headId: string): Promise<number> {
 
 export async function load(tx: Tx | Db, headId: string, id: string): Promise<Stored | null> {
   const [row] = await tx.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
-  return row ? { card: toCard(row), urgency: row.urgency } : null;
+  return row ? { card: toCard(row) } : null;
 }
 
 export interface PersistOptions {
-  /** Delivery urgency after the ceiling; required when the card is new. */
-  urgency?: string;
   /** Freeze this producer document as the version decided on (§4.4). */
   decidedDoc?: ProducerCard;
 }
@@ -62,13 +58,11 @@ export async function persist(tx: Tx, headId: string, card: Card, opts: PersistO
     .set({
       producerDoc: producerPart(stored),
       ...head,
-      ...(opts.urgency !== undefined ? { urgency: opts.urgency } : {}),
       ...(opts.decidedDoc !== undefined ? { decidedDoc: opts.decidedDoc } : {}),
     })
     .where(and(eq(cards.headId, headId), eq(cards.id, stored.id)))
     .returning({ id: cards.id });
   if (updated.length === 0) {
-    if (opts.urgency === undefined) throw new Error(`a new card needs its delivery urgency: ${stored.id}`);
     const id = parseId(stored.id)!;
     await tx.insert(cards).values({
       headId,
@@ -76,7 +70,6 @@ export async function persist(tx: Tx, headId: string, card: Card, opts: PersistO
       producer: id.producer,
       namespace: id.namespace,
       producerDoc: producerPart(stored),
-      urgency: opts.urgency,
       ...head,
       decidedDoc: opts.decidedDoc ?? null,
     });
@@ -91,6 +84,8 @@ const date = (s: string | undefined): Date | null => (s === undefined ? null : n
 function headColumns(c: Card) {
   return {
     state: c.state,
+    urgency: c.urgency ?? null,
+    delivery: c.delivery,
     changeSeq: c.change_seq,
     receivedAt: new Date(c.received_at),
     changedAt: new Date(c.changed_at),
@@ -105,11 +100,7 @@ function headColumns(c: Card) {
   };
 }
 
-/**
- * The protocol representation: producer fields as accepted, then the head-owned fields that are set. Unset fields are absent, never null.
- * TODO(pbcp-0.4): emit `delivery` (from cards.urgency) here once it is a head-owned field in @pbcp/core;
- * headColumns() then reads it back from the card instead of from PersistOptions.urgency.
- */
+/** The protocol representation: producer fields as accepted, then the head-owned fields that are set. Unset fields are absent, never null. */
 export function toCard(row: Row): Card {
   const out: Record<string, unknown> = {
     ...(row.producerDoc as ProducerCard),
@@ -117,6 +108,7 @@ export function toCard(row: Row): Card {
     change_seq: row.changeSeq,
     received_at: iso(row.receivedAt),
     changed_at: iso(row.changedAt),
+    delivery: row.delivery,
   };
   const optional: Record<string, unknown> = {
     seen_at: row.seenAt && iso(row.seenAt),

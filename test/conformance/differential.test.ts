@@ -27,9 +27,11 @@ function recording(h: HeadUnderTest, log: Call[]): HeadUnderTest {
   return {
     reset: () => h.reset(),
     token: (root, o) => h.token(root, o),
+    describe: (t) => rec('describe', null)(h.describe(t)),
     put: (t, c) => rec('put', cardId(c))(h.put(t, c)),
     changes: (t, after) => rec('changes', after)(h.changes(t, after)),
     decide: (id, d) => rec('decide', { id, ...d })(h.decide(id, d)),
+    decideWithToken: (t, id, d) => rec('decideWithToken', { id, ...d })(h.decideWithToken(t, id, d)),
     seen: (id) => rec('seen', id)(h.seen(id)),
     acknowledge: (id) => rec('acknowledge', id)(h.acknowledge(id)),
     clock: {

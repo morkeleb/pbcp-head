@@ -20,18 +20,6 @@ export interface Outcome {
 
 // --- submit (§7.1) ----------------------------------------------------------
 
-const URGENCY_ORDER: readonly Urgency[] = ['log', 'brief', 'immediate'];
-
-/**
- * §9: the card's urgency clamped to the producer's ceiling. The stored producer document keeps the original (§4.1).
- * TODO(pbcp-0.4): 0.4 names the result the head-owned `delivery` field; if @pbcp/core then clamps inside
- * submit(), this function and the urgency argument to persist() below go, and cards.urgency is renamed.
- */
-export function clampUrgency(requested: Urgency | undefined, ceiling: Urgency): Urgency {
-  const r = requested ?? 'brief';
-  return URGENCY_ORDER.indexOf(r) > URGENCY_ORDER.indexOf(ceiling) ? ceiling : r;
-}
-
 /** Bytes of the card's JSON wire form (§3.1 "Size"); whitespace in the request does not count against it. */
 function wireBytes(raw: string): number {
   const bytes = Buffer.byteLength(raw, 'utf8');
@@ -62,11 +50,11 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
   return writeTx(db, ctx.headId, async (tx) => {
     const stored = await load(tx, ctx.headId, incoming.id);
     const target = incoming.supersedes === undefined ? null : await load(tx, ctx.headId, incoming.supersedes);
-    const r = submit(stored?.card ?? null, incoming, now(), target?.card ?? null);
+    // §9: core clamps the stored content's `delivery` to the producer's ceiling; `urgency` stays as sent.
+    const r = submit(stored?.card ?? null, incoming, now(), target?.card ?? null, ctx.ceiling);
     let card = r.card;
     for (const c of r.changed) {
-      const urgency = c.id === incoming.id ? clampUrgency(incoming.urgency, ctx.ceiling) : (target as Stored).urgency;
-      const saved = await persist(tx, ctx.headId, c, { urgency });
+      const saved = await persist(tx, ctx.headId, c);
       if (c.id === incoming.id) card = saved;
     }
     return { status: r.status, card };
@@ -106,12 +94,11 @@ export async function syncChanges(db: Db, ctx: { headId: string; root: string },
   );
 }
 
-/** The `after` query parameter: absent means 0; anything but a non-negative integer is a 400. */
+/** The `after` query parameter (§7.2): absent means 0; anything but a non-negative integer is 400 invalid_cursor. */
 export function parseAfter(value: string | null): number {
   if (value === null || value === '') return 0;
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
-    // §7.4 has no code for a malformed sync cursor; invalid_card is the nearest 400 code.
-    throw new PbcpError('invalid_card', 'after must be a non-negative integer change_seq');
+    throw new PbcpError('invalid_cursor', 'after must be a non-negative integer change_seq');
   }
   return Number(value);
 }
@@ -181,6 +168,7 @@ async function ownerUpdate(db: Db, ctx: OwnerContext, id: string, op: (c: Card) 
  * it again with null. Like seen and ack it is a change to a head-owned field, so the card takes a fresh
  * change_seq and producers see it through sync (§4.2). @pbcp/core 0.3 has no snooze transition; this mirrors
  * markSeen: a decided or superseded card is not snoozed and comes back as 409 with the stored card.
+ * (@pbcp/core 0.4 still has no snooze(); this stays the head's mirror until the core grows one.)
  */
 export async function snoozeCard(db: Db, ctx: OwnerContext, id: string, until: string | null): Promise<Outcome> {
   return writeTx(db, ctx.headId, async (tx) => {

@@ -41,7 +41,8 @@ export const cards = pgTable(
     producer: text('producer').notNull(), // denormalised from the id's root
     namespace: text('namespace').notNull(), // the id's second segment
     producerDoc: jsonb('producer_doc').notNull(), // the ProducerCard exactly as accepted; equality is computed on this
-    urgency: text('urgency').notNull(), // the card's urgency clamped to its token's ceiling at receipt (§9); producer_doc keeps what was sent
+    urgency: text('urgency'), // the producer's urgency as sent (null when absent), denormalised from producer_doc
+    delivery: text('delivery').notNull(), // §4.2, §9: urgency clamped to the producer's ceiling when the content was stored
     state: text('state').notNull(), // open | decided | superseded
     changeSeq: bigint('change_seq', { mode: 'number' }).notNull(),
     receivedAt: tstz('received_at').notNull(),
