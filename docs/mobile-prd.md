@@ -16,10 +16,21 @@ Four screens, and a deliberate list of what the phone does not do.
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
-| **Brief** | The nightly `head:daily` card at the top (or the same fold, live, "so far today"); below it, open decisions newest first, each with its lead, proposal and actions on the card; then today's artifacts and signals folded by thread, each with its lead | Tap an action, swipe, pull to refresh; marks the last-visit cursor on close |
+| **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow below), each opening with its paragraph; open decisions, then artifacts (Updates) and signals folded by thread. Built from the four components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
 | **Card** | One card in full: markdown body, `mermaid` rendered, source link, thread history collapsed below | Decide, snooze, open source, see thread |
 | **Day** | Any date: every card received that day with its decision, in order — the decision log as a timeline | Scroll, jump to date, open a card |
 | **Orders** | Open orders with `exec_state`, grouped by executor; progress cards inline | Dictate a new order (text or voice); cancel |
+
+**The four components.** The web brief (`app/(ui)/brief/`) is the reference the phone matches. It is made of four self-contained components, each typed from the `/api/me` card shape (`packages/api-types`); the app builds the same four, under the same names, with the same tokens (`app/globals.css`: Newsreader for the masthead, day headings and card titles, Inter for everything else, one violet accent, hairline rules, no shadows):
+
+| Component | Shows | Does |
+| --- | --- | --- |
+| `DecisionCard` | Producer · time (an accent dot while unseen) and a menu (snooze, open source, delegate); title; `rendered_lead`; the proposal in an inset; the rest behind "More"; the actions in order (the default the only filled button, none filled without one), Dismiss as quiet text, Edit… only when `edit` is offered, a comment behind a disclosure; options with a body as a radio group | Decides on a tap at once (the buttons become "Approved · 09:14"); on a swipe or a key after a 4 s undo; sets `seen_at` when "More" opens. Ledger density folds it to one line |
+| `UpdateRow` | An artifact or signal thread: kind icon · producer · time, title, `rendered_lead`, the first visual fitted to the row, older cards folded to one line | Acknowledges the thread (the control becomes "Acknowledged · 09:14") |
+| `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists) and the day's paragraph: its decisions' leads, then one sentence of yesterday's, each linked (`daily_paragraph`) | — |
+| `WeekStrip` | Seven days, the selected one filled, a dot under days with open decisions | Jumps the timeline to a day |
+
+Under 900 px the brief is a timeline with a rail of times; from 900 px a broadsheet with decisions on the left (60 %) and updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.
 
 **Visuals** (RFC §3.1 Presentation). Diagrams and images in a card are thumbnails fitted to the card width, captioned, in reading order; the Brief shows at most the first visual of a folded card. Tap opens a full-screen viewer with pinch-zoom and pan on the cached SVG or image at native size, a share action, and the fence source behind a disclosure. The viewer is the same component for mermaid output and for producer images, so there is one zoom experience to get right.
 
@@ -39,7 +50,7 @@ The RFC's decision semantics map one to one onto touch, and the mapping is the p
 | Tap "Dismiss" | `dismissed` | At once | §4.3 |
 | "Add a comment" (a disclosure, never a required field) | `comment` alongside the decision | With it | §4.2, §4.5 |
 | Swipe right | The `default` option; `approve` when `actions` is a plain list with `approve`. Nothing when there is no default | After a 4 s undo window | §4.4 |
-| Swipe left | `reject` when offered; otherwise nothing | After a 4 s undo window | §4.3 |
+| Swipe left | `dismissed`, on every decision card; never `reject`, which is a producer action and taken by tapping it | After a 4 s undo window | §4.3, §4.5 |
 | Tap the title | Opens the card | — | — |
 | Long-press | Snooze picker: tonight, tomorrow's brief, next week | At once | `snoozed_until`, not a state |
 

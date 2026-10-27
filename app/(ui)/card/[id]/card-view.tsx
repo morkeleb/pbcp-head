@@ -65,8 +65,8 @@ export function CardView() {
   const stale = useCallback(() => void load(true), [load]);
   useFresh(path, fresh, stale);
 
-  if (status) return <main><p className="error">{status}</p></main>;
-  if (!detail) return <main><p className="muted">Loading…</p></main>;
+  if (status) return <main className="legacy"><p className="error">{status}</p></main>;
+  if (!detail) return <main className="legacy"><p className="muted">Loading…</p></main>;
   const { card, timezone } = detail;
   const update = (c: Partial<MeCard>) => setDetail((d) => d && { ...d, card: { ...d.card, ...c } });
   const post = async (action: string, body?: unknown) => {
@@ -81,7 +81,7 @@ export function CardView() {
   };
 
   return (
-    <main>
+    <main className="legacy">
       <div className="meta" style={{ marginTop: 8 }}>
         <span>{card.producer}</span>·<span>{card.kind}</span>·<span>{when(card.received_at, timezone)}</span>
         <span className="badge">{card.state}</span>

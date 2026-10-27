@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { api, loadTokens, OFFLINE_REASON, OfflineError, saveTokens, useOnline, when } from './client';
 
@@ -55,7 +56,11 @@ export interface MeCard {
 /** "as of <time>": shown when what is on screen came from the service worker's cache, not the network. */
 export function AsOf({ at, timezone }: { at?: string | null; timezone?: string }) {
   if (!at) return null;
-  return <span className="badge as-of" title="Shown from this device’s copy; it updates when the network answers">as of {when(at, timezone)}</span>;
+  return (
+    <span className="badge as-of rounded-full border border-dashed px-2 text-meta text-muted-foreground" title="Shown from this device’s copy; it updates when the network answers">
+      as of {when(at, timezone)}
+    </span>
+  );
 }
 
 /** Why the controls below it are disabled. Renders nothing while online. */
@@ -65,18 +70,24 @@ export function OfflineNote() {
   return <p className="muted offline" role="status">{OFFLINE_REASON}</p>;
 }
 
+/** Why a card's controls are disabled offline, in one line (the controls themselves say the rest). */
+export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection, and nothing is saved to send later.';
+
 /** What a write that was not sent says: nothing is queued. */
 export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send later; do it again when you’re back online.';
 
 // --- navigation ----------------------------------------------------------------------
 
 export function Nav() {
+  // The brief has its own masthead (app/(ui)/brief/masthead.tsx), which leads to the other pages.
+  const path = usePathname();
   const today = new Date().toISOString().slice(0, 10);
   const signOut = async () => {
     if (loadTokens()) await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     saveTokens(null);
     location.href = '/signin';
   };
+  if (path === '/brief') return null;
   return (
     <nav className="top">
       <Link href="/brief">Brief</Link>
@@ -263,7 +274,7 @@ export function Announcer() {
 const PROPOSAL = /^propos(al|ed)/i;
 
 interface BodyParts {
-  /** The first H2 beginning "Proposal" or "Proposed" and what follows, to the next H1 or H2. */
+  /** The first heading, at any level, beginning "Proposal" or "Proposed" (any case) and what follows, to the next heading of the same or a higher level (§4.5). */
   proposal: string;
   /** Everything else, in order, without the paragraph that is already the lead. */
   rest: string;
@@ -275,14 +286,14 @@ interface BodyParts {
  * block after any headings, rules and diagrams (§3.1), when that block is a paragraph. Runs in the browser only, on
  * HTML the head rendered: it re-serialises those nodes and renders nothing of its own.
  */
-function splitBody(html: string, leadFromBody: boolean): BodyParts {
+export function splitBody(html: string, leadFromBody: boolean): BodyParts {
   const t = document.createElement('template');
   t.innerHTML = html;
   const nodes = [...t.content.childNodes].filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()));
   const tag = (n: Node) => (n instanceof HTMLElement ? n.tagName : '');
   const level = (n: Node) => (/^H[1-6]$/.test(tag(n)) ? Number(tag(n)[1]) : 0);
-  const from = nodes.findIndex((n) => tag(n) === 'H2' && PROPOSAL.test(n.textContent?.trim() ?? ''));
-  let to = from < 0 ? -1 : nodes.findIndex((n, j) => j > from && level(n) > 0 && level(n) <= 2);
+  const from = nodes.findIndex((n) => level(n) > 0 && PROPOSAL.test(n.textContent?.trim() ?? ''));
+  let to = from < 0 ? -1 : nodes.findIndex((n, j) => j > from && level(n) > 0 && level(n) <= level(nodes[from]!));
   if (from >= 0 && to < 0) to = nodes.length;
   const inProposal = (i: number) => from >= 0 && i >= from && i < to;
   // §3.1 step 1 skips headings, thematic breaks and fences (drawn diagrams, code, collapsed fences).
@@ -410,14 +421,14 @@ export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
 // --- deciding (§4.3, §4.4) ------------------------------------------------------------------
 
-interface Option {
+export interface Option {
   id: string;
   label: string;
   isDefault: boolean;
   hasBody: boolean;
 }
 
-function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Option | null } {
+export function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Option | null } {
   const actions = card.actions ?? ['approve', 'reject'];
   const list = actions
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
@@ -430,11 +441,14 @@ function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Opti
   return { list, edit, byDefault };
 }
 
-/** What a swipe chooses (docs/mobile-prd.md): right the default, left `reject` when offered; otherwise nothing. */
+/**
+ * What a swipe chooses (docs/mobile-prd.md): right the default, nothing without one; left `dismissed`, which every
+ * decision card offers (§4.5). Never `reject`: that is one of the producer's actions, chosen by tapping it.
+ */
 export function swipeChoice(card: MeCard, direction: 'left' | 'right'): { decision: string; label: string } | null {
-  const { list, byDefault } = options(card);
-  const o = direction === 'right' ? byDefault : list.find((x) => x.id === 'reject');
-  return o ? { decision: o.id, label: o.label } : null;
+  if (direction === 'left') return { decision: 'dismissed', label: 'Dismiss' };
+  const { byDefault } = options(card);
+  return byDefault ? { decision: byDefault.id, label: byDefault.label } : null;
 }
 
 /** Lets a swipe on the card commit through the controls' own path (their comment included). */
@@ -449,7 +463,41 @@ export function decisionLabel(card: MeCard): string {
   return list.find((o) => o.id === card.decision)?.label ?? named[card.decision ?? ''] ?? card.decision ?? '';
 }
 
-type DecisionBody = { decision: string; edited_proposal?: string; comment?: string };
+export type DecisionBody = { decision: string; edited_proposal?: string; comment?: string };
+
+/**
+ * Records a decision (§7.3) the way every surface does: the card changes at once (optimistic), the head is asked,
+ * and a refusal or a lost connection puts the card back with the error. Nothing is queued.
+ */
+export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
+  const [error, setError] = useState<string | null>(null);
+  const decide = async (body: DecisionBody) => {
+    const before = card;
+    const optimistic: MeCard = { ...card, ...body, state: 'decided', decided_at: new Date().toISOString() };
+    setError(null);
+    onChange(optimistic);
+    announce(`${decidedLine(optimistic)}. ${card.title}`);
+    const failed = (message: string) => {
+      onChange(before);
+      setError(message);
+      announce(`Not recorded: ${message}`);
+    };
+    try {
+      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
+      if (r.status === 200 || r.status === 409) onChange({ ...before, ...r.body });
+      else failed(r.body?.message ?? `the head answered ${r.status}`);
+    } catch (e) {
+      failed(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
+    }
+  };
+  return { decide, error };
+}
+
+/** "Approved", "Rejected", "Dismissed", "Edited", or the option's label: what the state line says was decided. */
+export function decidedLine(card: MeCard): string {
+  const past: Record<string, string> = { approve: 'Approved', reject: 'Rejected', dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated' };
+  return past[card.decision ?? ''] ?? decisionLabel(card);
+}
 
 /**
  * The card's actions, on the card (§4.4, §4.5): a row of buttons in the producer's order, filled primary only
@@ -466,29 +514,8 @@ export function DecisionControls({ card, onChange, showDecided = false, handle }
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState('');
   const [comment, setComment] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const decide = async (d: DecisionBody) => {
-    const before = card;
-    const body = comment.trim() ? { ...d, comment: comment.trim() } : d;
-    const optimistic: MeCard = { ...card, ...body, state: 'decided', decided_at: new Date().toISOString() };
-    setError(null);
-    onChange(optimistic);
-    announce(`Decided: ${decisionLabel(optimistic)}. ${card.title}`);
-    const failed = (message: string) => {
-      onChange(before);
-      setError(message);
-      announce(`Not recorded: ${message}`);
-    };
-    try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
-      if (r.status === 200 || r.status === 409) onChange({ ...before, ...r.body });
-      else failed(r.body?.message ?? `the head answered ${r.status}`);
-    } catch (e) {
-      if (!(e instanceof OfflineError)) failed(e instanceof Error ? e.message : 'the request failed');
-      else failed(NOT_SENT);
-    }
-  };
+  const { decide: post, error } = useDecide(card, onChange);
+  const decide = (d: DecisionBody) => post(comment.trim() ? { ...d, comment: comment.trim() } : d);
 
   useEffect(() => {
     if (!handle) return;

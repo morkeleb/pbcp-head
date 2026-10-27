@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
+import { editorialFont, interfaceFont } from '../lib/fonts';
 import './globals.css';
 import { THEME_COLOR } from './manifest';
 import { ServiceWorker } from './service-worker';
@@ -18,9 +20,19 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: THEME_COLOR };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+/**
+ * The theme before first paint: the device's saved choice (masthead toggle, `pbcp.theme`), else the system's. Inline,
+ * with this request's CSP nonce, so a dark page never flashes light.
+ */
+const THEME = `try{var t=localStorage.getItem('pbcp.theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
-    <html lang="en">
+    <html lang="en" className={`${interfaceFont.variable} ${editorialFont.variable}`} suppressHydrationWarning>
+      <head>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME }} />
+      </head>
       <body>
         {children}
         <ServiceWorker />

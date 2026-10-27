@@ -1,7 +1,9 @@
 import type { Card } from '@pbcp/core';
 import { parseCard } from '@pbcp/core';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
-import { escapeMarkdown, foldDaily } from '../lib/brief/fold';
+import { dailyParagraph, escapeMarkdown, foldDaily } from '../lib/brief/fold';
 
 let seq = 0;
 function stored(id: string, extra: Partial<Card> = {}): Card {
@@ -32,51 +34,74 @@ describe('the nightly fold', () => {
     ],
   };
 
+  const fold = (i = input) => foldDaily(i)!;
+  const entries = (body: string) => body.split('\n').filter((l) => l.startsWith('- '));
+
   it('is a valid artifact card under head:daily, brief urgency, referencing the open decisions', () => {
-    const card = foldDaily(input);
+    const card = fold();
     expect(parseCard(card).ok).toBe(true);
     expect(card).toMatchObject({ id: 'head:daily:2026-10-07', kind: 'artifact', urgency: 'brief', producer: 'head', thread: 'daily', title: 'Brief for Wednesday 7 October', references: ['hermes:gmail:1', 'goalpath:item:9'] });
+    expect(card).not.toHaveProperty('summary'); // its lead is its opening paragraph
   });
 
-  it('lists every open decision as "title — lead", linked: a summary as text, a body lead as inline markdown', () => {
-    const { body } = foldDaily(input);
-    const lines = body.split('\n');
-    // The body lead is core's leadOf (§3.1): the first paragraph after the heading, its markdown kept.
+  it('opens with the daily paragraph: the decisions’ leads, then one sentence of yesterday’s, each linked, nothing else', () => {
+    const [paragraph] = fold().body.split('\n');
+    expect(paragraph).toMatch(
+      /^2 decisions: \[Anna asks whether the invoice can wait until the \*\*20th\*\*\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\); \[GP\\-9 is finished; accept it\?\]\(<https:\/\/head\.example\/card\/goalpath%3Aitem%3A9>\)\. Yesterday: \[/,
+    );
+    expect(paragraph).toMatch(/\.$/);
+    expect(paragraph).toContain('[The reply went out at 09:12](<https://head.example/card/hermes%3Agmail%3Ab>)');
+    // A lead's own links are unwrapped inside the paragraph, where the lead is already a link.
+    const withLink = fold({ ...input, yesterday: [stored('cal:x:1', { body: 'Moved to [Room 3](https://rooms.example/3) at 10.' })] });
+    expect(withLink.body.split('\n')[0]).toContain('Yesterday: [Moved to Room 3 at 10](<https://head.example/card/cal%3Ax%3A1>).');
+  });
+
+  it('then lists every open decision as "title — lead", linked: a summary as text, a body lead as inline markdown', () => {
+    const lines = entries(fold().body);
     expect(lines[0]).toBe('- [Reply to Anna re \\[invoice\\]\\(https://evil\\.example\\)](<https://head.example/card/hermes%3Agmail%3A1>) — Anna asks whether the invoice can wait until the **20th**.');
-    // The summary is the lead when there is one: plain text, so escaped.
     expect(lines[1]).toBe('- [Title goalpath:item:9](<https://head.example/card/goalpath%3Aitem%3A9>) (snoozed) — GP\\-9 is finished; accept it?');
     const many = Array.from({ length: 70 }, (_, i) => stored(`hermes:gmail:m${i}`, { kind: 'decision' }));
-    expect(foldDaily({ ...input, openDecisions: many }).body.split('\n').filter((l) => l.startsWith('- [Title hermes:gmail:m'))).toHaveLength(70); // every one
+    expect(entries(fold({ ...input, openDecisions: many }).body).filter((l) => l.startsWith('- [Title hermes:gmail:m'))).toHaveLength(70); // every one
   });
 
   it('then the previous day’s threads by their newest card’s lead', () => {
-    const { body } = foldDaily(input);
+    const { body } = fold();
     expect(body).toContain('**Yesterday**');
     expect(body).toContain('- [Sent](<https://head.example/card/hermes%3Agmail%3Ab>) (2 in thread) — The reply went out at 09:12.');
-    // A body whose first line is a list item: core's lead is that line, kept inline rather than becoming a list.
-    expect(body).toContain('— \\- **From:** Jonas');
-    // A summary over 280 characters is cut, at a word, with an ellipsis.
-    const cut = body.split('\n').find((l) => l.includes('mail%3Ainbox%3A7'))!.split(' — ')[1]!;
+    expect(body).toContain('— \\- **From:** Jonas'); // a list-item lead stays inline
+    const cut = entries(body).find((l) => l.includes('mail%3Ainbox%3A7'))!.split(' — ')[1]!;
     expect(cut.length).toBeLessThanOrEqual(280 + 10);
     expect(cut).toMatch(/…$/);
   });
 
   it('ends with the counts on one line, and draws no chart', () => {
-    const { body } = foldDaily(input);
+    const { body } = fold();
     expect(body.trimEnd().split('\n').at(-1)).toBe('2 open decisions · 5 cards yesterday from 3 producers');
-    expect(foldDaily(input)).toMatchObject({ summary: '2 open decisions · 5 cards yesterday from 3 producers' }); // its lead
     expect(body).not.toContain('```mermaid');
-    expect(body).not.toContain('| --- |');
   });
 
   it('escapes producer titles so they cannot add links or images', () => {
     expect(escapeMarkdown('![x](y) <b>')).toBe('\\!\\[x\\]\\(y\\) \\<b\\>');
   });
 
-  it('says so when the day was quiet', () => {
-    const { body } = foldDaily({ ...input, openDecisions: [], yesterday: [] });
-    expect(body.split('\n')[0]).toBe('Nothing is waiting for you.');
-    expect(body).toContain('No cards arrived yesterday.');
-    expect(body).toContain('0 open decisions · 0 cards yesterday from 0 producers');
+  it('keeps every lead in the paragraph a well-formed link, however the lead ends', () => {
+    const ends = ['Ends with a stop.', 'Ends with a colon:', 'Ends (with a bracket)', 'Ends with \\'].map((summary, i) => stored(`mail:x:${i}`, { kind: 'decision', summary } as Partial<Card>));
+    const [paragraph] = fold({ ...input, openDecisions: ends }).body.split('\n');
+    // What a markdown parser finds: one link per lead, each to its card (4 decisions + yesterday's 4 threads).
+    const links: string[] = [];
+    const walk = (n: { type: string; url?: string; children?: unknown[] }) => {
+      if (n.type === 'link') links.push(n.url!);
+      for (const c of (n.children ?? []) as Array<typeof n>) walk(c);
+    };
+    walk(unified().use(remarkParse).parse(paragraph!) as never);
+    expect(links).toHaveLength(8);
+    expect(links.every((u) => u.startsWith('https://head.example/card/'))).toBe(true);
+  });
+
+  it('mints nothing on a day with nothing open and nothing new; says only what there is otherwise', () => {
+    expect(foldDaily({ ...input, openDecisions: [], yesterday: [] })).toBeNull();
+    expect(dailyParagraph({ decisions: [], threads: [] }, input.cardUrl)).toBe('');
+    const quiet = fold({ ...input, openDecisions: [] });
+    expect(quiet.body.split('\n')[0]).toMatch(/^Yesterday: /);
   });
 });

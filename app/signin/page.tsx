@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ enroll?: string }> }) {
   const { enroll } = await searchParams;
   return (
-    <main style={{ maxWidth: 420, margin: '15vh auto', padding: '0 16px', fontFamily: 'system-ui, sans-serif' }}>
+    <main className="legacy" style={{ maxWidth: 420, margin: '15vh auto', padding: '0 16px' }}>
       <h1 style={{ fontSize: 22 }}>Sign in</h1>
       <SignIn enroll={enroll ?? null} apple={appleConfigured()} />
     </main>

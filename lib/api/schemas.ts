@@ -112,6 +112,16 @@ export const Brief = z.object({
   seq: Seq.describe('The head’s change counter now; post it to /api/me/visit when the owner leaves'),
   last_visit: LastVisit,
   daily: MeCard.nullable().describe('The latest `head:daily` card'),
+  daily_paragraph: z
+    .object({
+      html: z.string().describe('Safe inline HTML: "N decisions: <lead>; …. Yesterday: <lead>; …." with each lead linked to its card (RFC 0.6 §8)'),
+      so_far: z.boolean().describe('True until today’s `head:daily` card exists: the same fold, made now'),
+    })
+    .nullable()
+    .describe('The paragraph today opens with; null when nothing is open and nothing arrived yesterday'),
+  tomorrow: z
+    .object({ date: z.string().describe('YYYY-MM-DD in `timezone`'), cards: z.array(MeCard).describe('Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)') })
+    .describe('What is already set for tomorrow'),
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
   threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
   snoozed: z.number().int().nonnegative(),
