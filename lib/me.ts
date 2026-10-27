@@ -8,6 +8,7 @@ import type { Db } from '../db/client';
 import { cards, changeCounter, devices, heads, producerTokens } from '../db/schema';
 import { iso, now } from './clock';
 import { HttpError } from './http';
+import { expireDueOrders } from './orders';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { toCard } from './store';
@@ -17,6 +18,8 @@ type Row = typeof cards.$inferSelect;
 
 export type MeCard = Card & {
   rendered_html: string;
+  /** On an order's outcome card (A.3): whether it moved the order, or came late or from an old lease. */
+  order_outcome?: 'applied' | 'stale';
   rendered_actions?: Record<string, string>;
   first_visual?: Visual;
 };
@@ -38,9 +41,45 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       rendered_html: html,
       ...(actions && Object.keys(actions).length > 0 ? { rendered_actions: actions } : {}),
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
+      ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
     });
   }
   return out;
+}
+
+export async function rowsFor(db: Db, headId: string, ids: string[]): Promise<Row[]> {
+  return [...(await rowsById(db, headId, ids)).values()];
+}
+
+const isOrderId = (id: string | undefined) => id !== undefined && id.startsWith('head:order:');
+
+/**
+ * An order's thread (A.3): the cards executors post under their own namespace with `thread` set to the order
+ * id: progress signals and the outcome. Unlike a producer's thread it spans producers.
+ */
+async function orderThread(db: Db, headId: string, orderId: string): Promise<Row[]> {
+  return db
+    .select()
+    .from(cards)
+    .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' = ${orderId}`))
+    .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
+    .limit(200);
+}
+
+/** /api/me/orders: each order with its progress folded: a count, and the latest card in full. */
+export async function orderProgress(db: Db, headId: string, orders: Card[]) {
+  const rows = await rowsFor(db, headId, orders.map((o) => o.id));
+  const presented = new Map((await presentCards(db, rows)).map((c) => [c.id, c]));
+  return Promise.all(
+    orders.map(async (o) => {
+      const thread = await orderThread(db, headId, o.id);
+      const latest = thread.at(-1);
+      return {
+        ...presented.get(o.id)!,
+        progress: { count: thread.length, latest: latest ? (await presentCards(db, [latest]))[0]! : null },
+      };
+    }),
+  );
 }
 
 export async function headSettings(db: Db, headId: string) {
@@ -80,6 +119,7 @@ export interface Fold {
  */
 export async function brief(db: Db, headId: string) {
   const head = await headSettings(db, headId);
+  await expireDueOrders(db, headId); // A.2: lapsed leases are visible as lapsed before the brief reads them
   const at = new Date(now());
   const today = localDate(at, head.timezone);
   const [start] = dayRange(today, head.timezone);
@@ -149,7 +189,23 @@ export async function brief(db: Db, headId: string) {
   }
   folds.sort((a, b) => Number(b.immediate) - Number(a.immediate) || b.order - a.order);
 
-  const shown = [...decisions, ...attention, ...(daily ? [daily] : [])];
+  // A.3: outcomes that came late or from an old lease are stored but did nothing; the owner should hear of them.
+  const late = await db
+    .select()
+    .from(cards)
+    .where(and(eq(cards.headId, headId), eq(cards.outcome, 'stale'), eq(cards.state, 'open'), isNull(cards.acknowledgedAt)))
+    .orderBy(desc(cards.changeSeq))
+    .limit(50);
+  // A.2: a lease that lapsed with no outcome usually means a worker died. The head surfaces those orders here
+  // rather than minting a signal card per lapse.
+  const lapsed = await db
+    .select()
+    .from(cards)
+    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), eq(cards.execState, 'open'), gt(cards.claimSeq, 0)))
+    .orderBy(desc(cards.changeSeq))
+    .limit(50);
+
+  const shown = [...decisions, ...attention, ...late, ...(daily ? [daily] : [])];
   return {
     date: today,
     timezone: head.timezone,
@@ -159,6 +215,8 @@ export async function brief(db: Db, headId: string) {
     decisions: await presentCards(db, decisions),
     threads: folds.map(({ immediate: _i, order: _o, ...f }) => f),
     snoozed,
+    late_outcomes: await presentCards(db, late),
+    lapsed_orders: await presentCards(db, lapsed),
     new: shown.filter((r) => r.changeSeq > head.lastVisitSeq).map((r) => r.id),
   };
 }
@@ -248,18 +306,27 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
   const referenced = await rowsById(db, headId, refs);
 
   const thread = (row.producerDoc as { thread?: string }).thread;
-  const threadRows = thread
-    ? await db
-        .select()
-        .from(cards)
-        .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'thread' = ${thread}`))
-        .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
-        .limit(200)
-    : [];
+  // An order and the cards in its thread (A.3) are one conversation across producers: the order first.
+  const orderId = row.toProducer !== null ? row.id : isOrderId(thread) ? thread : undefined;
+  const threadRows = orderId
+    ? [...(await rowsFor(db, headId, [orderId])), ...(await orderThread(db, headId, orderId))]
+    : thread
+      ? await db
+          .select()
+          .from(cards)
+          .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'thread' = ${thread}`))
+          .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
+          .limit(200)
+      : [];
 
   const summary = (r: Row) => {
     const c = toCard(r);
-    return { id: c.id, title: c.title, kind: c.kind, state: c.state, received_at: c.received_at, ...(c.decision ? { decision: c.decision } : {}) };
+    return {
+      id: c.id, title: c.title, kind: c.kind, producer: c.producer, state: c.state, received_at: c.received_at,
+      ...(c.decision ? { decision: c.decision } : {}),
+      ...(c.exec_state ? { exec_state: c.exec_state } : {}),
+      ...(r.outcome ? { order_outcome: r.outcome } : {}),
+    };
   };
   const head = await headSettings(db, headId);
   return {

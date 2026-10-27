@@ -2,7 +2,7 @@
 // as columns; a Card is the two merged. Every write happens inside `writeTx`, which takes the head's
 // change_counter row FOR UPDATE first, so writes to one head are serialised and commit in change_seq order.
 
-import { parseId, producerPart, type Card, type ProducerCard } from '@pbcp/core';
+import { parseId, producerPart, type Card, type OrderCard, type ProducerCard } from '@pbcp/core';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, changeCounter } from '../db/schema';
@@ -13,6 +13,8 @@ type Row = typeof cards.$inferSelect;
 
 export interface Stored {
   card: Card;
+  /** For a `*` order: the executors eligible when it was minted (A.1). Head-private. */
+  eligible: string[] | null;
 }
 
 /** One transaction per protocol operation (CLAUDE.md): counter, card writes and decision log, all or nothing. */
@@ -34,12 +36,17 @@ export async function nextSeq(tx: Tx, headId: string): Promise<number> {
   return row!.seq;
 }
 
-export async function load(tx: Tx | Db, headId: string, id: string): Promise<Stored | null> {
-  const [row] = await tx.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
-  return row ? { card: toCard(row) } : null;
+export async function load(tx: Tx | Db, headId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<Stored | null> {
+  const q = tx.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
+  const [row] = opts.forUpdate ? await q.for('update') : await q;
+  return row ? { card: toCard(row), eligible: row.wildcardEligible } : null;
 }
 
 export interface PersistOptions {
+  /** For a new `*` order: the eligibility snapshot (A.1); written once, at mint. */
+  eligible?: readonly string[] | null;
+  /** On an order's outcome card: whether it moved exec_state (A.3). */
+  outcome?: 'applied' | 'stale';
   /** Freeze this producer document as the version decided on (§4.4). */
   decidedDoc?: ProducerCard;
 }
@@ -49,9 +56,9 @@ export interface PersistOptions {
  * returns it as stored. Callers pass `changed[]` in order, so a supersession gives the predecessor the
  * lower value and the successor the higher (§7.2).
  */
-export async function persist(tx: Tx, headId: string, card: Card, opts: PersistOptions = {}): Promise<Card> {
+export async function persist(tx: Tx, headId: string, card: Card | OrderCard, opts: PersistOptions = {}): Promise<Card> {
   const seq = await nextSeq(tx, headId);
-  const stored: Card = { ...card, change_seq: seq };
+  const stored = { ...card, change_seq: seq } as Card;
   const head = headColumns(stored);
   const updated = await tx
     .update(cards)
@@ -59,6 +66,7 @@ export async function persist(tx: Tx, headId: string, card: Card, opts: PersistO
       producerDoc: producerPart(stored),
       ...head,
       ...(opts.decidedDoc !== undefined ? { decidedDoc: opts.decidedDoc } : {}),
+      ...(opts.outcome !== undefined ? { outcome: opts.outcome } : {}),
     })
     .where(and(eq(cards.headId, headId), eq(cards.id, stored.id)))
     .returning({ id: cards.id });
@@ -72,6 +80,8 @@ export async function persist(tx: Tx, headId: string, card: Card, opts: PersistO
       producerDoc: producerPart(stored),
       ...head,
       decidedDoc: opts.decidedDoc ?? null,
+      wildcardEligible: opts.eligible ? [...opts.eligible] : null,
+      outcome: opts.outcome ?? null,
     });
   }
   return stored;
@@ -97,6 +107,11 @@ function headColumns(c: Card) {
     comment: c.comment ?? null,
     decidedAt: date(c.decided_at),
     delegatedTo: c.delegated_to ?? null,
+    toProducer: c.to_producer ?? null,
+    execState: c.exec_state ?? null,
+    claimedBy: c.claimed_by ?? null,
+    claimExpiresAt: date(c.claim_expires_at),
+    claimSeq: c.claim_seq ?? null,
   };
 }
 

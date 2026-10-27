@@ -7,6 +7,8 @@
 //   changes     GET /api/changes?after=        Bearer   (`after` sent as given, so malformed cursors reach the head)
 //   decide      POST /api/me/cards/{id}/decision  Session
 //   decideWithToken  POST /api/cards/{id}/decision with the producer's Bearer token (§7.3: must be 401)
+//   order       POST /api/me/orders            Session  (the owner gives an order; A.1)
+//   claim       POST /api/cards/{id}/claim     Bearer   { lease_seconds } (A.2)
 //   seen        POST /api/me/cards/{id}/seen      Session
 //   acknowledge POST /api/me/cards/{id}/ack       Session
 //   clock.set   queued, then POSTed to /api/test before the next request (the interface's set() is synchronous)
@@ -93,6 +95,14 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
 
     async changes(token, after) {
       return request('GET', `/api/changes?after=${encodeURIComponent(String(after))}`, bearer(token));
+    },
+
+    async order(input) {
+      return request('POST', '/api/me/orders', session, input);
+    },
+
+    async claim(token, id, lease) {
+      return request('POST', `/api/cards/${encodeURIComponent(id)}/claim`, `Bearer ${token}`, { lease_seconds: lease });
     },
 
     async decideWithToken(token, id, d: Decision) {

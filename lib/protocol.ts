@@ -6,11 +6,12 @@ import {
   acknowledge, CARD_LIMIT_BYTES, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
   submit, type Card, type Decision, type Urgency,
 } from '@pbcp/core';
-import { and, asc, eq, gt, max } from 'drizzle-orm';
+import { and, asc, eq, gt, max, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, decisionLog } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
+import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
 import { load, persist, toCard, writeTx, type Stored, type Tx } from './store';
 
 export interface Outcome {
@@ -57,6 +58,8 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
       const saved = await persist(tx, ctx.headId, c);
       if (c.id === incoming.id) card = saved;
     }
+    // A.3: a stored outcome moves its order's exec_state only if it comes from the current lease.
+    if (r.changed.length > 0) await applyOutcomeInTx(tx, ctx.headId, incoming);
     return { status: r.status, card };
   });
 }
@@ -69,17 +72,19 @@ export interface SyncPage {
 }
 
 /**
- * `GET /changes?after=`. Entries are the caller's cards with change_seq > after, ascending. `next` is the
+ * `GET /changes?after=`. Entries are the caller's cards, and the orders it may read (A.1), with change_seq > after, ascending. `next` is the
  * highest global change_seq examined: the global maximum above `after` when the page is not full, the
  * last entry's seq when it is, and `after` itself when nothing is newer. Both reads share one snapshot.
  */
 export async function syncChanges(db: Db, ctx: { headId: string; root: string }, after: number, pageSize: number): Promise<SyncPage> {
+  // A.2: lapsed leases return to `open` (with a new change_seq) before the page is read.
+  await expireDueOrders(db, ctx.headId);
   return db.transaction(
     async (tx) => {
       const rows = await tx
         .select()
         .from(cards)
-        .where(and(eq(cards.headId, ctx.headId), eq(cards.producer, ctx.root), gt(cards.changeSeq, after)))
+        .where(and(eq(cards.headId, ctx.headId), or(eq(cards.producer, ctx.root), visibleOrders(ctx.root)), gt(cards.changeSeq, after)))
         .orderBy(asc(cards.changeSeq))
         .limit(pageSize);
       const changes = rows.map((row) => ({ seq: row.changeSeq, card: toCard(row) }));

@@ -9,8 +9,7 @@ export function describeHead(owner: string, seq: number): HeadDescription {
     protocol: PROTOCOL,
     owner,
     seq,
-    // The orders extension is milestone H3.
-    extensions: [],
+    extensions: ['orders'],
     // §3.1: core and extended are drawn; other types fall back.
     render: { mermaid: [...RENDERED_TIERS] },
   };

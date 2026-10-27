@@ -61,18 +61,23 @@ export const cards = pgTable(
     renderedActions: jsonb('rendered_actions'), // { [action id]: html } for choice options with a markdown body (§4.4)
     renderedMeta: jsonb('rendered_meta'), // { firstVisual, fences: [{ type, class }] }
     renderedFrom: text('rendered_from'), // hash of what was rendered (pipeline version, body, option bodies); stale when it differs
-    // Orders extension (A.1), milestone H3. Present so the columns exist when it lands; nothing writes them yet.
+    // Orders extension (A.1). Head-owned fields of an order card; wildcard_eligible is the head-private
+    // snapshot of executors eligible when a `*` order was minted, never returned to anyone.
     toProducer: text('to_producer'),
     execState: text('exec_state'),
     claimedBy: text('claimed_by'),
     claimExpiresAt: tstz('claim_expires_at'),
     claimSeq: integer('claim_seq'),
     wildcardEligible: text('wildcard_eligible').array(),
+    // On a card that is an order's outcome (A.3): `applied` when it moved exec_state, `stale` when it came
+    // from an old or lapsed lease or after the order ended. Head-private; the brief surfaces stale ones.
+    outcome: text('outcome'),
   },
   (t) => [
     primaryKey({ columns: [t.headId, t.id] }),
     index('cards_sync').on(t.headId, t.changeSeq),
     index('cards_thread').on(t.headId, t.producer, sql`(${t.producerDoc}->>'thread')`),
+    index('cards_orders').on(t.headId, t.toProducer, t.changeSeq),
   ],
 );
 
