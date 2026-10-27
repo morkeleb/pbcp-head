@@ -1,10 +1,10 @@
 // The nightly card's body: a mechanical fold of the head's own records, no language model (CLAUDE.md H2).
-// Pure: the cron gathers the cards, this writes the card. The brief is the cards' leads (lib/lead.ts): what is
-// waiting for the owner, then what yesterday's threads said. Counts are one closing line; §8 makes counts and
-// charts additions to a brief, never the brief itself.
+// Pure: the cron gathers the cards, this writes the card. RFC 0.6 §8 "What a brief contains": every open decision's
+// title and lead, then the title and lead of the newest card of each of the previous day's threads, each linked to
+// its card. Counts are one closing line: an addition, never the brief.
 
-import type { Card, ProducerCard } from '@pbcp/core';
-import { leadOf } from '../lead';
+import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
+import { cutSummary, inlineLead } from '../render/lead';
 
 export interface FoldInput {
   owner: string;
@@ -13,7 +13,7 @@ export interface FoldInput {
   emittedAt: string;
   openDecisions: Card[];
   yesterday: Card[];
-  /** The head's own page for a card, an absolute https URL (lib/render keeps links to its own origin in-app). */
+  /** The head's own page for a card: an absolute https URL to this head (lib/render keeps it an in-app link). */
   cardUrl: (id: string) => string;
 }
 
@@ -22,6 +22,7 @@ export interface FoldLine {
   id: string;
   producer: string;
   title: string;
+  /** The lead as markdown for the brief: a summary escaped and cut at 280 characters, a body lead inline (§3.1). */
   lead: string;
   count: number;
   snoozed: boolean;
@@ -34,7 +35,6 @@ export interface FoldLines {
   counts: string;
 }
 
-const MAX_DECISIONS = 50;
 const MAX_THREADS = 100;
 const MAX_TITLE = 120;
 
@@ -48,7 +48,13 @@ const longDate = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${date}T00:00:00Z`));
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-const line = (c: Card, count = 1): FoldLine => ({ id: c.id, producer: c.producer, title: c.title, lead: leadOf(c), count, snoozed: !!c.snoozed_until });
+/** A card's lead as markdown in a brief line: a summary is text (§3.1), so it is escaped; a body lead stays markdown, inline. */
+export function leadMarkdown(c: { summary?: string; body: string }): string {
+  const lead = leadOf(c);
+  return lead.source === 'summary' ? escapeMarkdown(cutSummary(lead.text), Infinity) : inlineLead(lead.text);
+}
+
+const line = (c: Card, count = 1): FoldLine => ({ id: c.id, producer: c.producer, title: c.title, lead: leadMarkdown(c), count, snoozed: !!c.snoozed_until });
 
 /** Yesterday's cards collapsed by producer thread, newest thread first; each line is its newest card. */
 export function foldThreads(cards: Card[]): FoldLine[] {
@@ -69,20 +75,20 @@ export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday'>
   };
 }
 
+/** "title — lead", the title linked to the card (§8). */
 function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
   const more = l.count > 1 ? ` (${l.count} in thread)` : '';
   const snoozed = l.snoozed ? ' (snoozed)' : '';
-  const lead = l.lead ? ` — ${escapeMarkdown(l.lead, Infinity)}` : '';
-  return `- **${escapeMarkdown(l.producer)}** · [${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${more}${snoozed}${lead}`;
+  return `- [${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${more}${snoozed}${l.lead ? ` — ${l.lead}` : ''}`;
 }
 
 export function foldDaily(input: FoldInput): ProducerCard {
   const { decisions, threads, counts } = dailyLines(input);
   const lines: string[] = [];
 
+  // Every open decision (§8 MUST): no cap.
   if (decisions.length === 0) lines.push('Nothing is waiting for you.');
-  for (const l of decisions.slice(0, MAX_DECISIONS)) lines.push(markdownLine(l, input.cardUrl));
-  if (decisions.length > MAX_DECISIONS) lines.push(`- …and ${decisions.length - MAX_DECISIONS} more`);
+  for (const l of decisions) lines.push(markdownLine(l, input.cardUrl));
   lines.push('');
 
   lines.push('**Yesterday**', '');
@@ -102,7 +108,7 @@ export function foldDaily(input: FoldInput): ProducerCard {
     title: `Brief for ${longDate(input.date)}`,
     // The head is this card's producer: its lead is the counts (RFC 0.6 `summary`), since the body opens with a list.
     summary: counts,
-    references: input.openDecisions.slice(0, MAX_DECISIONS).map((c) => c.id),
+    references: input.openDecisions.map((c) => c.id),
     emitted_at: input.emittedAt,
     body: lines.join('\n').trimEnd() + '\n',
   };

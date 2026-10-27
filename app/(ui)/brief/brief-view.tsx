@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, cardHref, OfflineError, useFresh, useOnline, when } from '../client';
-import { announce, AsOf, CardBody, DecisionControls, Lead, NOT_SENT, Rendered, Thumb, type MeCard } from '../components';
+import { announce, AsOf, CardBody, DecisionControls, Lead, NOT_SENT, Rendered, swipeChoice, Thumb, useDeferred, useSwipe, type DecisionHandle, type MeCard } from '../components';
 
 interface Fold {
   producer: string;
@@ -143,11 +143,12 @@ function SoFarToday({ brief }: { brief: Brief }) {
   const cards = brief.threads.reduce((n, f) => n + f.count, 0);
   const producers = new Set(brief.threads.map((f) => f.producer)).size;
   const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  // "title — lead", linked (§8), the lead as the head rendered it.
   const Line = ({ card, count = 1 }: { card: MeCard; count?: number }) => (
     <li>
-      <strong>{card.producer}</strong> · <Link href={cardHref(card.id)}>{card.title}</Link>
+      <Link href={cardHref(card.id)}>{card.title}</Link>
       {count > 1 && <span className="muted"> ({count} in thread)</span>}
-      {card.lead && <> — {card.lead}</>}
+      {card.rendered_lead && <> — <span dangerouslySetInnerHTML={{ __html: card.rendered_lead }} /></>}
     </li>
   );
   return (
@@ -162,15 +163,24 @@ function SoFarToday({ brief }: { brief: Brief }) {
 
 function DecisionItem({ card, isNew, onChange, timezone }: { card: MeCard; isNew: boolean; onChange: (c: MeCard) => void; timezone: string }) {
   const decided = card.state === 'decided';
+  const online = useOnline();
+  const controls = useRef<DecisionHandle | null>(null);
+  const deferred = useDeferred();
+  // Swipe right: the default; swipe left: reject, when offered. Committed after the undo window, not at once.
+  const swipe = useSwipe((direction) => {
+    const choice = decided || !online || deferred.pending ? null : swipeChoice(card, direction);
+    if (choice) deferred.schedule(`${choice.label}: ${card.title}`, () => controls.current?.decide({ decision: choice.decision }));
+  });
   return (
-    <article className={`card${decided ? ' done' : ''}`}>
+    <article className={`card swipeable${decided ? ' done' : ''}`} {...swipe.handlers} style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}>
       <h3><Link href={cardHref(card.id)}>{card.title}</Link></h3>
       <div className="meta">
         <span>{card.producer}</span>·<span>{when(card.received_at, timezone)}</span>
         {isNew && !decided && <span className="badge new">new</span>}
       </div>
       {decided ? <Lead card={card} /> : <CardBody card={card} />}
-      <DecisionControls card={card} onChange={onChange} showDecided />
+      <DecisionControls card={card} onChange={onChange} showDecided handle={controls} />
+      {deferred.toast}
     </article>
   );
 }
@@ -183,6 +193,11 @@ function FoldItem({ fold, isNew, timezone, onAcked, onFailed }: { fold: Fold; is
   const [error, setError] = useState<string | null>(null);
   const online = useOnline();
   const time = (iso: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+  // A swipe either way acknowledges, after the undo window; the button does at once.
+  const deferred = useDeferred();
+  const swipe = useSwipe(() => {
+    if (!acked && online && !deferred.pending) deferred.schedule(`Acknowledge: ${c.title}`, () => void ack());
+  });
   // Acknowledges every card shown in the fold (§4.2 acknowledged_at): at once on screen, then on the head.
   const ack = async () => {
     setError(null);
@@ -207,7 +222,7 @@ function FoldItem({ fold, isNew, timezone, onAcked, onFailed }: { fold: Fold; is
     }
   };
   return (
-    <article className={`card${acked ? ' done' : ''}`}>
+    <article className={`card swipeable${acked ? ' done' : ''}`} {...swipe.handlers} style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}>
       <h3><Link href={cardHref(c.id)}>{c.title}</Link></h3>
       {!acked && (
         <div className="meta">
@@ -228,6 +243,7 @@ function FoldItem({ fold, isNew, timezone, onAcked, onFailed }: { fold: Fold; is
         </div>
       )}
       {error && <p className="error" role="alert">{error}</p>}
+      {deferred.toast}
     </article>
   );
 }

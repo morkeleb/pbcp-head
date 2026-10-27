@@ -11,7 +11,6 @@ import { HttpError } from './http';
 import { expireDueOrders } from './orders';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
-import { leadOf } from './lead';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
 import { dayRange, isDate, localDate } from './time';
@@ -20,8 +19,11 @@ type Row = typeof cards.$inferSelect;
 
 export type MeCard = Card & {
   rendered_html: string;
-  /** The card's lead as plain text: `summary`, else the body's first paragraph (lib/lead.ts). */
+  /** The card's lead (RFC 0.6 §3.1, core's leadOf): the `summary` as text, or the body's first paragraph as markdown. */
   lead: string;
+  lead_source: 'summary' | 'body';
+  /** The lead as safe inline HTML: the summary escaped (cut at 280 characters), or the paragraph rendered inline. */
+  rendered_lead: string;
   /** On an order's outcome card (A.3): whether it moved the order, or came late or from an old lease. */
   order_outcome?: 'applied' | 'stale';
   rendered_actions?: Record<string, string>;
@@ -43,7 +45,9 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
     out.push({
       ...card,
       rendered_html: html,
-      lead: leadOf(card),
+      lead: meta?.lead?.text ?? '',
+      lead_source: meta?.lead?.source ?? 'body',
+      rendered_lead: meta?.lead?.html ?? '',
       ...(actions && Object.keys(actions).length > 0 ? { rendered_actions: actions } : {}),
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
