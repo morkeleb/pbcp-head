@@ -13,7 +13,7 @@
 
 import { ChevronDown, Menu, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -143,7 +143,7 @@ export function ChromeProvider({ children }: { children: ReactNode }) {
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
-/** The theme saved on this device: `light` or `dark`, or the system's when none is (the root layout reads it before paint). */
+/** The theme saved on this device: `light` or `dark`, or `system` when none is (the root layout reads it before paint). */
 export function savedTheme(): ThemeChoice {
   try {
     const t = localStorage.getItem(THEME_KEY);
@@ -153,24 +153,59 @@ export function savedTheme(): ThemeChoice {
   }
 }
 
-/** Saves the theme on this device and applies it now. */
+const THEME_EVENT = 'pbcp:theme';
+
+/**
+ * Saves the theme on this device and applies it now. `system` saves nothing, so the page follows the system's scheme,
+ * live, through the listener the root layout installs before paint.
+ */
 export function setTheme(choice: ThemeChoice) {
-  const dark = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.classList.toggle('dark', dark);
   try {
     if (choice === 'system') localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, choice);
   } catch {
     // the choice lasts as long as the page
   }
+  const dark = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  window.dispatchEvent(new Event(THEME_EVENT));
 }
 
-function ThemeToggle() {
-  const dark = useDark(); // follows the page, so a change from Settings shows here too
+/** The saved choice, followed live: the masthead and Settings show the same one. */
+export function useThemeChoice(): ThemeChoice {
+  return useSyncExternalStore(
+    (changed) => {
+      window.addEventListener(THEME_EVENT, changed);
+      window.addEventListener('storage', changed);
+      return () => {
+        window.removeEventListener(THEME_EVENT, changed);
+        window.removeEventListener('storage', changed);
+      };
+    },
+    savedTheme,
+    () => 'system',
+  );
+}
+
+const THEMES: Array<[ThemeChoice, string]> = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
+
+function ThemeMenu() {
+  const dark = useDark(); // the icon is what the page is now; the menu says why
+  const choice = useThemeChoice();
+  const label = THEMES.find(([c]) => c === choice)![1];
   return (
-    <Button variant="ghost" size="icon-sm" onClick={() => setTheme(dark ? 'light' : 'dark')} aria-label={dark ? 'Light theme' : 'Dark theme'} aria-pressed={dark}>
-      {dark ? <Sun /> : <Moon />}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`Theme: ${label}`} data-theme-menu>
+          {dark ? <Moon /> : <Sun />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup value={choice} onValueChange={(v) => setTheme(v as ThemeChoice)}>
+          {THEMES.map(([c, l]) => <DropdownMenuRadioItem key={c} value={c} data-theme-choice={c}>{l}</DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -276,7 +311,7 @@ function Masthead({ density, onDensity, wide, cards, asOf, rowRef }: MastheadPro
         </DropdownMenu>
       )}
       <SearchDialog cards={cards} />
-      <ThemeToggle />
+      <ThemeMenu />
       <PagesMenu />
     </div>
   );

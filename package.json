@@ -21,6 +21,7 @@
     "revoke-token": "tsx --env-file-if-exists=.env scripts/revoke-token.ts",
     "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "screenshot": "tsx --env-file-if-exists=.env scripts/screenshot.ts",
     "test:gate": "vitest run",
     "api:generate": "tsx scripts/api-generate.ts",
     "icons": "tsx scripts/icons.ts",

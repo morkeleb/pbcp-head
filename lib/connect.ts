@@ -8,6 +8,7 @@ import { exampleCard, type ProducerCard } from '@pbcp/core';
 import { TOOL_NAMES } from '@pbcp-head/owner-mcp';
 import { DOCS_URL } from './front-door';
 import { mcpUrl } from './oauth';
+import { PAIRING_CODE_SHAPE } from './pairing-code';
 
 /** The only token there is on a public page: a placeholder. */
 export const TOKEN = '<token>';
@@ -53,7 +54,7 @@ export function connectLinks(origin: string): { head: Link[]; connectors: Link[]
  */
 export function pairingSteps(api: string): string[] {
   return [
-    'Ask the owner for a pairing code. They make one in Settings → Producers; it is 6 characters, valid 10 minutes, and works once.',
+    `Ask the owner for a pairing code. They make one in Settings → Producers; it is ${PAIRING_CODE_SHAPE}. It is valid 10 minutes and works once.`,
     `POST it with the root you choose (letters, digits and -; every card id you send starts with it) to ${api}/pair: {"code": "<code>", "root": "<root>", "name": "<what you are>"}.`,
     'Keep the token in the answer: it is shown this once. The answer also gives `api`, `owner` and `root`.',
     'Use `api`, `owner` and the token as the three values (PBCP_HEAD_URL, PBCP_TO_PERSON, PBCP_TOKEN).',

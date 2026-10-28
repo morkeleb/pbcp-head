@@ -7,9 +7,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { PAIRING_CODE_SHAPE } from '../../../lib/pairing-code';
 import type { Density } from '../brief/DecisionCard';
 import { Copyable } from '../copy';
-import { PageRow, savedTheme, setTheme, useChrome, type ThemeChoice } from '../chrome';
+import { PageRow, setTheme, useChrome, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, OfflineError, saveTokens, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred } from '../components';
 
@@ -266,7 +267,7 @@ function Pairing({ onPaired, onError }: { onPaired: () => void; onError: (e: unk
     <div className="mt-5" data-pairing>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={!online} onClick={() => void create()}>Pair a producer</Button>
-        <span className="text-lead text-muted-foreground">An agent mints its own token with a code, valid 10 minutes, once.</span>
+        <span className="text-lead text-muted-foreground">An agent mints its own token with a code: {PAIRING_CODE_SHAPE}. Valid 10 minutes, once.</span>
       </div>
       {made && open(made.id) && (
         <div className="mt-3 rounded-lg border border-ring p-3" data-pairing-code>
@@ -430,11 +431,10 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
 
 function Preferences({ onError }: { onError: (e: unknown) => void }) {
   const { density, setDensity } = useChrome();
-  const [theme, setThemeState] = useState<ThemeChoice>('system');
+  const theme = useThemeChoice();
   const [head, setHead] = useState<HeadSettings | null>(null);
   const [zone, setZone] = useState('');
   const online = useOnline();
-  useEffect(() => setThemeState(savedTheme()), []);
   const load = useCallback(async () => {
     const r = await api<HeadSettings>('/api/me/settings');
     if (r.status === 200) {
@@ -473,8 +473,8 @@ function Preferences({ onError }: { onError: (e: unknown) => void }) {
           )}
           {row(
             'Theme',
-            <select aria-label="Theme" className={field} value={theme} onChange={(e) => { setTheme(e.target.value as ThemeChoice); setThemeState(e.target.value as ThemeChoice); }}>
-              <option value="system">As the system</option>
+            <select aria-label="Theme" className={field} value={theme} onChange={(e) => setTheme(e.target.value as ThemeChoice)}>
+              <option value="system">System</option>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>,

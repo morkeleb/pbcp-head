@@ -3,6 +3,7 @@
 // file is stale.
 
 import { z } from 'zod';
+import { PAIRING_CODE_SHAPE } from '../pairing-code';
 import * as S from './schemas';
 
 type Json = Record<string, unknown>;
@@ -180,7 +181,7 @@ const PATHS: Record<string, Record<string, Json>> = {
   },
   '/api/me/settings/pairing': {
     get: operation('listPairingCodes', { summary: 'The open pairing codes (never the codes themselves)', ok: ok(S.PairingCodeList), errors: [400, 401] }),
-    post: operation('createPairingCode', { summary: 'Make a pairing code to give an agent: 6 characters, 10 minutes, once', ok: ok(S.NewPairingCode, 'The code, in this answer only', 201), errors: [400, 401] }),
+    post: operation('createPairingCode', { summary: 'Make a pairing code to give an agent: XXX-XXX, 10 minutes, once', ok: ok(S.NewPairingCode, 'The code, in this answer only', 201), errors: [400, 401] }),
   },
   '/api/me/settings/pairing/{id}': {
     delete: operation('cancelPairingCode', { summary: 'Cancel an open pairing code', parameters: [idParam('id', 'A pairing code’s id')], ok: { 204: { description: 'Cancelled' } }, errors: [400, 401, 404] }),
@@ -189,7 +190,7 @@ const PATHS: Record<string, Record<string, Json>> = {
     post: operation('pair', {
       summary: 'Trade a pairing code from the owner for your own producer token (public; no credential)',
       description:
-        'The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).',
+        `The code (${PAIRING_CODE_SHAPE}) is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 \`invalid_code\`; no other code is touched. With a good code, a malformed root is 400 \`invalid_root\` and a taken one 409 \`root_taken\`, and the code stays usable. Rate-limited per address (429).`,
       body: S.PairRequest,
       ok: ok(S.Paired, 'Paired: the token, once', 201),
       errors: [400, 409, 413],

@@ -22,10 +22,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: THEME_COLOR };
 
 /**
- * The theme before first paint: the device's saved choice (masthead toggle, `pbcp.theme`), else the system's. Inline,
- * with this request's CSP nonce, so a dark page never flashes light.
+ * The theme before first paint: the device's saved choice (`pbcp.theme`, from the masthead or Settings), else the
+ * system's, and the system's again whenever it changes, for as long as nothing is saved (System). Inline, with this
+ * request's CSP nonce, so a dark page never flashes light; app/(ui)/chrome.tsx applies a choice the same way.
  */
-const THEME = `try{var t=localStorage.getItem('pbcp.theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
+const THEME = `try{var q=matchMedia('(prefers-color-scheme: dark)'),a=function(){var t=null;try{t=localStorage.getItem('pbcp.theme')}catch(e){}document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&q.matches))};a();q.addEventListener('change',a)}catch(e){}`;
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const nonce = (await headers()).get('x-nonce') ?? undefined;

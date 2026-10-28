@@ -81,7 +81,7 @@ export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send l
 
 // --- the page theme, and diagrams drawn for it -------------------------------------------
 
-/** Whether the page is dark (the `.dark` class on <html>, set before paint and by the theme toggle), followed live. */
+/** Whether the page is dark (the `.dark` class on <html>, set before paint, by the theme menu, and by the system's scheme under System), followed live. */
 export function useDark(): boolean {
   return useSyncExternalStore(
     (changed) => {
