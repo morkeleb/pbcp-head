@@ -114,6 +114,14 @@ describe('a live brief', () => {
     await put('cal:event:2', 'Dinner with Lena moved to 19:30');
     await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'pbcp-push', url: '/brief' } })));
     await shows('Dinner with Lena moved to 19:30');
+
+    // Marked seen on another device: the counter moves (§4.2), so the brief loads again (acknowledging: me.test.ts).
+    const phone = await startSession(testDb(), { headId: OWNER, identityId: null, platform: 'web', name: 'phone' });
+    const ackBefore = loads;
+    expect((await call('POST', `/api/me/cards/${encodeURIComponent('cal:event:1')}/seen`, { auth: `Session ${phone.access_token}` })).status).toBe(200);
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'pbcp-push', url: '/brief' } })));
+    for (const end = Date.now() + 10_000; loads === ackBefore && Date.now() < end; ) await wait(100);
+    expect(loads).toBeGreaterThan(ackBefore);
     expect(await page.evaluate(() => document.body.innerText.includes('When should M4 ship?'))).toBe(true); // what was there stays
     expect(errors).toEqual([]);
   });

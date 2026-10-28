@@ -98,6 +98,35 @@ describe('GET /api/me/seq', () => {
     expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.date).toBe('2026-10-08');
     expect((await call('GET', '/api/me/seq', { auth: hermes })).status).toBe(401);
   });
+
+  it('moves when another session marks a card seen, acknowledges, snoozes or unsnoozes it (§4.2: each takes a fresh change_seq), and producers sync it', async () => {
+    await clock('2026-10-07T09:00:00Z');
+    await put('hermes:report:1', { kind: 'artifact' });
+    await put('hermes:gmail:9');
+    const phone = await ownerSession(OWNER, 'phone');
+    const stamp = async () => (await call('GET', '/api/me/seq', { auth: owner.auth })).body.seq as number;
+    const act = (path: string, body?: unknown) => call('POST', path, { auth: phone.auth, ...(body ? { body } : {}) });
+    const report = `/api/me/cards/${encodeURIComponent('hermes:report:1')}`;
+    const decision = `/api/me/cards/${encodeURIComponent('hermes:gmail:9')}`;
+
+    let before = await stamp();
+    expect((await act(`${report}/ack`)).status).toBe(200);
+    const acked = await stamp();
+    expect(acked).toBe(before + 1);
+    // The producer sees the acknowledgement in its sync, at the new change_seq (§7.2).
+    const synced = (await call('GET', `/api/changes?after=${before}`, { auth: hermes })).body.changes;
+    expect(synced).toEqual([{ seq: acked, card: expect.objectContaining({ id: 'hermes:report:1', change_seq: acked, acknowledged_at: expect.any(String) }) }]);
+
+    for (const [path, body] of [[`${decision}/seen`], [`${decision}/snooze`, { until: '2026-10-08T07:00:00Z' }], [`${decision}/unsnooze`]] as Array<[string, unknown?]>) {
+      before = await stamp();
+      expect((await act(path, body)).status, path).toBe(200);
+      expect(await stamp(), path).toBe(before + 1);
+    }
+    // Seen again: nothing changed, so no new change_seq.
+    before = await stamp();
+    await act(`${decision}/seen`);
+    expect(await stamp()).toBe(before);
+  });
 });
 
 describe('a card’s day (RFC 0.7 §8)', () => {
