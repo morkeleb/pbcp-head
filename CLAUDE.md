@@ -35,6 +35,7 @@ This repo is the **product**: the reference head (Next.js on Vercel, Postgres) a
 - **No worker process.** Lease expiry (later) is evaluated lazily; the brief is a Vercel Cron. The head deploys as one Vercel project.
 - **Render on receipt, server-side.** Producer markdown is never executed in a browser or on a phone (RFC §3.1). This is milestone H2, but nothing in H1 may assume client-side rendering.
 - **No marketing, no product names** beyond what the RFC's examples use.
+- The signed-out front door (`/` for a browser) is the one page that may use product language; the no-marketing rule applies to code, docs and every other page.
 - TypeScript strict, Next.js App Router, Drizzle, Postgres, vitest. `docker-compose.yml` brings up Postgres for local work and CI.
 
 ## Licence

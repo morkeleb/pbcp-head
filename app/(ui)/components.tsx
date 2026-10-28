@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowUpRight } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import type { ParagraphParts } from '../../lib/brief/paragraph';
 import { api, OfflineError, when } from './client';
 
@@ -78,6 +78,15 @@ export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection, and n
 /** What a write that was not sent says: nothing is queued. */
 export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send later; do it again when you’re back online.';
 
+
+// --- the locale times are written in ----------------------------------------------------
+
+/**
+ * The locale the brief writes times and dates in: undefined, the device's own, everywhere in the app. A page that is
+ * rendered on the server with cards in it (the front door's demo) sets one, so the server and the browser write the same.
+ */
+export const LocaleContext = createContext<string | undefined>(undefined);
+export const useLocale = () => useContext(LocaleContext);
 
 // --- the page theme, and diagrams drawn for it -------------------------------------------
 

@@ -140,8 +140,18 @@ export interface ApiResult<T> {
   cachedAt?: string;
 }
 
+/**
+ * A sandbox answers every call in place of the head: the front door's demo brief (app/about) runs the brief's real
+ * components with one, so deciding or acknowledging settles the card for that visitor and sends nothing. No session is
+ * read and nothing leaves the page while it is set.
+ */
+export type Sandbox = (path: string, init: { method: string; body?: unknown }) => ApiResult<any>;
+let sandbox: Sandbox | null = null;
+export const setSandbox = (s: Sandbox | null) => void (sandbox = s);
+
 export async function api<T = any>(path: string, init: { method?: string; body?: unknown; keepalive?: boolean; network?: boolean } = {}): Promise<ApiResult<T>> {
   const method = init.method ?? 'GET';
+  if (sandbox) return sandbox(path, { method, ...(init.body !== undefined ? { body: init.body } : {}) }) as ApiResult<T>;
   // A write is sent now or not at all: never without a network, never queued for later.
   if (method !== 'GET' && (offline || navigator.onLine === false)) throw new OfflineError();
   let tokens = loadTokens();
@@ -181,6 +191,6 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
 
 export const cardHref = (id: string) => `/card/${encodeURIComponent(id)}`;
 
-export function when(iso: string, timezone?: string): string {
-  return new Intl.DateTimeFormat(undefined, { timeZone: timezone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+export function when(iso: string, timezone?: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { timeZone: timezone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }

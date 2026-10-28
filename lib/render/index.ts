@@ -92,15 +92,25 @@ export const renderSource = (card: Card): string => sha256(JSON.stringify([RENDE
 
 /** Renders a card's body and option bodies and stores them beside it. */
 export async function renderCard(db: Db, headId: string, card: Card): Promise<CardRender> {
+  const { html, actions, meta } = await renderCardContent(db, card);
+  const body = { html };
+  await db
+    .update(cards)
+    .set({ renderedHtml: body.html, renderedActions: actions, renderedMeta: meta, renderedFrom: renderSource(card) })
+    .where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
+  return { html: body.html, actions, meta };
+}
+
+/**
+ * A card's body, option bodies and lead through the pipeline, stored nowhere (the diagram cache aside): renderCard
+ * keeps the result on the card's row; the front door's demo brief (lib/demo) shows it and keeps nothing.
+ */
+export async function renderCardContent(db: Db, card: Card): Promise<CardRender> {
   const body = await renderBody(db, card.body);
   const actions: Record<string, string> = {};
   for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(db, md)).html;
   const lead = await presentLead(card, async (md) => (await renderBody(db, md)).html);
   const meta: RenderMeta = { firstVisual: body.firstVisual, lead, fences: body.result.fences.map((f) => ({ type: f.type, class: f.class })) };
-  await db
-    .update(cards)
-    .set({ renderedHtml: body.html, renderedActions: actions, renderedMeta: meta, renderedFrom: renderSource(card) })
-    .where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
   return { html: body.html, actions, meta };
 }
 

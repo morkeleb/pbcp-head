@@ -961,6 +961,55 @@ describe('a producer’s table on a phone', () => {
   });
 });
 
+describe('the front door in a browser', () => {
+  /** A visitor with no session on this device: a context of its own (the suite's page is signed in). */
+  async function visitor(js = true) {
+    const context = await browser.createBrowserContext();
+    const p = await context.newPage();
+    p.once('close', () => void context.close().catch(() => undefined));
+    await p.setJavaScriptEnabled(js);
+    await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    return p;
+  }
+  const REPLY = 'hermes:demo:gmail-19c3a8e05f72:reply';
+
+  it('renders the page and its demo brief without JavaScript', async () => {
+    const p = await visitor(false);
+    await p.goto(`${headUrl()}/`, { waitUntil: 'networkidle0' });
+    const text = await p.evaluate(() => document.body.innerText);
+    expect(text).toContain('Your day, unified.');
+    expect(text).toContain('Reply to Anna re invoice timing');
+    expect(text).toContain('Today’s brief');
+    expect(await p.$('form[action="/api/invite"] input[name="email"]')).not.toBeNull();
+    await p.close();
+  });
+
+  it('lets a visitor decide a demo card: it settles in place, and nothing is sent', async () => {
+    const p = await visitor();
+    const sent: string[] = [];
+    p.on('request', (r) => void (r.url().includes('/api/me/') && !r.url().includes('/api/me/svg/') && sent.push(`${r.method()} ${new URL(r.url()).pathname}`)));
+    const errors: string[] = [];
+    p.on('pageerror', (e) => errors.push(String(e)));
+    await p.goto(`${headUrl()}/`, { waitUntil: 'networkidle0' });
+    const card = `[data-hero-layout="timeline"] article[data-card="${REPLY}"]`;
+    await p.waitForSelector(card);
+    await (await p.$(`xpath/.//div[@data-hero-layout="timeline"]//article[@data-card="${REPLY}"]//button[normalize-space(.)="approve"]`))!.click();
+    await p.waitForFunction((sel) => document.querySelector(sel)?.textContent?.includes('Approved'), {}, card);
+    expect(sent).toEqual([]);
+    expect(errors).toEqual([]);
+    await p.close();
+  });
+
+  it('sends a visitor who is signed in on this device on to the brief', async () => {
+    const p = await visitor();
+    await p.goto(`${headUrl()}/signin`);
+    await p.evaluate((t) => localStorage.setItem('pbcp.session', JSON.stringify(t)), session);
+    await p.goto(`${headUrl()}/`);
+    await p.waitForFunction(() => location.pathname === '/brief');
+    await p.close();
+  });
+});
+
 describe('one masthead', () => {
   /** The masthead's shared parts, with the ids Radix generates per render taken out, and its height. */
   const shared = () =>
@@ -1043,7 +1092,7 @@ describe('the card page', () => {
 describe('settings', () => {
   it('shows the sections in order, mints a token shown once and filled into the snippets, and is under the shared masthead', async () => {
     await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
-    expect(await page.$$eval('[data-section-settings]', (ss) => ss.map((s) => s.getAttribute('data-section-settings')))).toEqual(['this-head', 'producers', 'connect', 'devices', 'preferences']);
+    expect(await page.$$eval('[data-section-settings]', (ss) => ss.map((s) => s.getAttribute('data-section-settings')))).toEqual(['this-head', 'producers', 'connect', 'devices', 'preferences', 'invites']);
     expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
     expect(await page.$eval('[data-pairing]', (p) => p.textContent)).toContain('six characters shown as two groups of three (XXX-XXX); the dash is optional when entering');
     expect(await page.$eval('[data-value="owner id"]', (v) => v.textContent)).toBe(OWNER);

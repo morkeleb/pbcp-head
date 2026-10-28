@@ -20,7 +20,7 @@ export function proxy(req: NextRequest): NextResponse {
   const root = req.nextUrl.pathname === '/';
   const res =
     root && prefersHtml(req.headers.get('accept'))
-      ? NextResponse.rewrite(new URL('/about', req.url), { request: { headers } })
+      ? NextResponse.rewrite(Object.assign(req.nextUrl.clone(), { pathname: '/about' }), { request: { headers } })
       : NextResponse.next({ request: { headers } });
   if (root) res.headers.set('vary', 'Accept');
   res.headers.set('content-security-policy', csp);

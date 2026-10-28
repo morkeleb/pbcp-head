@@ -264,3 +264,19 @@ export const cronRuns = pgTable('cron_runs', {
   name: text('name').primaryKey(),
   lastRunAt: tstz('last_run_at').notNull(),
 });
+
+/**
+ * Requests for an invite to the hosted head, from the front door's form (POST /api/invite): the address and when, and
+ * the browser it came from. Deployment-wide, not a head's; the deployment's own head (PBCP_HEAD, or its only head) sees
+ * them in Settings. No mail is sent. One row per address: asking again changes nothing.
+ */
+export const inviteRequests = pgTable(
+  'invite_requests',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    email: text('email').notNull(),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    userAgent: text('user_agent'),
+  },
+  (t) => [uniqueIndex('invite_requests_email').on(sql`lower(${t.email})`)],
+);

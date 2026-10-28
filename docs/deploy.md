@@ -159,7 +159,7 @@ It needs `DATABASE_URL` and `SESSION_SECRET` loaded as above.
 - **Credentials:** it uses the database only to mint producer tokens and an owner session, and revokes both when it finishes.
 - **Cards:** it sends them to the deployment over HTTPS (`--url`, default `WEBAUTHN_ORIGIN`), so the head renders them and draws their diagrams as it would real ones.
 - **Removing it:** `pnpm demo morten --remove` deletes every demo card (their ids have the namespace `demo`), the demo orders and their executors' cards.
-- **Purging it:** `pnpm demo:purge --head morten [--dry-run]` also deletes the demo's producer tokens, and every card of a demo root (`scripts/demo-data.ts`) that no real producer holds, earlier demo runs' included. A root with a live token that isn't the demo's (a real `n8n` or `hermes`) keeps all its cards but the `demo` ones. It refuses to run without `--head`; `--dry-run` lists what it would remove.
+- **Purging it:** `pnpm demo:purge --head morten [--dry-run]` also deletes the demo's producer tokens, and every card of a demo root (`lib/demo/data.ts`) that no real producer holds, earlier demo runs' included. A root with a live token that isn't the demo's (a real `n8n` or `hermes`) keeps all its cards but the `demo` ones. It refuses to run without `--head`; `--dry-run` lists what it would remove.
 
 ### 6. Deploy
 

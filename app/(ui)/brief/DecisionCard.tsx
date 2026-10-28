@@ -25,7 +25,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
+  announce, CardLabels, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
   type MeCard,
 } from '../components';
 
@@ -64,12 +64,13 @@ const SNOOZES = [
 ] as const;
 
 /** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
-export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
+export const clock = (iso: string, timeZone?: string, locale?: string) => new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
 
 export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true, expanded = false, forDay }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);
   const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
+  const locale = useLocale();
   const decided = card.state === 'decided';
   const [selected, setSelected] = useState<string>(byDefault?.id ?? '');
   const [editing, setEditing] = useState(false);
@@ -133,7 +134,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
       {forDay && <span className="flex-none normal-case tracking-normal" data-for-day>· for {forDay}</span>}
       {showTime && <span aria-hidden>·</span>}
       {!card.seen_at && !decided && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
-      {showTime && <time className="flex-none" dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>}
+      {showTime && <time className="flex-none" dateTime={card.received_at}>{clock(card.received_at, timezone, locale)}</time>}
       {sourceLink(card.source) && (
         <>
           <span aria-hidden>·</span>
@@ -171,7 +172,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
   const stateLine = decided && (
     <p className="state-line mt-3 text-lead text-muted-foreground" role="status">
       {decidedLine(card)}
-      {card.decided_at && <> · {clock(card.decided_at, timezone)}</>}
+      {card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}
     </p>
   );
 
@@ -290,7 +291,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
             )}
           </button>
           {decided ? (
-            <span className="text-lead text-muted-foreground">{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone)}</>}</span>
+            <span className="text-lead text-muted-foreground">{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</span>
           ) : (
             <div className="decide-row flex flex-wrap items-center gap-1">
               {list.map((o) => (

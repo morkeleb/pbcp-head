@@ -53,6 +53,7 @@ export function SettingsView() {
         <Connect minted={minted} />
         <Devices onError={report} />
         <Preferences onError={report} />
+        <InviteRequests onError={report} />
       </main>
     </>
   );
@@ -496,6 +497,52 @@ function Preferences({ onError }: { onError: (e: unknown) => void }) {
           )}
         </tbody>
       </table>
+    </Section>
+  );
+}
+
+// --- 6. invite requests ------------------------------------------------------------------------------------------
+
+interface InviteRequest { id: string; email: string; created_at: string; user_agent: string | null }
+
+/**
+ * Who asked for an invite at the front door's form (lib/invites.ts): read-only, with Delete. Only the deployment's own
+ * head is shown them; for any other the section is not there.
+ */
+function InviteRequests({ onError }: { onError: (e: unknown) => void }) {
+  const [requests, setRequests] = useState<InviteRequest[] | null>(null);
+  const online = useOnline();
+  const load = useCallback(async () => {
+    const r = await api<{ requests: InviteRequest[] }>('/api/me/settings/invites');
+    setRequests(r.status === 200 ? r.body.requests : null);
+  }, []);
+  useEffect(() => void load(), [load]);
+  if (requests === null) return null;
+  const remove = async (id: string) => {
+    try {
+      await call(`/api/me/settings/invites/${encodeURIComponent(id)}`, 'DELETE');
+    } catch (e) {
+      onError(e);
+    }
+    await load();
+  };
+  return (
+    <Section id="invites" title="Invite requests" intro="Addresses that asked for an invite at the front door. Nothing is sent to them.">
+      {requests.length === 0 ? (
+        <p className="text-lead text-muted-foreground">No one has asked yet.</p>
+      ) : (
+        <ul className="divide-y border-y text-body" data-invites>
+          {requests.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 py-2" data-invite={r.id}>
+              <div className="min-w-0 flex-1">
+                <p className="truncate">{r.email}</p>
+                <p className="truncate text-lead text-muted-foreground">{when(r.created_at)}{r.user_agent ? ` · ${r.user_agent}` : ''}</p>
+              </div>
+              <Button size="xs" variant="ghost" className="shrink-0 text-destructive" disabled={!online} onClick={() => void remove(r.id)}>Delete</Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   );
 }

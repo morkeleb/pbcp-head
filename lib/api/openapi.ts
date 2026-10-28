@@ -29,6 +29,7 @@ const errors = (statuses: number[], conflict: 'card' | 'error' = 'card') =>
           404: '`not_found`',
           409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token',
           413: '`too_large`: the body is over 1 MiB',
+          429: '`rate_limited`: too many requests from this address; Retry-After says when to try again',
           502: '`image_unavailable`: the image could not be fetched, or is not an image of at most 2 MB',
           503: '`push_unavailable`: the head has no VAPID keys, so it sends no notifications',
         }[s],
@@ -241,6 +242,22 @@ const PATHS: Record<string, Record<string, Json>> = {
       errors: [400, 401, 413],
     }),
     delete: operation('unsubscribePush', { summary: 'Remove this device’s Web Push subscription', ok: { 204: { description: 'Removed' } }, errors: [400, 401] }),
+  },
+  '/api/invite': {
+    post: operation('requestInvite', {
+      summary: 'Ask for an invite to the hosted head (public; no credential)',
+      description: 'The front door’s form. A request with an Authorization header is refused (400). An address already asked is accepted again and changes nothing. No mail is sent. Rate-limited per address (429). A form-encoded post (the form without JavaScript) is answered 303 to `/?invite=requested`.',
+      body: S.InviteBody,
+      ok: ok(S.InviteAccepted, 'Recorded', 202),
+      errors: [400, 413, 429],
+      public: true,
+    }),
+  },
+  '/api/me/settings/invites': {
+    get: operation('listInviteRequests', { summary: 'The requests for an invite, oldest first: for the deployment’s own head only (403 `not_the_operator`)', ok: ok(S.InviteList), errors: [400, 401, 403] }),
+  },
+  '/api/me/settings/invites/{id}': {
+    delete: operation('deleteInviteRequest', { summary: 'Delete an invite request', parameters: [idParam('id', 'An invite request’s id')], ok: { 204: { description: 'Deleted' } }, errors: [400, 401, 403, 404] }),
   },
   '/api/push/key': {
     get: operation('pushKey', { summary: 'The head’s VAPID public key, to subscribe with (public)', ok: ok(S.PushKey), errors: [503], public: true }),
