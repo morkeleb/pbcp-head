@@ -6,3 +6,6 @@ coverage/
 .env*
 !.env.example
 .vercel/
+
+# The owner MCP binary, bundled by `pnpm --filter @pbcp-head/owner-mcp build`
+packages/owner-mcp/dist/

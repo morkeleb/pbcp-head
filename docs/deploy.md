@@ -288,3 +288,36 @@ The draw function's cold start was measured by running that directory in the AWS
 The whole test suite, R01–R08 included (225 tests), passes with every diagram drawn by that function.
 
 A cold draw happens only when a new card brings a fence that is not yet in the diagram cache, and a card is rendered after its PUT has been answered (`after()`). A producer never waits for it; at worst the owner sees a card a few seconds before its diagram.
+
+## Using the head from an assistant (MCP)
+
+The head serves the owner's MCP server at `/api/mcp`: tools to read the brief and record decisions (`brief`, `list_cards`, `get_card`, `decide`, `acknowledge`, `snooze`, `unsnooze`, `create_order`). An assistant signs in with OAuth (PKCE, dynamic client registration); the owner allows it with their passkey, and signs it out in Settings → Devices. Nothing to configure on the head: the metadata is at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`.
+
+**The Claude app, as a custom connector**
+
+1. In Claude, open **Settings → Connectors → Add custom connector**.
+2. Name it (say, *Brief*) and give the URL `https://<your head>/api/mcp`. Leave the OAuth client fields empty: the head registers the app itself.
+3. **Connect**: your head's sign-in page opens; sign in with your passkey and **Allow**. The connector's tools are then available in your chats.
+
+**Claude Desktop, over stdio** (or any MCP client that runs a local command)
+
+```sh
+pnpm install && pnpm --filter @pbcp-head/owner-mcp build        # builds packages/owner-mcp/dist/stdio.js
+node packages/owner-mcp/dist/stdio.js login https://<your head>  # opens the consent page; prints two lines
+```
+
+Put what it prints into `claude_desktop_config.json` (Settings → Developer → Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "brief": {
+      "command": "node",
+      "args": ["/absolute/path/to/pbcp-head/packages/owner-mcp/dist/stdio.js"],
+      "env": { "PBCP_HEAD_URL": "https://<your head>", "PBCP_SESSION": "<what login printed>" }
+    }
+  }
+}
+```
+
+`PBCP_SESSION` is an assistant's session (`<client id>:<refresh token>`), never a producer token, which the binary refuses. Refresh tokens rotate; the newest is kept in `~/.config/pbcp-owner-mcp/` and used from then on. Signing the device out in Settings ends it; run `login` again to reconnect.

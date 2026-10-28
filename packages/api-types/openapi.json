@@ -3770,8 +3770,10 @@
             "enum": [
               "web",
               "ios",
-              "android"
-            ]
+              "android",
+              "mcp"
+            ],
+            "description": "`mcp`: an assistant connected through OAuth (/api/mcp)"
           },
           "created_at": {
             "type": "string",

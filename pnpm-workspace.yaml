@@ -5,6 +5,8 @@
 packages:
   - vendor/pbcp/packages/core
   - vendor/pbcp/packages/client
+  # The owner's MCP server (stdio binary, and the tools /api/mcp serves).
+  - packages/owner-mcp
 onlyBuiltDependencies:
   - esbuild
   - sharp

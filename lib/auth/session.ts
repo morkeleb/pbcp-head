@@ -17,6 +17,8 @@ const ISSUER = 'pbcp-head';
 
 export const PLATFORMS = ['web', 'ios', 'android'] as const;
 export type Platform = (typeof PLATFORMS)[number];
+/** An assistant connected through OAuth (lib/oauth.ts); never a platform a sign-in can claim. */
+export const MCP_PLATFORM = 'mcp';
 
 export interface Session {
   headId: string;
@@ -61,8 +63,8 @@ export async function verify(audience: string, token: string): Promise<Record<st
   }
 }
 
-const hash = (token: string): Buffer => createHash('sha256').update(token, 'utf8').digest();
-const newRefreshToken = () => `pbcp_rt_${randomBytes(32).toString('base64url')}`;
+export const hash = (token: string): Buffer => createHash('sha256').update(token, 'utf8').digest();
+export const newRefreshToken = () => `pbcp_rt_${randomBytes(32).toString('base64url')}`;
 
 async function issue(headId: string, deviceId: string, refreshToken: string, refreshExpiresAt: Date): Promise<SessionTokens> {
   return {
@@ -98,14 +100,19 @@ export async function startSession(db: Db, d: NewDevice): Promise<SessionTokens>
 }
 
 /**
- * Exchanges a refresh token for a new pair and retires it. Presenting a token that was already rotated out
- * means it leaked, so the device is revoked and must sign in again.
+ * Rotates a refresh token: the device gets a new one and the old one is retired. Presenting a token that was already
+ * rotated out means it leaked, so the device is revoked and must sign in again. `accepts` decides whether this kind of
+ * refresh is for this device (a web session's, or an assistant's through OAuth); a device it refuses is left as it is.
+ * Null when the token is not valid, has expired, or its device was signed out or refused.
  */
-export async function refreshSession(db: Db, refreshToken: unknown): Promise<SessionTokens> {
-  if (typeof refreshToken !== 'string' || refreshToken === '') throw new HttpError(400, 'invalid_request', 'refresh_token is required');
+export async function rotateRefresh(
+  db: Db,
+  refreshToken: string,
+  accepts: (device: typeof devices.$inferSelect) => boolean,
+): Promise<{ device: typeof devices.$inferSelect; next: string; expires: Date } | null> {
   const h = hash(refreshToken);
-  // The refusal is thrown after the transaction, so revoking a device on reuse commits rather than rolls back.
-  const rotated = await db.transaction(async (tx) => {
+  // The refusal is the caller's, after the transaction, so revoking a device on reuse commits rather than rolls back.
+  return db.transaction(async (tx) => {
     const [device] = await tx.select().from(devices).where(eq(devices.refreshTokenHash, h)).for('update');
     if (!device) {
       const [reused] = await tx.select().from(devices).where(eq(devices.previousRefreshHash, h)).for('update');
@@ -114,17 +121,26 @@ export async function refreshSession(db: Db, refreshToken: unknown): Promise<Ses
       }
       return null;
     }
-    if (device.revokedAt !== null || device.refreshExpiresAt === null || device.refreshExpiresAt <= new Date()) return null;
+    if (device.revokedAt !== null || device.refreshExpiresAt === null || device.refreshExpiresAt <= new Date() || !accepts(device)) return null;
     const next = newRefreshToken();
     const expires = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
     await tx
       .update(devices)
       .set({ refreshTokenHash: hash(next), previousRefreshHash: h, refreshExpiresAt: expires, lastSeenAt: new Date() })
       .where(eq(devices.id, device.id));
-    return { headId: device.headId, deviceId: device.id, next, expires };
+    return { device, next, expires };
   });
+}
+
+/**
+ * Exchanges a refresh token for a new pair and retires it (rotateRefresh). An assistant's device (platform `mcp`)
+ * refreshes through OAuth only (lib/oauth.ts), never here.
+ */
+export async function refreshSession(db: Db, refreshToken: unknown): Promise<SessionTokens> {
+  if (typeof refreshToken !== 'string' || refreshToken === '') throw new HttpError(400, 'invalid_request', 'refresh_token is required');
+  const rotated = await rotateRefresh(db, refreshToken, (d) => d.platform !== MCP_PLATFORM);
   if (!rotated) throw new HttpError(401, 'unauthorized', 'the refresh token is not valid, has expired, or its device was signed out');
-  return issue(rotated.headId, rotated.deviceId, rotated.next, rotated.expires);
+  return issue(rotated.device.headId, rotated.device.id, rotated.next, rotated.expires);
 }
 
 /** Signs a device out: its refresh token stops working and its access tokens are refused from now on. */

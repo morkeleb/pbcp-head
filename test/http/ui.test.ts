@@ -819,6 +819,41 @@ describe('settings', () => {
   });
 });
 
+describe('OAuth consent', () => {
+  it('asks a signed-out owner to sign in first, then names the app and what it may do, and Allow sends the code back', async () => {
+    const reg = await (await fetch(`${headUrl()}/api/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_name: 'Claude', redirect_uris: ['https://claude.example/api/mcp/auth_callback'] }) })).json();
+    const auth = new URL(`${headUrl()}/api/oauth/authorize`);
+    const params = { response_type: 'code', client_id: reg.client_id, redirect_uri: 'https://claude.example/api/mcp/auth_callback', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256', state: 'xyz', scope: 'owner' };
+    for (const [k, v] of Object.entries(params)) auth.searchParams.set(k, v);
+
+    // Signed out: to sign-in, which would bring the owner back.
+    const out = await (await browser.createBrowserContext()).newPage();
+    await out.goto(auth.href, { waitUntil: 'networkidle0' });
+    expect(new URL(out.url()).pathname).toBe('/signin');
+    expect(new URL(out.url()).searchParams.get('next')).toMatch(/^\/oauth\/consent\?request=/);
+    await out.browserContext().close();
+
+    // Signed in (the page's session): the app's name, the sentence, where it returns.
+    await page.goto(auth.href, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-consent]');
+    expect(await page.$eval('[data-client-name]', (e) => e.textContent)).toBe('Claude');
+    expect(await page.$eval('[data-consent]', (e) => e.textContent)).toContain('Allow this app to read your brief and record your decisions.');
+    expect(await page.$eval('[data-consent]', (e) => e.textContent)).toContain('claude.example');
+    await page.setRequestInterception(true);
+    let back = '';
+    page.on('request', (r) => {
+      if (!r.url().startsWith('https://claude.example/')) return void r.continue();
+      if (r.url().startsWith('https://claude.example/api/mcp/auth_callback')) back = r.url();
+      void r.respond({ status: 200, body: 'ok' });
+    });
+    await (await page.$('[data-allow]'))!.click();
+    await until(async () => back !== '');
+    const u = new URL(back);
+    expect(u.searchParams.get('state')).toBe('xyz');
+    expect(u.searchParams.get('code')).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+  });
+});
+
 describe('web orders', () => {
   it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;

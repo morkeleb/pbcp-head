@@ -4656,12 +4656,17 @@ extension Components {
             public var id: Swift.String
             /// - Remark: Generated from `#/components/schemas/Device/name`.
             public var name: Swift.String?
+            /// `mcp`: an assistant connected through OAuth (/api/mcp)
+            ///
             /// - Remark: Generated from `#/components/schemas/Device/platform`.
             @frozen public enum PlatformPayload: String, Codable, Hashable, Sendable, CaseIterable {
                 case web = "web"
                 case ios = "ios"
                 case android = "android"
+                case mcp = "mcp"
             }
+            /// `mcp`: an assistant connected through OAuth (/api/mcp)
+            ///
             /// - Remark: Generated from `#/components/schemas/Device/platform`.
             public var platform: Components.Schemas.Device.PlatformPayload
             /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
@@ -4689,7 +4694,7 @@ extension Components {
             /// - Parameters:
             ///   - id:
             ///   - name:
-            ///   - platform:
+            ///   - platform: `mcp`: an assistant connected through OAuth (/api/mcp)
             ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
             ///   - lastSeenAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
             ///   - timezone: An IANA timezone, e.g. `Europe/Copenhagen`

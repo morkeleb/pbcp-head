@@ -41,6 +41,30 @@ export const producerTokens = pgTable('producer_tokens', {
   pairedAt: tstz('paired_at'),
 });
 
+// OAuth for assistants (lib/oauth): clients registered dynamically (RFC 7591; public clients, no secrets), and
+// authorization codes (10 minutes, single use, PKCE S256). The tokens a client gets are a device's (devices,
+// platform 'mcp'): an access JWT with scope `owner`, and a rotating refresh token stored hashed on the device.
+export const oauthClients = pgTable('oauth_clients', {
+  clientId: text('client_id').primaryKey(),
+  clientName: text('client_name'),
+  redirectUris: text('redirect_uris').array().notNull(),
+  metadata: jsonb('metadata').notNull(), // the registration as accepted, returned to the client
+  createdAt: tstz('created_at').notNull().defaultNow(),
+});
+
+export const oauthCodes = pgTable('oauth_codes', {
+  codeHash: bytea('code_hash').primaryKey(),
+  clientId: text('client_id').notNull().references(() => oauthClients.clientId),
+  headId: text('head_id').notNull().references(() => heads.id),
+  redirectUri: text('redirect_uri').notNull(),
+  codeChallenge: text('code_challenge').notNull(),
+  scope: text('scope').notNull(),
+  resource: text('resource').notNull(),
+  expiresAt: tstz('expires_at').notNull(),
+  usedAt: tstz('used_at'),
+  deviceId: text('device_id'), // the device its exchange made: signed out if the code is presented again
+});
+
 // Pairing codes (lib/settings/pairing.ts): made by the owner, given to an agent, which trades one for its own producer
 // token at POST /api/pair. Only the code's hash is kept; a code is single use, bound to its head, and short-lived.
 export const pairingCodes = pgTable(
@@ -178,6 +202,7 @@ export const devices = pgTable(
     refreshExpiresAt: tstz('refresh_expires_at'),
     pushToken: text('push_token'),
     timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
+    clientId: text('client_id'), // platform 'mcp': the OAuth client it was authorised for (lib/oauth)
     tzSeenAt: tstz('tz_seen_at'), // when it last sent one: the most recent of these is the active device
     createdAt: tstz('created_at').notNull().defaultNow(),
     lastSeenAt: tstz('last_seen_at'),

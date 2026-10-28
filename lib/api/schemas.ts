@@ -248,7 +248,7 @@ export const LabelPatch = z.object({
 export const Device = z.object({
   id: z.string(),
   name: z.string().nullable(),
-  platform: z.enum(['web', 'ios', 'android']),
+  platform: z.enum(['web', 'ios', 'android', 'mcp']).describe('`mcp`: an assistant connected through OAuth (/api/mcp)'),
   created_at: Timestamp,
   last_seen_at: Timestamp.nullable(),
   timezone: Zone.nullable().describe('The zone it last sent in X-Timezone'),
