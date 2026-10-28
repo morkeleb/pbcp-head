@@ -670,9 +670,14 @@ describe('labels and a card’s day (RFC 0.7)', () => {
       const density = document.querySelector('[data-masthead] [role="tablist"]')!.getBoundingClientRect();
       const filter = document.querySelector('[data-label-filter]')!.getBoundingClientRect();
       const search = document.querySelector('[data-masthead] button[aria-label="Search"]')!.getBoundingClientRect();
-      return { afterDensity: filter.left >= density.right, beforeSearch: filter.right <= search.left, sameLine: Math.abs((filter.top + filter.bottom) / 2 - (density.top + density.bottom) / 2) < 4, inRow: !!document.querySelector('[data-masthead-row] [data-label-filter]') };
+      const button = document.querySelector('[data-label-filter] button')!.getBoundingClientRect();
+      return {
+        afterDensity: filter.left >= density.right, beforeSearch: filter.right <= search.left, sameLine: Math.abs((filter.top + filter.bottom) / 2 - (density.top + density.bottom) / 2) < 4, inRow: !!document.querySelector('[data-masthead-row] [data-label-filter]'),
+        // The density toggle is the label filter's size: both the masthead's small controls.
+        sameHeight: Math.round(density.height) === Math.round(button.height),
+      };
     });
-    expect(place).toEqual({ afterDensity: true, beforeSearch: true, sameLine: true, inRow: false });
+    expect(place).toEqual({ afterDensity: true, beforeSearch: true, sameLine: true, inRow: false, sameHeight: true });
     await page.setViewport({ width: 360, height: 800, isMobile: true, hasTouch: true });
     await page.reload({ waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-label-filter] button[aria-label="Filter by label"]');
@@ -1010,6 +1015,26 @@ describe('the front door in a browser', () => {
     await p.goto(`${headUrl()}/`);
     await p.waitForFunction(() => location.pathname === '/brief');
     await p.close();
+  });
+});
+
+describe('menus on a scrolled page', () => {
+  it('keeps the masthead in view while the menu, or a card’s ⋮ menu, is open', async () => {
+    await page.setViewport({ width: 390, height: 400, isMobile: true, hasTouch: true }); // short, so the brief scrolls
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('article[data-kind="decision"]');
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForFunction(() => scrollY > 100);
+    const mast = () => page.$eval('[data-masthead]', (m) => Math.round(m.getBoundingClientRect().top));
+    expect(await mast()).toBe(0);
+    for (const trigger of ['[data-masthead] button[aria-label="Pages"]', 'article[data-kind="decision"] button[aria-label="Card actions"], article[data-kind="decision"] [aria-haspopup="menu"]']) {
+      await (await page.$(trigger))!.tap();
+      await page.waitForSelector('[role="menu"]');
+      expect(await mast(), trigger).toBe(0);
+      expect(await page.evaluate(() => getComputedStyle(document.body).overflow), trigger).not.toBe('hidden');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('[role="menu"]'));
+    }
   });
 });
 

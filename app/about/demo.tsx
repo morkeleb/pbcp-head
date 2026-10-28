@@ -81,9 +81,9 @@ function FrameMasthead({ head, dateline, wide, density, onDensity }: { head: Dem
     <div className="flex items-center gap-1 text-muted-foreground" aria-hidden>
       {wide && (
         <Tabs value={density} onValueChange={(v) => onDensity(v as Density)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="comfortable" className="px-2 text-control">Comfortable</TabsTrigger>
-            <TabsTrigger value="ledger" className="px-2 text-control">Ledger</TabsTrigger>
+          <TabsList className="h-6 p-0.5 group-data-[orientation=horizontal]/tabs:h-6">
+            <TabsTrigger value="comfortable" className="px-2 py-0 text-xs">Comfortable</TabsTrigger>
+            <TabsTrigger value="ledger" className="px-2 py-0 text-xs">Ledger</TabsTrigger>
           </TabsList>
         </Tabs>
       )}
