@@ -22,6 +22,7 @@ Results are compact JSON. Refusals come back as tool errors in the head's own wo
 
 ```sh
 node dist/stdio.js login https://<head>   # once: OAuth through a loopback redirect; prints PBCP_HEAD_URL and PBCP_SESSION
+                                          # reuses the client it registered before; --register makes a new one
 ```
 
 ```json

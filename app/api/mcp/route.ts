@@ -13,13 +13,12 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { createOwnerServer } from '@pbcp-head/owner-mcp';
 import { db } from '../../../db/client';
 import { preflight, withCors } from '../../../lib/cors';
-import { authenticateAssistant, presentedToken, unauthorized } from '../../../lib/oauth';
-import { headOrigin } from '../../../lib/settings/head';
+import { authenticateAssistant, presentedToken, unauthorized, oauthOrigin } from '../../../lib/oauth';
 
 export const dynamic = 'force-dynamic';
 
 async function serve(req: Request): Promise<Response> {
-  const origin = headOrigin(req.url);
+  const origin = oauthOrigin();
   if (!(await authenticateAssistant(db(), req, origin))) return withCors(unauthorized(origin));
   const token = presentedToken(req)!;
   const server = createOwnerServer({ headUrl: origin, accessToken: async () => token });

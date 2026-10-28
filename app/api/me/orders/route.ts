@@ -19,7 +19,8 @@ export const GET = meHandler(async (s) => {
   return json({ timezone, orders: await orderProgress(db(), s.headId, orders) });
 });
 
-export const POST = meHandler(async (s, req) => {
+// An assistant's tools call this route (packages/owner-mcp): its scoped token is accepted here (lib/auth/session.ts).
+export const POST = meHandler({ assistant: true }, async (s, req) => {
   const b = parseRequest(OrderRequest, await readObject(req));
   const order = await giveOrder(db(), s.headId, { to_producer: b.to_producer, title: b.title.trim(), body: b.body ?? '', ...(b.urgency ? { urgency: b.urgency } : {}) });
   after(() => renderAfterCommit(db(), s.headId, order));

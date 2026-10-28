@@ -47,7 +47,7 @@ Under **Settings → Environment Variables**, for Production (and Preview, with 
 | --- | --- |
 | `SESSION_SECRET` | `openssl rand -base64 48`; at least 32 characters |
 | `CRON_SECRET` | `openssl rand -base64 32`. Vercel Cron sends it to `/api/cron/brief` as a bearer token by itself |
-| `WEBAUTHN_ORIGIN` | `https://<your domain>`, the origin passkeys are registered for |
+| `WEBAUTHN_ORIGIN` | `https://<your domain>`, the origin passkeys are registered for. **Required:** it is also the OAuth issuer and the MCP resource, which are never taken from a request's Host header, so the head refuses to start without it |
 | `WEBAUTHN_RP_ID` | optional; defaults to the host of `WEBAUTHN_ORIGIN` |
 | `APPLE_CLIENT_ID` | optional; Sign in with Apple's Services ID and/or bundle id |
 | `PBCP_HEAD` | optional; which head `GET /` describes when the database holds more than one |
@@ -320,4 +320,4 @@ Put what it prints into `claude_desktop_config.json` (Settings → Developer →
 }
 ```
 
-`PBCP_SESSION` is an assistant's session (`<client id>:<refresh token>`), never a producer token, which the binary refuses. Refresh tokens rotate; the newest is kept in `~/.config/pbcp-owner-mcp/` and used from then on. Signing the device out in Settings ends it; run `login` again to reconnect.
+`PBCP_SESSION` is an assistant's session (`<client id>:<refresh token>`), never a producer token, which the binary refuses. Refresh tokens rotate; the newest is kept in `~/.config/pbcp-owner-mcp/` and used from then on. Signing the device out in Settings ends it; run `login` again to reconnect. `login` registers its OAuth client once and reuses it from that state file; `login --register <head>` registers a new one. A registered client that never completes a sign-in is deleted after 7 days.

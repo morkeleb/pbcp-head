@@ -48,7 +48,7 @@ export const oauthClients = pgTable('oauth_clients', {
   clientId: text('client_id').primaryKey(),
   clientName: text('client_name'),
   redirectUris: text('redirect_uris').array().notNull(),
-  metadata: jsonb('metadata').notNull(), // the registration as accepted, returned to the client
+  tokenEndpointAuthMethod: text('token_endpoint_auth_method').notNull().default('none'),
   createdAt: tstz('created_at').notNull().defaultNow(),
 });
 
@@ -75,7 +75,7 @@ export const pairingCodes = pgTable(
     codeHash: bytea('code_hash').notNull(),
     createdAt: tstz('created_at').notNull().defaultNow(),
     expiresAt: tstz('expires_at').notNull(),
-    usedAt: tstz('used_at'), // paired, cancelled, or burned by a failed attempt: either way, never again
+    usedAt: tstz('used_at'), // paired or cancelled: either way, never again (an expired code is refused by its expires_at)
   },
   (t) => [uniqueIndex('pairing_codes_hash').on(t.codeHash), index('pairing_codes_head').on(t.headId)],
 );
@@ -198,7 +198,10 @@ export const devices = pgTable(
     name: text('name'),
     platform: text('platform').notNull(), // web | ios | android
     refreshTokenHash: bytea('refresh_token_hash'),
-    previousRefreshHash: bytea('previous_refresh_hash'), // the token rotated out last; presenting it again revokes the device
+    // Refresh tokens come in a family per device, numbered by generation: `pbcp_rt_<family>.<generation>.<random>`. The
+    // current one's hash is refresh_token_hash; presenting any earlier generation of the family revokes the device.
+    refreshFamily: text('refresh_family'),
+    refreshGeneration: integer('refresh_generation').notNull().default(0),
     refreshExpiresAt: tstz('refresh_expires_at'),
     pushToken: text('push_token'),
     timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
@@ -208,7 +211,7 @@ export const devices = pgTable(
     lastSeenAt: tstz('last_seen_at'),
     revokedAt: tstz('revoked_at'),
   },
-  (t) => [uniqueIndex('devices_refresh').on(t.refreshTokenHash), index('devices_head').on(t.headId)],
+  (t) => [uniqueIndex('devices_refresh').on(t.refreshTokenHash), uniqueIndex('devices_refresh_family').on(t.refreshFamily), index('devices_head').on(t.headId)],
 );
 
 // Drawn diagrams by sha256 of the sanitised fence (§3.1 Determinism): identical fences across cards and

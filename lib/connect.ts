@@ -131,7 +131,7 @@ export function llmsTxt(facts: ConnectFacts, origin: string): string {
     pairCurl(facts.api),
     '```',
     '',
-    'A wrong, expired or used code is answered 400 invalid_code, and every outstanding code is then void: ask the owner for a new one. A root that already has a token is 409 root_taken; choose another and try again with the same code.',
+    'A wrong, expired or used code is answered 400 invalid_code: ask the owner for a new one (attempts are limited per address). A root that already has a token is 409 root_taken; choose another and try again with the same code.',
     '',
     '## Facts',
     '',

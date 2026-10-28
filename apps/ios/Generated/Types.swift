@@ -150,7 +150,7 @@ public protocol APIProtocol: Sendable {
     func cancelPairingCode(_ input: Operations.CancelPairingCode.Input) async throws -> Operations.CancelPairingCode.Output
     /// Trade a pairing code from the owner for your own producer token (public; no credential)
     ///
-    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
     ///
     /// - Remark: HTTP `POST /api/pair`.
     /// - Remark: Generated from `#/paths//api/pair/post(pair)`.
@@ -494,7 +494,7 @@ extension APIProtocol {
     }
     /// Trade a pairing code from the owner for your own producer token (public; no credential)
     ///
-    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
     ///
     /// - Remark: HTTP `POST /api/pair`.
     /// - Remark: Generated from `#/paths//api/pair/post(pair)`.

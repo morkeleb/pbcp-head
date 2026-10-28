@@ -1,6 +1,7 @@
 // Runs once when a server or a Vercel function instance boots, before any request is handled.
-import { refuseTestModeInProduction } from './lib/boot';
+import { refuseTestModeInProduction, requirePublicOrigin } from './lib/boot';
 
 export function register(): void {
   refuseTestModeInProduction();
+  requirePublicOrigin();
 }

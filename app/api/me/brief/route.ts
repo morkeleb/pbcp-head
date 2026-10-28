@@ -7,4 +7,5 @@ import { meHandler } from '../../../../lib/owner';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = meHandler(async (s) => json(await brief(db(), s.headId)));
+// An assistant's tools call this route (packages/owner-mcp): its scoped token is accepted here (lib/auth/session.ts).
+export const GET = meHandler({ assistant: true }, async (s) => json(await brief(db(), s.headId)));

@@ -60,7 +60,7 @@ export default async function ConnectPage() {
           </ol>
           <div className="mt-3"><Copyable text={pairCurl(facts.api)} label="pair" block /></div>
           <p className="pt-2 text-lead text-muted-foreground">
-            A wrong, expired or used code is <code>400 invalid_code</code>, and every outstanding code is then void: ask for a new one. A root that already has a token is <code>409 root_taken</code>: choose another and use the same code.
+            A wrong, expired or used code is <code>400 invalid_code</code>: ask for a new one (attempts are limited per address). A root that already has a token is <code>409 root_taken</code>: choose another and use the same code.
           </p>
         </Section>
 

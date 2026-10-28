@@ -1,7 +1,7 @@
 // POST /api/pair { code, root, name? } — public: a producer trades a pairing code from the owner for its own token
 // (lib/settings/pairing.ts). The code is the credential: a request that carries any other (a producer token, a session)
 // is refused, so the owner pairs nothing here; the owner's side is Settings. Rate-limited per address. 201
-// { token, api, owner, root } once; 400 invalid_code (every outstanding code burned), 400 invalid_root, 409 root_taken.
+// { token, api, owner, root } once; 400 invalid_code (no other code is touched), 400 invalid_root, 409 root_taken.
 
 import { db } from '../../../db/client';
 import { HttpError, handle, json, readObject } from '../../../lib/http';

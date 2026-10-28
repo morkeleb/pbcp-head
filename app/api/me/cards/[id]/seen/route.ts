@@ -4,4 +4,5 @@ import { seenHandler } from '../../../../../../lib/owner';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = seenHandler(4);
+// An assistant's tools call this route (packages/owner-mcp): its scoped token is accepted here (lib/auth/session.ts).
+export const POST = seenHandler(4, { assistant: true });

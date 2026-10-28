@@ -2,10 +2,9 @@
 // server is (lib/oauth.ts). The path-suffixed form, which a client derives from the resource's own path.
 
 import { preflight, withCors } from '../../../../../lib/cors';
-import { protectedResourceMetadata } from '../../../../../lib/oauth';
-import { headOrigin } from '../../../../../lib/settings/head';
+import { protectedResourceMetadata, oauthOrigin } from '../../../../../lib/oauth';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = (req: Request) => withCors(Response.json(protectedResourceMetadata(headOrigin(req.url))));
+export const GET = () => withCors(Response.json(protectedResourceMetadata(oauthOrigin())));
 export const OPTIONS = preflight;

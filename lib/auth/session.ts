@@ -64,7 +64,20 @@ export async function verify(audience: string, token: string): Promise<Record<st
 }
 
 export const hash = (token: string): Buffer => createHash('sha256').update(token, 'utf8').digest();
-export const newRefreshToken = () => `pbcp_rt_${randomBytes(32).toString('base64url')}`;
+
+/**
+ * Refresh tokens come in families, one per device, numbered by generation: `pbcp_rt_<family>.<generation>.<random>`.
+ * The device keeps its family, the current generation and the current token's hash; a token of the family from any
+ * earlier generation is a rotated-out one presented again, so it leaked, and the device is signed out.
+ */
+const FAMILY_TOKEN = /^pbcp_rt_([A-Za-z0-9_-]{22})\.(\d{1,9})\.([A-Za-z0-9_-]{43})$/;
+export const refreshTokenFor = (family: string, generation: number) => `pbcp_rt_${family}.${generation}.${randomBytes(32).toString('base64url')}`;
+
+/** A new family's first token: what a device is created with. */
+export function newRefreshFamily(): { family: string; generation: number; token: string } {
+  const family = randomBytes(16).toString('base64url');
+  return { family, generation: 0, token: refreshTokenFor(family, 0) };
+}
 
 async function issue(headId: string, deviceId: string, refreshToken: string, refreshExpiresAt: Date): Promise<SessionTokens> {
   return {
@@ -90,20 +103,23 @@ export async function startSession(db: Db, d: NewDevice): Promise<SessionTokens>
   const platform = (PLATFORMS as readonly unknown[]).includes(d.platform) ? (d.platform as Platform) : 'web';
   const name = typeof d.name === 'string' && d.name.length > 0 ? d.name.slice(0, 100) : null;
   const id = randomUUID();
-  const refresh = newRefreshToken();
+  const refresh = newRefreshFamily();
   const expires = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
   await db.insert(devices).values({
     id, headId: d.headId, identityId: d.identityId, platform, name,
-    refreshTokenHash: hash(refresh), refreshExpiresAt: expires, lastSeenAt: new Date(),
+    refreshTokenHash: hash(refresh.token), refreshFamily: refresh.family, refreshGeneration: 0, refreshExpiresAt: expires, lastSeenAt: new Date(),
   });
-  return issue(d.headId, id, refresh, expires);
+  return issue(d.headId, id, refresh.token, expires);
 }
 
 /**
- * Rotates a refresh token: the device gets a new one and the old one is retired. Presenting a token that was already
- * rotated out means it leaked, so the device is revoked and must sign in again. `accepts` decides whether this kind of
- * refresh is for this device (a web session's, or an assistant's through OAuth); a device it refuses is left as it is.
- * Null when the token is not valid, has expired, or its device was signed out or refused.
+ * Rotates a refresh token: the device gets the next generation of its family and the presented one is retired.
+ * Presenting a token of the family from an earlier generation means a rotated-out token leaked, so the device is
+ * revoked and must sign in again. `accepts` decides whether this kind of refresh is for this device (a web session's, or
+ * an assistant's through OAuth); a device it refuses is left as it is. Null when the token is not valid, has expired, or
+ * its device was signed out, refused, or just revoked for reuse.
+ *
+ * A token from before families (`pbcp_rt_<random>`) is accepted once, by its hash, and starts its device's family.
  */
 export async function rotateRefresh(
   db: Db,
@@ -111,22 +127,32 @@ export async function rotateRefresh(
   accepts: (device: typeof devices.$inferSelect) => boolean,
 ): Promise<{ device: typeof devices.$inferSelect; next: string; expires: Date } | null> {
   const h = hash(refreshToken);
+  const m = FAMILY_TOKEN.exec(refreshToken);
   // The refusal is the caller's, after the transaction, so revoking a device on reuse commits rather than rolls back.
   return db.transaction(async (tx) => {
-    const [device] = await tx.select().from(devices).where(eq(devices.refreshTokenHash, h)).for('update');
-    if (!device) {
-      const [reused] = await tx.select().from(devices).where(eq(devices.previousRefreshHash, h)).for('update');
-      if (reused && reused.revokedAt === null) {
-        await tx.update(devices).set({ revokedAt: new Date(), refreshTokenHash: null }).where(eq(devices.id, reused.id));
+    const [device] = m
+      ? await tx.select().from(devices).where(eq(devices.refreshFamily, m[1]!)).for('update')
+      : await tx.select().from(devices).where(eq(devices.refreshTokenHash, h)).for('update');
+    if (!device) return null;
+    if (m) {
+      const generation = Number(m[2]);
+      const current = device.refreshTokenHash !== null && device.refreshTokenHash.equals(h) && generation === device.refreshGeneration;
+      if (!current) {
+        // An earlier generation of this family: a rotated-out token, presented again. Anything else is just not valid.
+        if (generation < device.refreshGeneration && device.revokedAt === null) {
+          await tx.update(devices).set({ revokedAt: new Date(), refreshTokenHash: null }).where(eq(devices.id, device.id));
+        }
+        return null;
       }
-      return null;
     }
     if (device.revokedAt !== null || device.refreshExpiresAt === null || device.refreshExpiresAt <= new Date() || !accepts(device)) return null;
-    const next = newRefreshToken();
+    const family = device.refreshFamily ?? newRefreshFamily().family;
+    const generation = device.refreshFamily ? device.refreshGeneration + 1 : 0;
+    const next = refreshTokenFor(family, generation);
     const expires = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000);
     await tx
       .update(devices)
-      .set({ refreshTokenHash: hash(next), previousRefreshHash: h, refreshExpiresAt: expires, lastSeenAt: new Date() })
+      .set({ refreshTokenHash: hash(next), refreshFamily: family, refreshGeneration: generation, refreshExpiresAt: expires, lastSeenAt: new Date() })
       .where(eq(devices.id, device.id));
     return { device, next, expires };
   });
@@ -151,6 +177,12 @@ export async function revokeDevice(db: Db, s: Session): Promise<void> {
     .where(and(eq(devices.id, s.deviceId), eq(devices.headId, s.headId)));
 }
 
+/** Which sessions a route takes: every route takes the owner's own; only a route the assistant's tools use takes an assistant's. */
+export interface SessionPolicy {
+  /** The route is one packages/owner-mcp's tools call: an assistant's scoped token is accepted too. */
+  assistant?: boolean;
+}
+
 /** The `Session` credential from a request, or null. A `Bearer` (producer) token is never a session. */
 export function sessionToken(req: Request): string | null {
   const m = /^Session +(\S+)$/i.exec(req.headers.get('authorization') ?? '');
@@ -165,12 +197,17 @@ export function sessionToken(req: Request): string | null {
  * after the credential (an unknown zone is 400 `invalid_request`) and stored on the device with `tz_seen_at`;
  * the head follows the zone of the device most recently seen (lib/timezone.ts).
  */
-export async function authenticateSession(db: Db, req: Request): Promise<Session> {
+export async function authenticateSession(db: Db, req: Request, policy: SessionPolicy = {}): Promise<Session> {
   const token = sessionToken(req);
   if (token === null) throw new HttpError(401, 'unauthorized', 'a session is required: Authorization: Session <access token>');
   const claims = await verify('session', token);
   if (!claims || typeof claims.sub !== 'string' || typeof claims.did !== 'string') {
     throw new HttpError(401, 'unauthorized', 'the session is not valid or has expired');
+  }
+  // A scoped token is an assistant's (lib/oauth.ts): it reaches only the routes its tools use, which opt in. Never
+  // settings, devices, enrolment, sign-in, consent or minting.
+  if (claims.scope !== undefined && !policy.assistant) {
+    throw new HttpError(403, 'insufficient_scope', 'an assistant’s token reaches the brief and its cards only; this needs the owner, signed in');
   }
   const live = and(eq(devices.id, claims.did), eq(devices.headId, claims.sub), isNull(devices.revokedAt));
   const header = req.headers.get(TIMEZONE_HEADER);

@@ -1,7 +1,8 @@
 // pbcp-owner-mcp: the owner's MCP server over stdio, for a desktop client (Claude Desktop, any MCP client).
 //
 //   pbcp-owner-mcp login https://head.example   sign in once: OAuth with PKCE through a loopback redirect; prints
-//                                                PBCP_SESSION
+//                                                PBCP_SESSION. Reuses the client it registered before (kept in the
+//                                                state file); `login --register <head>` registers a new one.
 //   pbcp-owner-mcp                               serve, with PBCP_HEAD_URL and PBCP_SESSION in the environment
 //
 // PBCP_SESSION is `<client id>:<refresh token>`, an assistant's credential from the head's authorization server, never a
@@ -32,13 +33,17 @@ function stateFile(head: string): string {
   return join(dir, `${new URL(head).host.replace(/[^A-Za-z0-9.-]/g, '_')}.json`);
 }
 
-function saved(head: string, clientId: string): string | null {
+function state(head: string): Partial<Credential> {
   try {
-    const s = JSON.parse(readFileSync(stateFile(head), 'utf8')) as Partial<Credential>;
-    return s.clientId === clientId && typeof s.refreshToken === 'string' ? s.refreshToken : null;
+    return JSON.parse(readFileSync(stateFile(head), 'utf8')) as Partial<Credential>;
   } catch {
-    return null;
+    return {};
   }
+}
+
+function saved(head: string, clientId: string): string | null {
+  const s = state(head);
+  return s.clientId === clientId && typeof s.refreshToken === 'string' ? s.refreshToken : null;
 }
 
 const save = (head: string, c: Credential) => writeFileSync(stateFile(head), JSON.stringify(c), { mode: 0o600 });
@@ -65,22 +70,29 @@ export function accessTokens(head: string, seed: Credential): () => Promise<stri
   };
 }
 
-/** Signs in once: registers this client, opens the consent page, and catches the code on a loopback address (RFC 8252). */
-async function login(head: string): Promise<void> {
+/**
+ * Signs in: opens the consent page and catches the code on a loopback address (RFC 8252). The client is registered once,
+ * with a loopback redirect URI and no port (the head accepts any port on it), and reused from the state file after.
+ */
+async function login(head: string, fresh: boolean): Promise<void> {
   const meta = await metadata(head);
-  const state = randomBytes(16).toString('base64url');
+  const state_ = randomBytes(16).toString('base64url');
   const server = createServer();
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as { port: number }).port;
   const redirectUri = `http://127.0.0.1:${port}/callback`;
-  const client = await registerClient(origin(head), { metadata: meta, clientMetadata: { client_name: 'Claude Desktop (pbcp-owner-mcp)', redirect_uris: [redirectUri], token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], scope: SCOPE } });
-  const { authorizationUrl, codeVerifier } = await startAuthorization(origin(head), { metadata: meta, clientInformation: client, redirectUrl: redirectUri, scope: SCOPE, state, resource: mcp(head) });
+  const known = fresh ? undefined : state(head).clientId;
+  const client = known
+    ? { client_id: known }
+    : await registerClient(origin(head), { metadata: meta, clientMetadata: { client_name: 'Claude Desktop (pbcp-owner-mcp)', redirect_uris: ['http://127.0.0.1/callback'], token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], scope: SCOPE } });
+  if (!known) save(head, { clientId: client.client_id, refreshToken: '' });
+  const { authorizationUrl, codeVerifier } = await startAuthorization(origin(head), { metadata: meta, clientInformation: client, redirectUrl: redirectUri, scope: SCOPE, state: state_, resource: mcp(head) });
   const code = await new Promise<string>((resolve, reject) => {
     server.on('request', (req, res) => {
       const u = new URL(req.url ?? '/', redirectUri);
       if (u.pathname !== '/callback') return void res.writeHead(404).end();
       const done = (text: string) => res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(text);
-      if (u.searchParams.get('state') !== state) return void (done('This sign-in did not come from this login. Close this tab and run it again.'), reject(new Error('state did not match')));
+      if (u.searchParams.get('state') !== state_) return void (done('This sign-in did not come from this login. Close this tab and run it again.'), reject(new Error('state did not match')));
       const err = u.searchParams.get('error');
       if (err) return void (done('Not allowed. You can close this tab.'), reject(new Error(`${err}: ${u.searchParams.get('error_description') ?? ''}`)));
       done('Signed in. You can close this tab and return to the terminal.');
@@ -104,8 +116,10 @@ async function serve(): Promise<void> {
   await server.connect(new StdioServerTransport());
 }
 
-const [command, arg] = process.argv.slice(2);
-(command === 'login' ? (arg ? login(arg) : Promise.reject(new Error('usage: pbcp-owner-mcp login <head url>'))) : serve()).catch((e: unknown) => {
+const [command, ...rest] = process.argv.slice(2);
+const fresh = rest.includes('--register');
+const target = rest.find((a) => !a.startsWith('--'));
+(command === 'login' ? (target ? login(target, fresh) : Promise.reject(new Error('usage: pbcp-owner-mcp login [--register] <head url>'))) : serve()).catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 });

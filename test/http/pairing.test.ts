@@ -1,5 +1,6 @@
 // Producer pairing (lib/settings/pairing.ts): the owner makes a code in Settings; an agent trades it at the public
-// POST /api/pair for a token of its own. A failed attempt burns every outstanding code; a good code with a bad root
+// POST /api/pair for a token of its own. A failed attempt touches no code and counts against the rate limit; a code is
+// burned only by its own use; a good code with a bad root
 // does not; the route is rate-limited per address; a pairing is in the owner's record.
 
 import { and, eq } from 'drizzle-orm';
@@ -74,14 +75,19 @@ describe('POST /api/pair', () => {
     expect(Object.keys(r.body).sort()).toEqual(['error', 'message']);
   });
 
-  it('burns the real code when a wrong one is tried, and says nothing more', async () => {
+  it('refuses a wrong code with 400 invalid_code and nothing more, and leaves every real code usable', async () => {
     const real = await newCode();
     const other = await newCode();
     const wrong = await pair({ code: 'ZZZ-ZZZ', root: 'agent-7' });
     expect([wrong.status, wrong.body.error]).toEqual([400, 'invalid_code']);
     expect(wrong.body.message).not.toMatch(/expired|used|exist/i);
-    expect(await openCodes()).toEqual([]);
-    for (const c of [real, other]) expect((await pair({ code: c.code, root: 'agent-7' })).body.error).toBe('invalid_code');
+    expect(await openCodes()).toHaveLength(2); // a wrong attempt touches no code: it costs the caller one try
+    expect((await pair({ code: real.code, root: 'agent-7' })).status).toBe(201);
+    expect((await pair({ code: other.code, root: 'agent-8' })).status).toBe(201);
+    // A used code is refused the same way, and burns nothing else.
+    const third = await newCode();
+    expect((await pair({ code: real.code, root: 'agent-9' })).body.error).toBe('invalid_code');
+    expect(await openCodes()).toEqual([expect.objectContaining({ id: third.id })]);
   });
 
   it('answers a taken root with 409 root_taken, and a malformed one with 400 invalid_root, without burning the code', async () => {
