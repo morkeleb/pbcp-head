@@ -402,7 +402,7 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
     }
   };
   return (
-    <Section id="devices" title="Devices" intro="Where you are signed in. Signing a device out ends its session there.">
+    <Section id="devices" title="Devices" intro="Where you are signed in, and the assistants you allowed to use your brief. Signing one out ends its access there and then.">
       {devices === null ? (
         <p className="text-lead text-muted-foreground">Loading…</p>
       ) : (
@@ -422,7 +422,7 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
                   {d.name ?? 'Unnamed device'}
                   {d.current && <span className="ml-2 rounded-full border px-1.5 text-meta text-muted-foreground" data-this-device>this device</span>}
                 </td>
-                <td className="py-2 pr-3 text-muted-foreground">{d.platform}</td>
+                <td className="py-2 pr-3 text-muted-foreground">{d.platform === 'mcp' ? 'assistant' : d.platform}</td>
                 <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{d.last_seen_at ? when(d.last_seen_at) : '—'}</td>
                 <td className="py-2 text-right">
                   <Button size="xs" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void signOut(d)}>Sign out</Button>

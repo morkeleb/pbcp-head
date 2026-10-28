@@ -3,7 +3,7 @@
 // a card is opened.
 
 import { and, eq } from 'drizzle-orm';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
@@ -816,6 +816,57 @@ describe('settings', () => {
     await page.waitForFunction((t) => document.querySelector('[data-snippet="curl"]')?.textContent?.includes(t), {}, token);
     expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toBe(pub.split('<token>').join(token));
     expect(await page.$eval('[data-value="PBCP_TOKEN"]', (c) => c.textContent)).toBe(token);
+  });
+});
+
+describe('OAuth consent', () => {
+  it('asks a signed-out owner to sign in first, then names the app and what it may do, and Allow sends the code back', async () => {
+    const reg = await (await fetch(`${headUrl()}/api/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_name: 'Claude', redirect_uris: ['https://claude.example/api/mcp/auth_callback'] }) })).json();
+    const auth = new URL(`${headUrl()}/api/oauth/authorize`);
+    const params = { response_type: 'code', client_id: reg.client_id, redirect_uri: 'https://claude.example/api/mcp/auth_callback', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256', state: 'xyz', scope: 'owner' };
+    for (const [k, v] of Object.entries(params)) auth.searchParams.set(k, v);
+
+    // Signed out: to sign-in, which would bring the owner back.
+    const out = await (await browser.createBrowserContext()).newPage();
+    await out.goto(auth.href, { waitUntil: 'networkidle0' });
+    expect(new URL(out.url()).pathname).toBe('/signin');
+    expect(new URL(out.url()).searchParams.get('next')).toMatch(/^\/oauth\/consent\?request=/);
+    await out.browserContext().close();
+
+    // Signed in (the page's session): the app's name, the sentence, where it returns.
+    await page.goto(auth.href, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-consent]');
+    expect(await page.$eval('[data-client-name]', (e) => e.textContent)).toBe('Claude');
+    expect(await page.$eval('[data-consent]', (e) => e.textContent)).toContain('Allow this app to read your brief and record your decisions.');
+    expect(await page.$eval('[data-consent]', (e) => e.textContent)).toContain('claude.example');
+    await page.setRequestInterception(true);
+    let back = '';
+    const intercept = (r: HTTPRequest) => {
+      if (!r.url().startsWith('https://claude.example/')) return void r.continue();
+      if (r.url().startsWith('https://claude.example/api/mcp/auth_callback')) back = r.url();
+      void r.respond({ status: 200, body: 'ok' });
+    };
+    page.on('request', intercept);
+    await (await page.$('[data-allow]'))!.click();
+    await until(async () => back !== '');
+    const u = new URL(back);
+    expect(u.searchParams.get('state')).toBe('xyz');
+    expect(u.searchParams.get('code')).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+    page.off('request', intercept);
+    await page.setRequestInterception(false);
+
+    // A request whose payload was altered (a name and a return address of the attacker's choosing): nothing from it is
+    // shown, because the page shows only what the head verified.
+    const signed = new URL((await fetch(auth, { redirect: 'manual' })).headers.get('location')!).searchParams.get('request')!;
+    const [h, body, sig] = signed.split('.');
+    const claims = JSON.parse(Buffer.from(body!, 'base64url').toString());
+    const forged = { ...claims, req: { ...claims.req, client_name: 'Totally Your Bank', redirect_uri: 'https://attacker.example/cb' } };
+    await page.goto(`${headUrl()}/oauth/consent?request=${[h, Buffer.from(JSON.stringify(forged)).toString('base64url'), sig].join('.')}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[role="alert"]');
+    expect(await page.$('[data-consent]')).toBeNull();
+    const text = await page.$eval('body', (b) => b.textContent ?? '');
+    expect(text).toContain('This request cannot be used.');
+    expect(text).not.toMatch(/Totally Your Bank|attacker\.example/);
   });
 });
 

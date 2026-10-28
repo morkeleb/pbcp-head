@@ -7,7 +7,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { db } from '../../../db/client';
-import { connectLinks, connectSnippets, OWNER, pairCurl, pairingSteps, TOKEN, type Link as DocLink } from '../../../lib/connect';
+import { assistantAccess, connectLinks, connectSnippets, OWNER, pairCurl, pairingSteps, TOKEN, type Link as DocLink } from '../../../lib/connect';
 import { connectFacts, headOrigin } from '../../../lib/settings/head';
 import { PageRow } from '../chrome';
 import { Copyable } from '../copy';
@@ -60,7 +60,7 @@ export default async function ConnectPage() {
           </ol>
           <div className="mt-3"><Copyable text={pairCurl(facts.api)} label="pair" block /></div>
           <p className="pt-2 text-lead text-muted-foreground">
-            A wrong, expired or used code is <code>400 invalid_code</code>, and every outstanding code is then void: ask for a new one. A root that already has a token is <code>409 root_taken</code>: choose another and use the same code.
+            A wrong, expired or used code is <code>400 invalid_code</code>: ask for a new one (attempts are limited per address). A root that already has a token is <code>409 root_taken</code>: choose another and use the same code.
           </p>
         </Section>
 
@@ -80,6 +80,19 @@ export default async function ConnectPage() {
             With curl. The card is the specification’s example, whose id is under the root <code>{curlRoot}</code>: the command needs a token for that root (§12).
           </p>
           <Copyable text={curl} label="curl" block />
+        </Section>
+
+        <Section title="Use this head from an assistant">
+          <p className="pb-2 text-lead text-muted-foreground">
+            For an assistant acting for the owner (reading the brief, recording decisions), not a producer: the owner’s MCP server. It signs in with OAuth (PKCE and dynamic
+            registration); the owner allows the app with their passkey and can sign it out in Settings → Devices.
+          </p>
+          <table className="w-full text-body" data-assistant>
+            <tbody className="divide-y border-y">
+              <Row name="MCP URL"><Copyable text={assistantAccess(origin).url} label="mcp" wrap /></Row>
+              <Row name="Tools">{assistantAccess(origin).tools.map((t) => <code key={t} className="mr-2 text-body">{t}</code>)}</Row>
+            </tbody>
+          </table>
         </Section>
 
         <Section title="Read more">

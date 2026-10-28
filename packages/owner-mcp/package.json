@@ -1,0 +1,27 @@
+{
+  "name": "@pbcp-head/owner-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An MCP server for a head's owner: read the brief and record decisions through /api/me. A stdio binary, and the tools the head serves at /api/mcp.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "pbcp-owner-mcp": "./dist/stdio.js"
+  },
+  "scripts": {
+    "api-types": "openapi-typescript ../api-types/openapi.json -o src/api.d.ts",
+    "build": "esbuild src/stdio.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/stdio.js --banner:js='#!/usr/bin/env node'"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "openapi-fetch": "0.17.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

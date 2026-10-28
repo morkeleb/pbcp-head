@@ -8,7 +8,8 @@ import { meHandler } from '../../../../lib/owner';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = meHandler(async (s, req) => {
+// An assistant's tools call this route (packages/owner-mcp): its scoped token is accepted here (lib/auth/session.ts).
+export const GET = meHandler({ assistant: true }, async (s, req) => {
   const q = new URL(req.url).searchParams;
   return json(await listCards(db(), s.headId, { date: q.get('date'), from: q.get('from'), to: q.get('to'), since: q.get('since'), until: q.get('until'), state: q.get('state'), after: q.get('after'), limit: q.get('limit') }));
 });

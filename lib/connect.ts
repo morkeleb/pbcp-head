@@ -5,7 +5,9 @@
 
 import { curlSnippet, producerConfig, shellQuote } from '@pbcp/client';
 import { exampleCard, type ProducerCard } from '@pbcp/core';
+import { TOOL_NAMES } from '@pbcp-head/owner-mcp';
 import { DOCS_URL } from './front-door';
+import { mcpUrl } from './oauth';
 
 /** The only token there is on a public page: a placeholder. */
 export const TOKEN = '<token>';
@@ -69,6 +71,22 @@ export function pairCurl(api: string): string {
   ].join('\n');
 }
 
+/**
+ * Using the head from an assistant (an MCP client) on the owner's behalf: not as a producer, but as the owner, through
+ * the owner's MCP server at /api/mcp (lib/oauth.ts, packages/owner-mcp).
+ */
+export function assistantAccess(origin: string) {
+  return {
+    url: mcpUrl(origin),
+    tools: [...TOOL_NAMES],
+    lines: [
+      `MCP server (streamable HTTP): ${mcpUrl(origin)}`,
+      `Authorisation: OAuth 2.1 with PKCE (S256) and dynamic client registration; the metadata is at ${origin}/.well-known/oauth-authorization-server and ${origin}/.well-known/oauth-protected-resource. The owner signs in with a passkey and allows the app; they can sign it out in Settings → Devices.`,
+      `Tools: ${TOOL_NAMES.join(', ')}.`,
+    ],
+  };
+}
+
 /** The card the curl sends: the §3 example (its root is `hermes`), or, for a token of another root, a one-line artifact under it. */
 export function curlCard(owner: string, root?: string): ProducerCard | undefined {
   if (root === undefined || root === exampleCard.producer) return undefined; // curlSnippet sends the §3 example
@@ -113,7 +131,7 @@ export function llmsTxt(facts: ConnectFacts, origin: string): string {
     pairCurl(facts.api),
     '```',
     '',
-    'A wrong, expired or used code is answered 400 invalid_code, and every outstanding code is then void: ask the owner for a new one. A root that already has a token is 409 root_taken; choose another and try again with the same code.',
+    'A wrong, expired or used code is answered 400 invalid_code: ask the owner for a new one (attempts are limited per address). A root that already has a token is 409 root_taken; choose another and try again with the same code.',
     '',
     '## Facts',
     '',
@@ -131,6 +149,12 @@ export function llmsTxt(facts: ConnectFacts, origin: string): string {
     '```sh',
     curl,
     '```',
+    '',
+    '## Use this head from an assistant',
+    '',
+    'An assistant acting for the owner (reading the brief to them, recording what they decide) connects to the owner’s MCP server, not as a producer:',
+    '',
+    ...assistantAccess(origin).lines.map((l) => `- ${l}`),
     '',
     '## Links',
     '',

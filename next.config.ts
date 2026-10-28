@@ -66,6 +66,8 @@ const config: NextConfig = {
   // Loaded from node_modules at runtime, not bundled. mermaid-cli in particular serialises functions into
   // the headless page; a bundler rewriting their dynamic import() breaks drawing. @sparticuz/chromium finds
   // its compressed browser next to its own module.
+  // The owner's MCP server ships TypeScript source (packages/owner-mcp); Next compiles it with the app.
+  transpilePackages: ['@pbcp-head/owner-mcp'],
   serverExternalPackages: ['postgres', '@mermaid-js/mermaid-cli', 'puppeteer', 'mermaid', 'jsdom', 'dompurify', '@sparticuz/chromium'],
   outputFileTracingIncludes: { '/api/render/draw': DRAW_FILES },
   // The draw function carries a 70 MB browser; to stay well inside Vercel's 250 MB it drops what a route

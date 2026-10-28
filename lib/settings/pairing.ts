@@ -2,11 +2,12 @@
 // POST /api/pair for a token of its own, bound to the root it chooses (RFC §12). The code is the credential, so:
 //
 // - 6 characters from an alphabet without look-alikes, shown as two groups ("K7Q-4MX"); valid 10 minutes; single use;
-//   bound to the head that made it; only its sha256 is stored.
-// - A failed attempt (a code that does not exist, has expired, or was used) burns every outstanding code on this
-//   deployment and answers 400 invalid_code and nothing else: a guess never gets a second try at any code, and a wrong
-//   code cannot say which code it was aimed at. With a good code, a root that is malformed (400 invalid_root) or taken
-//   (409 root_taken) is said so, and the code stays usable.
+//   bound to the head that made it; only its sha256 is stored. 31^6 ≈ 887 million codes against 10 tries an hour per
+//   address, for the 10 minutes a code is open.
+// - A failed attempt (a code that does not exist, has expired, or was used) is 400 invalid_code and nothing else, and
+//   costs the caller one of its attempts under the route's rate limit; no other code is touched. A code is burned only
+//   by its own use (or cancellation), and stops working at its expiry. With a good code, a root that is malformed (400
+//   invalid_root) or taken (409 root_taken) is said so, and the code stays usable.
 // - The route is rate-limited per address (lib/rate-limit.ts `pair`). Neither the code nor the token is ever logged.
 //
 // A pairing is recorded on the token row (name, address, time) and as a `head:producer:<root>` signal at urgency log,
@@ -72,11 +73,6 @@ export async function cancelPairingCode(db: Db, headId: string, id: string): Pro
 
 const invalidCode = () => new HttpError(400, 'invalid_code', 'the pairing code is not valid; ask the owner for a new one');
 
-/** Every outstanding code on the deployment, used up: after a failed attempt, nothing a guess could reach survives. */
-async function burnAll(db: Db): Promise<void> {
-  await db.update(pairingCodes).set({ usedAt: new Date(now()) }).where(isNull(pairingCodes.usedAt));
-}
-
 export interface PairRequest {
   code?: unknown;
   root?: unknown;
@@ -97,10 +93,7 @@ export async function pair(db: Db, body: PairRequest, address: string, api: stri
           .from(pairingCodes)
           .where(and(eq(pairingCodes.codeHash, hashCode(code)), isNull(pairingCodes.usedAt), gt(pairingCodes.expiresAt, at)))
       : [];
-  if (!held) {
-    await burnAll(db);
-    throw invalidCode();
-  }
+  if (!held) throw invalidCode();
 
   // A good code: the root's faults are the producer's to fix, and the code stays usable.
   const root = typeof body.root === 'string' ? body.root.trim() : '';
