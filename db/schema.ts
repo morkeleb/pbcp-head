@@ -204,6 +204,18 @@ export const devices = pgTable(
     refreshGeneration: integer('refresh_generation').notNull().default(0),
     refreshExpiresAt: tstz('refresh_expires_at'),
     pushToken: text('push_token'),
+    // Web Push (lib/push): the subscription the device's service worker made, removed when the push service says it is
+    // gone (404/410). One per device; subscribing again replaces it.
+    pushEndpoint: text('push_endpoint'),
+    pushP256dh: text('push_p256dh'),
+    pushAuth: text('push_auth'),
+    pushSubscribedAt: tstz('push_subscribed_at'),
+    pushUserAgent: text('push_user_agent'),
+    // The daily "brief is ready" notification: on or off, at a local time in minutes after midnight (a quarter hour) in
+    // the device's timezone, and the local date it was last sent for, so a cron re-run never sends twice.
+    notifyDaily: boolean('notify_daily').notNull().default(false),
+    notifyAtMinutes: integer('notify_at_minutes').notNull().default(7 * 60),
+    lastNotifiedOn: date('last_notified_on', { mode: 'string' }),
     timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
     clientId: text('client_id'), // platform 'mcp': the OAuth client it was authorised for (lib/oauth)
     tzSeenAt: tstz('tz_seen_at'), // when it last sent one: the most recent of these is the active device
@@ -241,3 +253,9 @@ export const rateLimits = pgTable(
   },
   (t) => [primaryKey({ columns: [t.bucket, t.key, t.windowStart] }), index('rate_limits_expiry').on(t.expiresAt)],
 );
+
+/** When each cron job last ran (lib/push/daily.ts): the window a run covers starts where the last one ended. */
+export const cronRuns = pgTable('cron_runs', {
+  name: text('name').primaryKey(),
+  lastRunAt: tstz('last_run_at').notNull(),
+});

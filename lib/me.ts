@@ -17,6 +17,7 @@ import type { Visual } from './render/markdown';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
 import { addDays, dayRange, isDate, localDate } from './time';
+import { formatTime } from './push/daily';
 
 type Row = typeof cards.$inferSelect;
 
@@ -479,5 +480,6 @@ export async function listDevices(db: Db, headId: string, current: string) {
     timezone: d.timezone,
     timezone_seen_at: d.tzSeenAt ? iso(d.tzSeenAt) : null,
     current: d.id === current,
+    daily_notification: { enabled: d.notifyDaily, time: formatTime(d.notifyAtMinutes), subscribed: d.pushEndpoint !== null },
   }));
 }

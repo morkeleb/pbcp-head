@@ -10,6 +10,8 @@ import { HttpError } from './http';
 import { addDays, localDate, localMinutes, zonedInstant } from './time';
 import { SNOOZE_PRESETS } from './api/schemas';
 import { canonicalZone, effectiveTimezone } from './timezone';
+import { listDevices } from './me';
+import { parseQuarterHour } from './push/daily';
 
 /**
  * POST /api/me/visit: the owner left the brief having seen everything up to `seq` (default: now). The
@@ -112,6 +114,26 @@ export async function deleteDevice(db: Db, headId: string, id: string): Promise<
     .where(and(eq(devices.headId, headId), eq(devices.id, id), isNull(devices.revokedAt)))
     .returning({ id: devices.id });
   if (r.length === 0) throw new HttpError(404, 'not_found', `no signed-in device ${id}`);
+}
+
+/**
+ * PATCH /api/me/settings/devices/{id}: the daily brief notification of the calling device. `time` is HH:MM on a quarter
+ * hour in the device's timezone. Another device's is refused: it subscribes for itself, so it is set from there.
+ */
+export async function setDailyNotification(db: Db, s: { headId: string; deviceId: string }, id: string, body: { daily_notification?: unknown }) {
+  const n = body.daily_notification as { enabled?: unknown; time?: unknown } | undefined;
+  if (!n || typeof n !== 'object' || (n.enabled === undefined && n.time === undefined)) throw new HttpError(400, 'invalid_request', 'expected { daily_notification: { enabled?, time? } }');
+  if (n.enabled !== undefined && typeof n.enabled !== 'boolean') throw new HttpError(400, 'invalid_request', 'enabled is true or false');
+  const minutes = n.time === undefined ? undefined : parseQuarterHour(n.time);
+  if (minutes === null) throw new HttpError(400, 'invalid_request', 'time is HH:MM on a quarter hour, e.g. 07:00 or 21:45');
+  const [device] = await db.select({ id: devices.id }).from(devices).where(and(eq(devices.headId, s.headId), eq(devices.id, id), isNull(devices.revokedAt)));
+  if (!device) throw new HttpError(404, 'not_found', `no signed-in device ${id}`);
+  if (id !== s.deviceId) throw new HttpError(403, 'not_this_device', 'a device’s notification is set on that device, which subscribes for it');
+  await db
+    .update(devices)
+    .set({ ...(n.enabled !== undefined ? { notifyDaily: n.enabled as boolean } : {}), ...(minutes !== undefined ? { notifyAtMinutes: minutes } : {}) })
+    .where(eq(devices.id, id));
+  return (await listDevices(db, s.headId, s.deviceId)).find((d) => d.id === id)!;
 }
 
 export const DISPLAY_NAME_MAX = 100;

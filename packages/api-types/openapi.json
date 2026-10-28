@@ -1738,6 +1738,97 @@
       }
     },
     "/api/me/settings/devices/{id}": {
+      "patch": {
+        "operationId": "setDailyNotification",
+        "summary": "This device’s daily brief notification: on or off, at a quarter hour in its timezone",
+        "description": "Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A device id: the caller’s own",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevicePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "signOutDevice",
         "summary": "Sign a device out",
@@ -1781,6 +1872,126 @@
           },
           "404": {
             "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/push": {
+      "post": {
+        "operationId": "subscribePush",
+        "summary": "Store this device’s Web Push subscription (PushSubscription.toJSON()), replacing any it had",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscription"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unsubscribePush",
+        "summary": "Remove this device’s Web Push subscription",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/push/key": {
+      "get": {
+        "operationId": "pushKey",
+        "summary": "The head’s VAPID public key, to subscribe with (public)",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushKey"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`push_unavailable`: the head has no VAPID keys, so it sends no notifications",
             "content": {
               "application/json": {
                 "schema": {
@@ -2064,7 +2275,7 @@
             }
           },
           "403": {
-            "description": "`forbidden`",
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
             "content": {
               "application/json": {
                 "schema": {
@@ -3816,6 +4027,29 @@
           "current": {
             "type": "boolean",
             "description": "The device making this request"
+          },
+          "daily_notification": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "time": {
+                "type": "string",
+                "description": "HH:MM, a quarter hour, in the device’s timezone (default 07:00)"
+              },
+              "subscribed": {
+                "type": "boolean",
+                "description": "The device has a Web Push subscription the head can send to"
+              }
+            },
+            "required": [
+              "enabled",
+              "time",
+              "subscribed"
+            ],
+            "additionalProperties": false,
+            "description": "The daily “brief is ready” notification (Settings → Devices)"
           }
         },
         "required": [
@@ -3826,7 +4060,21 @@
           "last_seen_at",
           "timezone",
           "timezone_seen_at",
-          "current"
+          "current",
+          "daily_notification"
+        ],
+        "additionalProperties": false
+      },
+      "PushKey": {
+        "type": "object",
+        "properties": {
+          "public_key": {
+            "type": "string",
+            "description": "The VAPID public key, base64url: the applicationServerKey"
+          }
+        },
+        "required": [
+          "public_key"
         ],
         "additionalProperties": false
       },
@@ -4428,6 +4676,61 @@
         },
         "required": [
           "ceiling"
+        ]
+      },
+      "DevicePatch": {
+        "type": "object",
+        "properties": {
+          "daily_notification": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "time": {
+                "description": "HH:MM on a quarter hour",
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):(00|15|30|45)$"
+              }
+            }
+          }
+        },
+        "required": [
+          "daily_notification"
+        ]
+      },
+      "PushSubscription": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "The push service URL (https)"
+          },
+          "expirationTime": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "keys": {
+            "type": "object",
+            "properties": {
+              "p256dh": {
+                "type": "string"
+              },
+              "auth": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "p256dh",
+              "auth"
+            ]
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
         ]
       },
       "MintTokenRequest": {

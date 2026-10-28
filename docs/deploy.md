@@ -49,6 +49,8 @@ Under **Settings → Environment Variables**, for Production (and Preview, with 
 | `CRON_SECRET` | `openssl rand -base64 32`. Vercel Cron sends it to `/api/cron/brief` as a bearer token by itself |
 | `WEBAUTHN_ORIGIN` | `https://<your domain>`, the origin passkeys are registered for. **Required:** it is also the OAuth issuer and the MCP resource, which are never taken from a request's Host header, so the head refuses to start without it |
 | `WEBAUTHN_RP_ID` | optional; defaults to the host of `WEBAUTHN_ORIGIN` |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | optional; the Web Push key pair for the daily brief notification. Generate it with `npx web-push generate-vapid-keys` (it prints both, base64url). Without them, Settings says notifications are unavailable. Keep the pair: a new one invalidates every device's subscription, and each device then has to turn its notification on again |
+| `VAPID_SUBJECT` | optional; a `mailto:` or `https:` contact the push services may use. Defaults to `WEBAUTHN_ORIGIN` |
 | `APPLE_CLIENT_ID` | optional; Sign in with Apple's Services ID and/or bundle id |
 | `PBCP_HEAD` | optional; which head `GET /` describes when the database holds more than one |
 | `NODE_OPTIONS` | `--experimental-require-module`, for Production and Preview. **Required** |
@@ -72,7 +74,7 @@ Passkeys are bound to the RP id, so settle on the domain before the owner enrols
 `vercel.json` configures two functions:
 
 - **`/api/render/draw`**: 2048 MB, `maxDuration` 60 s. This is the only function that loads Chromium. The rest of the head sends each mermaid fence there over HTTPS (`lib/render/drawer.ts`), authenticated with a key derived from `SESSION_SECRET`.
-- **`/api/cron/brief`**: `maxDuration` 300 s. It mints the nightly `head:daily` card.
+- **`/api/cron/brief`**: `maxDuration` 300 s. It mints the nightly `head:daily` card and sends the daily notifications.
 
 How the head finds its draw route:
 
@@ -83,9 +85,9 @@ With Fluid compute, Vercel may take a function's memory from the project's **Fun
 
 Build on Vercel, not locally. The serverless Chromium in `@sparticuz/chromium` is x86_64 only, and a `vercel build` on an arm64 machine (an Apple Silicon Mac) marks every function arm64. `vercel deploy --prebuilt` from such a machine would therefore ship a draw function that cannot start its browser. Vercel's own builders are x86_64.
 
-#### The nightly brief, and Hobby versus Pro
+#### The nightly brief, the daily notification, and Hobby versus Pro
 
-`vercel.json` runs `/api/cron/brief` every hour at half past (`30 * * * *`). Each run checks every head: once it is 05:30 or later in the head's **effective timezone**, and that local date has no `head:daily:<date>` card yet, it mints one. The effective timezone is:
+`vercel.json` runs `/api/cron/brief` every 15 minutes (`*/15 * * * *`), which a Pro plan allows (Pro runs cron jobs as often as once a minute). It was hourly at half past; the daily notification's times are quarter hours, so the schedule is every quarter hour. Each run checks every head: once it is 05:30 or later in the head's **effective timezone**, and that local date has no `head:daily:<date>` card yet, it mints one. The effective timezone is:
 
 1. the owner's override, set with `PATCH /api/me/settings { "timezone": "Europe/Copenhagen" }` (or `pnpm seed --timezone`), when set;
 2. otherwise the zone of the owner's device most recently seen: every `/api/me` request may send `X-Timezone`, and the web app always does;
@@ -93,15 +95,17 @@ Build on Vercel, not locally. The serverless Chromium in `@sparticuz/chromium` i
 
 So the card follows the owner when they travel.
 - **Never doubled.** The card's id is the local date, and a date that already has its card is skipped, so a zone change mid-day doesn't mint the day twice.
-- **Not skipped once reached.** A date gets its card at the first hourly run after its 05:30 in the zone the owner is in.
+- **Not skipped once reached.** A date gets its card at the first run after its 05:30 in the zone the owner is in.
 - **Some dates never happen.** A flight east across midnight can skip over a date's 05:30 altogether, and that date then has no card.
-- **On time.** Running at :30, the card lands at 05:30 in whole-hour zones, 06:00 in half-hour zones (e.g. India), and 06:15 in Nepal.
+- **On time.** Running every quarter hour, the card lands at 05:30 in whole- and half-hour zones and 05:45 in Nepal.
 
-**Hobby allows only daily cron jobs.** An hourly expression fails the deployment with "Hobby accounts are limited to daily cron jobs". On Hobby, change the schedule to one daily run that lands after 05:30 local all year (Europe/Copenhagen: `0 5 * * *`). That brings two limits:
+**The daily notification** (Settings → Devices, per device): each run sends one push to every device whose chosen time, a quarter hour in that device's timezone, came since the previous run. The run is recorded in `cron_runs`. A device gets one a day at most: its `last_notified_on` is claimed before sending, so a repeated or overlapping run never sends twice. A missed run is caught up by the next, as long as it is the same local day. The notification quotes the first sentence of the day's paragraph once the card exists; otherwise it says how many decisions wait.
+
+**Hobby allows only daily cron jobs.** An hourly or quarter-hourly expression fails the deployment with "Hobby accounts are limited to daily cron jobs". On Hobby, change the schedule to one daily run that lands after 05:30 local all year (Europe/Copenhagen: `0 5 * * *`). That brings two limits:
 - the card for a travelling owner comes at whatever local hour that run falls on;
 - Hobby fires a daily job anywhere within its hour.
 
-Hobby allows 100 cron jobs per project, so 24 daily entries (`30 0 * * *` … `30 23 * * *`, each with a distinct path such as `/api/cron/brief?h=0`) give hourly coverage within its rules. A missed or extra run is harmless either way.
+Hobby allows 100 cron jobs per project, so 24 daily entries (`30 0 * * *` … `30 23 * * *`, each with a distinct path such as `/api/cron/brief?h=0`) give hourly coverage within its rules. A missed or extra run is harmless either way. A notification then comes at the first run after its time, so on such a schedule a 07:15 notification arrives at about 07:30.
 
 ### 5. Migrate and seed
 
@@ -180,7 +184,7 @@ That one `up` does the following:
 - creates the `PBCP_OWNER` head on first start and prints its enrolment link;
 - serves the head on port 3000, or `PBCP_PORT`.
 
-A `cron` service calls the nightly-brief route every 30 minutes with `CRON_SECRET`, standing in for Vercel Cron.
+A `cron` service calls the nightly-brief route every 15 minutes with `CRON_SECRET`, standing in for Vercel Cron. For the daily notification, set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in `.env` too.
 
 - **TLS.** Passkeys need a secure origin, so outside `localhost` put the head behind a TLS-terminating reverse proxy (Caddy, nginx, Traefik). Set `WEBAUTHN_ORIGIN` to its `https://` origin.
 - **Client addresses.** The proxy must set `X-Forwarded-For` or `X-Real-IP` to the client address. The per-address rate limit on `/api/auth/*` keys on it, so without a proxy every client shares one limit. Do not expose port 3000 directly.

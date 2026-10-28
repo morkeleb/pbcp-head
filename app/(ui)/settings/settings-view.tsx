@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { PAIRING_CODE_SHAPE } from '../../../lib/pairing-code';
 import type { Density } from '../brief/DecisionCard';
 import { Copyable } from '../copy';
+import { DailyNotification, type DailyNotificationState } from './daily-notification';
 import { PageRow, setTheme, useChrome, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, OfflineError, saveTokens, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred } from '../components';
@@ -24,7 +25,7 @@ interface Token {
 }
 interface OpenCode { id: string; created_at: string; expires_at: string }
 interface Label { label: string; cards: number; ceiling: Urgency | null }
-interface Device { id: string; name: string | null; platform: string; last_seen_at: string | null; created_at: string; current: boolean }
+interface Device { id: string; name: string | null; platform: string; last_seen_at: string | null; created_at: string; current: boolean; daily_notification: DailyNotificationState }
 interface HeadSettings { timezone: string; timezone_source: 'override' | 'device' | 'default'; timezone_override: string | null }
 
 const field = 'rounded-md border border-input bg-background px-2 py-1 text-body text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
@@ -399,7 +400,7 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
       ) : (
         <ul className="divide-y border-y text-body" data-devices>
           {devices.map((d) => (
-            <li key={d.id} className="flex items-center gap-3 py-2" data-device={d.id}>
+            <li key={d.id} className="flex flex-wrap items-center gap-x-3 py-2" data-device={d.id}>
               <div className="min-w-0 flex-1">
                 <p>
                   {d.name ?? 'Unnamed device'}
@@ -410,6 +411,8 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
                 </p>
               </div>
               <Button size="xs" variant="ghost" className="shrink-0 text-muted-foreground" disabled={!online} onClick={() => void signOut(d)}>Sign out</Button>
+              {/* Web Push reaches the web app; an assistant has no screen, and the phone app will use its own channel. */}
+              {d.platform === 'web' && <DailyNotification deviceId={d.id} current={d.current} state={d.daily_notification} online={online} onChanged={load} onError={onError} />}
             </li>
           ))}
         </ul>

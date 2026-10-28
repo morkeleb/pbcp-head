@@ -25,10 +25,10 @@ describe('GET /api/cron/brief', () => {
     await call('PUT', cardPath('hermes:gmail:2'), { auth: hermes, body: card('hermes:gmail:2', { kind: 'signal', thread: 't' }) });
 
     await clock('2026-10-07T03:00:00Z'); // 05:00 in Copenhagen
-    expect((await cron()).body).toEqual({ minted: [] });
+    expect((await cron()).body).toEqual({ minted: [], notified: [] });
     await clock('2026-10-07T03:30:00Z'); // 05:30
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }] });
-    expect((await cron()).body).toEqual({ minted: [] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }], notified: [] });
+    expect((await cron()).body).toEqual({ minted: [], notified: [] });
 
     const brief = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
     expect(brief.daily).toMatchObject({ id: 'head:daily:2026-10-07', kind: 'artifact', producer: 'head', references: ['hermes:gmail:1'] });
@@ -49,20 +49,20 @@ describe('GET /api/cron/brief', () => {
     await clock('2026-10-07T12:00:00Z');
     await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     await at('America/Denver');
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }], notified: [] });
     // The flight lands: 2026-10-08 08:00 in Stockholm is still 2026-10-08 00:00 in Denver. Same instant, two
     // calendars; the phone now says Stockholm, so it is the 8th, 05:30 has passed, and the 8th has no card.
     await clock('2026-10-08T06:00:00Z');
     await at('Europe/Stockholm');
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }], notified: [] });
     // Hourly runs for the rest of the day, in either zone, mint nothing more.
     for (const t of ['2026-10-08T07:30:00Z', '2026-10-08T12:30:00Z', '2026-10-08T21:30:00Z']) {
       await clock(t);
-      expect((await cron()).body).toEqual({ minted: [] });
+      expect((await cron()).body).toEqual({ minted: [], notified: [] });
     }
     await at('America/Denver'); // back again: in Denver it is still the 8th, which has its card
     await clock('2026-10-08T22:30:00Z');
-    expect((await cron()).body).toEqual({ minted: [] });
+    expect((await cron()).body).toEqual({ minted: [], notified: [] });
     const days = await testDb().select({ id: cards.id }).from(cards).where(and(eq(cards.headId, OWNER), eq(cards.namespace, 'daily')));
     expect(days.map((d) => d.id).sort()).toEqual(['head:daily:2026-10-07', 'head:daily:2026-10-08']);
   });
@@ -73,17 +73,17 @@ describe('GET /api/cron/brief', () => {
     await clock('2026-10-07T04:30:00Z'); // 22:30 on the 6th in Denver: before 05:30 on the 7th
     await call('PUT', cardPath('hermes:gmail:open'), { auth: hermes, body: card('hermes:gmail:open') }); // something to brief
     await at('America/Denver');
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-06', status: 201 }] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-06', status: 201 }], notified: [] });
     await clock('2026-10-07T11:30:00Z'); // 05:30 on the 7th in Denver
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }], notified: [] });
     await clock('2026-10-07T13:00:00Z'); // mid-day; the owner is now in Stockholm, 15:00 on the 7th
     await at('Europe/Stockholm');
     for (const t of ['2026-10-07T13:30:00Z', '2026-10-07T18:30:00Z', '2026-10-07T21:30:00Z']) {
       await clock(t);
-      expect((await cron()).body).toEqual({ minted: [] });
+      expect((await cron()).body).toEqual({ minted: [], notified: [] });
     }
     await clock('2026-10-08T03:30:00Z'); // 05:30 on the 8th in Stockholm
-    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }] });
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-08', status: 201 }], notified: [] });
     const days = await testDb().select({ id: cards.id }).from(cards).where(and(eq(cards.headId, OWNER), eq(cards.namespace, 'daily')));
     expect(days.map((d) => d.id).sort()).toEqual(['head:daily:2026-10-06', 'head:daily:2026-10-07', 'head:daily:2026-10-08']);
   });
@@ -114,7 +114,7 @@ describe('GET /api/cron/brief', () => {
 
   it('mints no card on a day with nothing open and nothing new', async () => {
     await clock('2026-10-07T06:00:00Z');
-    expect((await cron()).body).toEqual({ minted: [] });
+    expect((await cron()).body).toEqual({ minted: [], notified: [] });
     expect(await testDb().select({ id: cards.id }).from(cards).where(eq(cards.namespace, 'daily'))).toEqual([]);
   });
 

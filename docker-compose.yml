@@ -34,6 +34,9 @@ services:
       TEST_DATABASE_URL: postgres://pbcp:pbcp@postgres:5432/pbcp_test
       SESSION_SECRET: ${SESSION_SECRET:-}
       CRON_SECRET: ${CRON_SECRET:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:3000}
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
       PBCP_OWNER: ${PBCP_OWNER:-}
@@ -43,8 +46,9 @@ services:
       - "${PBCP_PORT:-3000}:3000"
     restart: unless-stopped
 
-  # Vercel Cron's stand-in: calls the nightly-brief route every 30 minutes (lib/brief/nightly.ts mints
-  # each head's card once its local time passes 05:30, so a half-hourly call is all it needs).
+  # Vercel Cron's stand-in: calls the nightly-brief route every 15 minutes, as vercel.json does. It mints each head's
+  # card once its local time passes 05:30 (lib/brief/nightly.ts) and sends the daily notifications, whose times are
+  # quarter hours (lib/push/daily.ts).
   cron:
     image: pbcp-head
     depends_on: [head]
@@ -57,7 +61,7 @@ services:
           .then(async (r) => console.log(new Date().toISOString(), r.status, await r.text()))
           .catch((e) => console.error(new Date().toISOString(), e.message));
         setTimeout(run, 60_000);
-        setInterval(run, 30 * 60_000);
+        setInterval(run, 15 * 60_000);
     restart: unless-stopped
 
 volumes:

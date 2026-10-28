@@ -6,6 +6,7 @@
 import Ajv2020 from 'ajv/dist/2020';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createECDH, randomBytes } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { card, cardPath } from './cards';
@@ -43,6 +44,7 @@ function check(method: string, url: string, res: { status: number; body: unknown
 }
 
 let owner: { auth: string; deviceId: string };
+let phone: { auth: string; deviceId: string };
 let hermes: string;
 async function api(method: string, url: string, body?: unknown, auth: string | null = owner.auth) {
   const res = await call(method, url, { ...(auth ? { auth } : {}), ...(body !== undefined ? { body } : {}), headers: { 'x-timezone': 'Europe/Copenhagen' } });
@@ -55,7 +57,7 @@ beforeAll(async () => {
   await resetHead();
   await call('POST', '/api/test', { body: { clock: '2026-10-07T09:00:00Z', syncPageSize: null } });
   owner = await ownerSession();
-  await ownerSession(OWNER, 'phone');
+  phone = await ownerSession(OWNER, 'phone');
   hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', ceiling: 'immediate', executor: true })}`;
   await mintProducerToken(testDb(), { headId: OWNER, root: 'cal', instance: 'laptop' });
   const put = (id: string, extra: Record<string, unknown> = {}) => call('PUT', cardPath(id), { auth: hermes, body: card(id, extra) });
@@ -103,6 +105,15 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('GET', '/api/me/settings/devices');
     await api('POST', '/api/me/settings/enrolment');
     await api('DELETE', '/api/me/settings/devices/nope'); // 404
+    await api('GET', '/api/push/key', undefined, null);
+    const p256dh = createECDH('prime256v1');
+    p256dh.generateKeys();
+    await api('POST', '/api/me/settings/push', { endpoint: 'https://push.example/send/abc', expirationTime: null, keys: { p256dh: p256dh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') } });
+    await api('PATCH', `/api/me/settings/devices/${owner.deviceId}`, { daily_notification: { enabled: true, time: '07:15' } });
+    await api('PATCH', `/api/me/settings/devices/${owner.deviceId}`, { daily_notification: { time: '07:10' } }); // 400
+    await api('PATCH', `/api/me/settings/devices/${phone.deviceId}`, { daily_notification: { enabled: true } }); // 403 not_this_device
+    await api('PATCH', '/api/me/settings/devices/nope', { daily_notification: { enabled: true } }); // 404
+    await api('DELETE', '/api/me/settings/push');
     await api('POST', '/api/me/visit', {});
     await api('POST', '/api/me/visit', { seq: 1 });
   });

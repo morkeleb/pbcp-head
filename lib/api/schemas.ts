@@ -255,7 +255,27 @@ export const Device = z.object({
   timezone: Zone.nullable().describe('The zone it last sent in X-Timezone'),
   timezone_seen_at: Timestamp.nullable(),
   current: z.boolean().describe('The device making this request'),
+  daily_notification: z.object({
+    enabled: z.boolean(),
+    time: z.string().describe('HH:MM, a quarter hour, in the device’s timezone (default 07:00)'),
+    subscribed: z.boolean().describe('The device has a Web Push subscription the head can send to'),
+  }).describe('The daily “brief is ready” notification (Settings → Devices)'),
 }).register(responses, { id: 'Device' });
+
+export const DevicePatch = z.object({
+  daily_notification: z.object({
+    enabled: z.boolean().optional(),
+    time: z.string().regex(/^([01]\d|2[0-3]):(00|15|30|45)$/).optional().describe('HH:MM on a quarter hour'),
+  }),
+}).register(requests, { id: 'DevicePatch' });
+
+export const PushSubscription = z.object({
+  endpoint: z.string().describe('The push service URL (https)'),
+  expirationTime: z.number().nullable().optional(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+}).register(requests, { id: 'PushSubscription' });
+
+export const PushKey = z.object({ public_key: z.string().describe('The VAPID public key, base64url: the applicationServerKey') }).register(responses, { id: 'PushKey' });
 
 export const DeviceList = z.object({ devices: z.array(Device) }).register(responses, { id: 'DeviceList' });
 

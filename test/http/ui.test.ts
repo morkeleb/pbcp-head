@@ -9,12 +9,12 @@ import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { startSession } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
 let browser: Browser;
 let page: Page;
 let errors: string[];
-let session: { access_token: string };
+let session: { access_token: string; device_id: string };
 beforeAll(async () => {
   // The browser the head draws with, when it names one (the Docker image's /usr/bin/chromium).
   const path = process.env.PBCP_CHROMIUM_PATH;
@@ -769,6 +769,27 @@ describe('theme', () => {
     expect(await page.$eval('[data-theme-menu]', (b) => b.getAttribute('aria-label'))).toBe('Theme: System');
     await scheme('dark');
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+  });
+});
+
+describe('settings: the daily brief notification', () => {
+  it('is a switch and a quarter-hour time on this device, shown but not changeable for another, and on an iPhone in Safari says to install first', async () => {
+    const other = await ownerSession(OWNER, 'phone');
+    await call('PATCH', `/api/me/settings/devices/${other.deviceId}`, { auth: other.auth, body: { daily_notification: { enabled: true, time: '06:45' } } });
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    const mine = `[data-daily-notification="${session.device_id}"]`;
+    await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('once a day'), {}, mine);
+    expect(await page.$eval(`${mine} [data-notify-switch]`, (b) => [b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled])).toEqual(['false', false]);
+    expect(await page.$eval(`${mine} [data-notify-time]`, (t) => [(t as HTMLSelectElement).value, t.querySelectorAll('option').length])).toEqual(['07:00', 96]);
+    const theirs = `[data-daily-notification="${other.deviceId}"]`;
+    expect(await page.$eval(`${theirs} [data-notify-switch]`, (b) => [b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled])).toEqual(['true', true]);
+    expect(await page.$eval(`${theirs} [data-notify-time]`, (t) => (t as HTMLSelectElement).value)).toBe('06:45');
+    expect(await page.$eval(`${theirs} [data-notify-note]`, (n) => n.textContent)).toBe('Set on that device.');
+
+    await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('Home Screen'), {}, mine);
+    expect(await page.$eval(`${mine} [data-notify-switch]`, (b) => (b as HTMLButtonElement).disabled)).toBe(true);
   });
 });
 
