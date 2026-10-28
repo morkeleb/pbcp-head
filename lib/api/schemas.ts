@@ -260,13 +260,18 @@ export const Device = z.object({
     time: z.string().describe('HH:MM, a quarter hour, in the device’s timezone (default 07:00)'),
     subscribed: z.boolean().describe('The device has a Web Push subscription the head can send to'),
   }).describe('The daily “brief is ready” notification (Settings → Devices)'),
+  urgent_notification: z.object({
+    enabled: z.boolean(),
+    subscribed: z.boolean().describe('The device has a Web Push subscription the head can send to'),
+  }).describe('A push for each card stored with delivery immediate (§9), off by default'),
 }).register(responses, { id: 'Device' });
 
 export const DevicePatch = z.object({
   daily_notification: z.object({
     enabled: z.boolean().optional(),
     time: z.string().regex(/^([01]\d|2[0-3]):(00|15|30|45)$/).optional().describe('HH:MM on a quarter hour'),
-  }),
+  }).optional(),
+  urgent_notification: z.object({ enabled: z.boolean() }).optional(),
 }).register(requests, { id: 'DevicePatch' });
 
 export const PushSubscription = z.object({

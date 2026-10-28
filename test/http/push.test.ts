@@ -1,4 +1,5 @@
-// The daily brief notification (lib/push): subscribing and unsubscribing a device, its setting, and the cron's sends,
+// Notifications (lib/push): subscribing and unsubscribing a device, its settings, the cron's daily sends and the urgent
+// push for an immediate card,
 // received by a stand-in push service on localhost that the test decrypts as a browser would (RFC 8291).
 
 import ece from 'http_ece';
@@ -6,8 +7,10 @@ import { createECDH, randomBytes, type ECDH } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { cronRuns, devices } from '../../db/schema';
+import { cards, cronRuns, devices } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
+import { notifyUrgent } from '../../lib/push/urgent';
+import { toCard } from '../../lib/store';
 import { TEST_CRON_SECRET, TEST_VAPID_PUBLIC_KEY } from '../env';
 import { card, cardPath } from './cards';
 import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
@@ -57,13 +60,13 @@ let hermes: string;
 const clock = (at: string) => call('POST', '/api/test', { body: { clock: at } });
 const cron = async () => (await call('GET', '/api/cron/brief', { auth: `Bearer ${TEST_CRON_SECRET}` })).body as { notified: Array<{ device: string; date: string; result: string }> };
 
-/** A web device in Copenhagen, subscribed, with the daily notification on at `time`. */
-async function device(name: string, opts: { time?: string; subscribe?: boolean; enable?: boolean } = {}) {
+/** A web device in Copenhagen, subscribed, with the daily notification on at `time` (and urgent cards as `urgent`). */
+async function device(name: string, opts: { time?: string; subscribe?: boolean; enable?: boolean; urgent?: boolean } = {}) {
   const d = await ownerSession(OWNER, name);
   await call('GET', '/api/me/brief', { auth: d.auth, headers: { 'x-timezone': 'Europe/Copenhagen' } });
   const sub = browserSubscription(name);
   if (opts.subscribe !== false) expect((await call('POST', '/api/me/settings/push', { auth: d.auth, body: sub.json })).status).toBe(204);
-  const r = await call('PATCH', `/api/me/settings/devices/${d.deviceId}`, { auth: d.auth, body: { daily_notification: { enabled: opts.enable !== false, time: opts.time ?? '07:00' } } });
+  const r = await call('PATCH', `/api/me/settings/devices/${d.deviceId}`, { auth: d.auth, body: { daily_notification: { enabled: opts.enable !== false, time: opts.time ?? '07:00' }, urgent_notification: { enabled: opts.urgent ?? false } } });
   expect(r.status).toBe(200);
   return { ...d, sub };
 }
@@ -189,5 +192,83 @@ describe('the cron sends the daily notification', () => {
     await clock('2026-10-08T05:00:00Z');
     expect((await cron()).notified).toEqual([]);
     expect(received).toHaveLength(1);
+  });
+});
+
+describe('urgent cards', () => {
+  let urgentProducer: string;
+  beforeEach(async () => {
+    urgentProducer = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'alarm', ceiling: 'immediate' })}`;
+  });
+  const put = (id: string, extra: Record<string, unknown>, auth = urgentProducer) => call('PUT', cardPath(id), { auth, body: card(id, { kind: 'signal', urgency: 'immediate', ...extra }) });
+  /** The pushes that arrived for a subscription path, once the PUT's after-commit work had time to run. */
+  const settled = async (paths: string[], expected: number) => {
+    for (const end = Date.now() + 5000; Date.now() < end && received.filter((r) => paths.includes(r.path)).length < expected; ) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 300)); // and nothing more after
+    return received.filter((r) => paths.includes(r.path));
+  };
+
+  it('pushes an immediate card to each device with Urgent cards on and a subscription, and to no other; the push opens the card', async () => {
+    const on = await device('on', { enable: false, urgent: true });
+    const off = await device('off', { enable: true, urgent: false });
+    const unsubscribed = await device('unsubscribed', { subscribe: false, enable: false, urgent: true });
+    const lead = `The db-1 data volume is at **91%** and grew 4% in the last 24 hours. At this rate it is full in about two days; [the graph](https://grafana.example/d/1) shows \`/var/lib/postgres\` growing.`;
+    expect((await put('alarm:disk:db-1', { title: 'db-1 disk at 91%', body: `${lead}\n\nMore detail.` })).status).toBe(201);
+    const got = await settled([on.sub.path, off.sub.path, unsubscribed.sub.path], 1);
+    expect(got.map((r) => r.path)).toEqual([on.sub.path]);
+    const n = decrypt(got[0]!, on.sub);
+    expect(n).toEqual({ title: 'db-1 disk at 91%', body: expect.any(String), data: { url: `/card/${encodeURIComponent('alarm:disk:db-1')}` }, tag: 'pbcp-card:alarm:disk:db-1' });
+    expect(n.body.length).toBeLessThanOrEqual(120);
+    // Plain text, cut at a word under 120 characters: no markdown marks, the link's text kept.
+    expect(n.body).toMatch(/^The db-1 data volume is at 91% and grew 4% in the last 24 hours\. At this rate it is full in about two days; the graph…$/);
+    expect(n.body).not.toMatch(/\*|\[|\]\(/);
+  });
+
+  it('sends nothing for a card delivered at brief: below immediate, or held there by the producer’s or a label’s ceiling', async () => {
+    const on = await device('on', { enable: false, urgent: true });
+    expect((await put('alarm:x:1', { urgency: 'brief', summary: 'Brief only.' })).status).toBe(201);
+    expect((await put('hermes:x:2', { urgency: 'immediate', summary: 'Ceiling brief.' }, hermes)).status).toBe(201); // hermes: ceiling brief
+    await call('PATCH', '/api/me/settings/labels/ops', { auth: on.auth, body: { ceiling: 'brief' } });
+    expect((await put('alarm:x:3', { labels: ['ops'], summary: 'Label ceiling brief.' })).status).toBe(201);
+    expect(await settled([on.sub.path], 0)).toEqual([]);
+  });
+
+  it('re-sends a replacement only when its title or lead changed', async () => {
+    const on = await device('on', { enable: false, urgent: true });
+    await put('alarm:disk:db-1', { title: 'db-1 disk at 91%', summary: 'Full in two days.', body: 'Detail one.' });
+    expect(await settled([on.sub.path], 1)).toHaveLength(1);
+    await put('alarm:disk:db-1', { title: 'db-1 disk at 91%', summary: 'Full in two days.', body: 'Detail two, the lead unchanged.' });
+    expect(await settled([on.sub.path], 1)).toHaveLength(1);
+    await put('alarm:disk:db-1', { title: 'db-1 disk at 95%', summary: 'Full tomorrow.', body: 'Detail three.' });
+    const got = await settled([on.sub.path], 2);
+    expect(got).toHaveLength(2);
+    expect(decrypt(got[1]!, on.sub)).toMatchObject({ title: 'db-1 disk at 95%', body: 'Full tomorrow.' });
+  });
+
+  it('answers the PUT 201 whatever the push service does, and a 410 removes the subscription', async () => {
+    const failing = await device('failing', { enable: false, urgent: true });
+    const gone = await device('gone', { enable: false, urgent: true });
+    answer.set(failing.sub.path, 500);
+    answer.set(gone.sub.path, 410);
+    expect((await put('alarm:a:1', { summary: 'One.' })).status).toBe(201);
+    await settled([failing.sub.path, gone.sub.path], 2);
+    const [row] = await testDb().select().from(devices).where(eq(devices.id, gone.deviceId));
+    expect(row).toMatchObject({ pushEndpoint: null, notifyUrgent: true });
+    // A push service that does not answer at all: the PUT is still 201.
+    await testDb().update(devices).set({ pushEndpoint: 'http://127.0.0.1:9/nobody' }).where(eq(devices.id, failing.deviceId));
+    expect((await put('alarm:a:2', { summary: 'Two.' })).status).toBe(201);
+  });
+
+  it('sends nothing for a card that was decided before its push went', async () => {
+    const owner = await device('owner', { enable: false, urgent: false });
+    await put('alarm:door:1', { kind: 'decision', title: 'Front door open', summary: 'Lock it?', actions: [{ id: 'lock', label: 'Lock', default: true }] });
+    const stored = (await call('POST', `/api/me/cards/${encodeURIComponent('alarm:door:1')}/decision`, { auth: owner.auth, body: { decision: 'lock' } })).body;
+    expect(stored.state).toBe('decided');
+    await call('PATCH', `/api/me/settings/devices/${owner.deviceId}`, { auth: owner.auth, body: { urgent_notification: { enabled: true } } });
+    // The push as the PUT would have made it, judged now: the card is no longer open.
+    const [row] = await testDb().select().from(cards).where(eq(cards.id, 'alarm:door:1'));
+    const asPut = { ...toCard(row!), state: 'open' as const };
+    expect(await notifyUrgent(testDb(), OWNER, asPut, null)).toEqual([]);
+    expect(await settled([owner.sub.path], 0)).toEqual([]);
   });
 });

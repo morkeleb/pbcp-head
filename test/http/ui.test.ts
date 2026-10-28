@@ -772,24 +772,38 @@ describe('theme', () => {
   });
 });
 
-describe('settings: the daily brief notification', () => {
-  it('is a switch and a quarter-hour time on this device, shown but not changeable for another, and on an iPhone in Safari says to install first', async () => {
+describe('settings: notifications', () => {
+  it('shows "Daily brief at <time>" and "Urgent cards" side by side, editable on this device only; on an iPhone in Safari, says to install first', async () => {
     const other = await ownerSession(OWNER, 'phone');
-    await call('PATCH', `/api/me/settings/devices/${other.deviceId}`, { auth: other.auth, body: { daily_notification: { enabled: true, time: '06:45' } } });
+    await call('PATCH', `/api/me/settings/devices/${other.deviceId}`, { auth: other.auth, body: { daily_notification: { enabled: true, time: '06:45' }, urgent_notification: { enabled: true } } });
     await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
-    const mine = `[data-daily-notification="${session.device_id}"]`;
-    await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('once a day'), {}, mine);
-    expect(await page.$eval(`${mine} [data-notify-switch]`, (b) => [b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled])).toEqual(['false', false]);
+    const mine = `[data-notifications="${session.device_id}"]`;
+    await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('this device’s timezone'), {}, mine);
+    const switches = (sel: string) => page.$$eval(`${sel} [data-notify-switch]`, (bs) => bs.map((b) => [b.getAttribute('data-notify-switch'), b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled]));
+    expect(await switches(mine)).toEqual([['daily', 'false', false], ['urgent', 'false', false]]);
+    // "Daily brief at <time>": the words around the time select, which shows 07:00 (below).
+    expect(await page.$eval(`${mine} [data-daily-notification]`, (n) => {
+      const c = n.cloneNode(true) as HTMLElement;
+      c.querySelector('select')!.replaceWith(`<${(n.querySelector('select') as HTMLSelectElement).value}>`);
+      return c.textContent!.replace(/\s+/g, ' ').trim();
+    })).toMatch(/^Daily brief\s*at\s*<07:00>$/);
+    expect(await page.$eval(`${mine} [data-urgent-notification]`, (n) => n.textContent)).toBe('Urgent cardsas they arrive');
     expect(await page.$eval(`${mine} [data-notify-time]`, (t) => [(t as HTMLSelectElement).value, t.querySelectorAll('option').length])).toEqual(['07:00', 96]);
-    const theirs = `[data-daily-notification="${other.deviceId}"]`;
-    expect(await page.$eval(`${theirs} [data-notify-switch]`, (b) => [b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled])).toEqual(['true', true]);
+    // Side by side, on a phone too.
+    for (const width of [1280, 360]) {
+      await page.setViewport({ width, height: 844 });
+      const tops = await page.$$eval(`${mine} [data-notify-switch]`, (bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+      expect(tops[0], String(width)).toBe(tops[1]);
+    }
+    const theirs = `[data-notifications="${other.deviceId}"]`;
+    expect(await switches(theirs)).toEqual([['daily', 'true', true], ['urgent', 'true', true]]);
     expect(await page.$eval(`${theirs} [data-notify-time]`, (t) => (t as HTMLSelectElement).value)).toBe('06:45');
     expect(await page.$eval(`${theirs} [data-notify-note]`, (n) => n.textContent)).toBe('Set on that device.');
 
     await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
     await page.reload({ waitUntil: 'networkidle0' });
     await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('Home Screen'), {}, mine);
-    expect(await page.$eval(`${mine} [data-notify-switch]`, (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    expect(await switches(mine)).toEqual([['daily', 'false', true], ['urgent', 'false', true]]);
   });
 });
 

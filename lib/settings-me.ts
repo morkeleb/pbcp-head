@@ -117,21 +117,30 @@ export async function deleteDevice(db: Db, headId: string, id: string): Promise<
 }
 
 /**
- * PATCH /api/me/settings/devices/{id}: the daily brief notification of the calling device. `time` is HH:MM on a quarter
- * hour in the device's timezone. Another device's is refused: it subscribes for itself, so it is set from there.
+ * PATCH /api/me/settings/devices/{id}: the calling device's notifications: the daily brief (on or off, at HH:MM on a
+ * quarter hour in the device's timezone) and urgent cards (on or off). Another device's are refused: it subscribes for
+ * itself, so they are set from there.
  */
-export async function setDailyNotification(db: Db, s: { headId: string; deviceId: string }, id: string, body: { daily_notification?: unknown }) {
-  const n = body.daily_notification as { enabled?: unknown; time?: unknown } | undefined;
-  if (!n || typeof n !== 'object' || (n.enabled === undefined && n.time === undefined)) throw new HttpError(400, 'invalid_request', 'expected { daily_notification: { enabled?, time? } }');
-  if (n.enabled !== undefined && typeof n.enabled !== 'boolean') throw new HttpError(400, 'invalid_request', 'enabled is true or false');
-  const minutes = n.time === undefined ? undefined : parseQuarterHour(n.time);
+export async function setNotifications(db: Db, s: { headId: string; deviceId: string }, id: string, body: { daily_notification?: unknown; urgent_notification?: unknown }) {
+  const daily = body.daily_notification as { enabled?: unknown; time?: unknown } | undefined;
+  const urgent = body.urgent_notification as { enabled?: unknown } | undefined;
+  const usage = 'expected { daily_notification?: { enabled?, time? }, urgent_notification?: { enabled } }';
+  if (daily === undefined && urgent === undefined) throw new HttpError(400, 'invalid_request', usage);
+  if (daily !== undefined && (!daily || typeof daily !== 'object' || (daily.enabled === undefined && daily.time === undefined))) throw new HttpError(400, 'invalid_request', usage);
+  if (urgent !== undefined && (!urgent || typeof urgent !== 'object' || typeof urgent.enabled !== 'boolean')) throw new HttpError(400, 'invalid_request', usage);
+  if (daily?.enabled !== undefined && typeof daily.enabled !== 'boolean') throw new HttpError(400, 'invalid_request', 'enabled is true or false');
+  const minutes = daily?.time === undefined ? undefined : parseQuarterHour(daily.time);
   if (minutes === null) throw new HttpError(400, 'invalid_request', 'time is HH:MM on a quarter hour, e.g. 07:00 or 21:45');
   const [device] = await db.select({ id: devices.id }).from(devices).where(and(eq(devices.headId, s.headId), eq(devices.id, id), isNull(devices.revokedAt)));
   if (!device) throw new HttpError(404, 'not_found', `no signed-in device ${id}`);
-  if (id !== s.deviceId) throw new HttpError(403, 'not_this_device', 'a device’s notification is set on that device, which subscribes for it');
+  if (id !== s.deviceId) throw new HttpError(403, 'not_this_device', 'a device’s notifications are set on that device, which subscribes for them');
   await db
     .update(devices)
-    .set({ ...(n.enabled !== undefined ? { notifyDaily: n.enabled as boolean } : {}), ...(minutes !== undefined ? { notifyAtMinutes: minutes } : {}) })
+    .set({
+      ...(daily?.enabled !== undefined ? { notifyDaily: daily.enabled as boolean } : {}),
+      ...(minutes !== undefined ? { notifyAtMinutes: minutes } : {}),
+      ...(urgent !== undefined ? { notifyUrgent: urgent.enabled as boolean } : {}),
+    })
     .where(eq(devices.id, id));
   return (await listDevices(db, s.headId, s.deviceId)).find((d) => d.id === id)!;
 }

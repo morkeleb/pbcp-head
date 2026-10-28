@@ -101,6 +101,8 @@ So the card follows the owner when they travel.
 
 **The daily notification** (Settings → Devices, per device): each run sends one push to every device whose chosen time, a quarter hour in that device's timezone, came since the previous run. The run is recorded in `cron_runs`. A device gets one a day at most: its `last_notified_on` is claimed before sending, so a repeated or overlapping run never sends twice. A missed run is caught up by the next, as long as it is the same local day. The notification quotes the first sentence of the day's paragraph once the card exists; otherwise it says how many decisions wait.
 
+**Urgent cards** (Settings → Devices, per device, off by default) need no cron. A card stored with `delivery: immediate` (its urgency after the producer's and its labels' ceilings, §9) is pushed from its PUT request after the commit, to each device with the switch on. The push carries its title, its lead cut at 120 characters, and a tap opens the card. It is best effort: a failed push never fails the PUT, and it is not retried.
+
 **Hobby allows only daily cron jobs.** An hourly or quarter-hourly expression fails the deployment with "Hobby accounts are limited to daily cron jobs". On Hobby, change the schedule to one daily run that lands after 05:30 local all year (Europe/Copenhagen: `0 5 * * *`). That brings two limits:
 - the card for a travelling owner comes at whatever local hour that run falls on;
 - Hobby fires a daily job anywhere within its hour.

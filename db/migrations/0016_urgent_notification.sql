@@ -1,0 +1,1 @@
+ALTER TABLE "devices" ADD COLUMN "notify_urgent" boolean DEFAULT false NOT NULL;

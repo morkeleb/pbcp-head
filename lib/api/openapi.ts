@@ -215,9 +215,9 @@ const PATHS: Record<string, Record<string, Json>> = {
     get: operation('listSettingsDevices', { summary: 'The signed-in devices; `current` marks the caller', ok: ok(S.DeviceList), errors: [400, 401] }),
   },
   '/api/me/settings/devices/{id}': {
-    patch: operation('setDailyNotification', {
-      summary: 'This device’s daily brief notification: on or off, at a quarter hour in its timezone',
-      description: 'Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.',
+    patch: operation('setNotifications', {
+      summary: 'This device’s notifications: the daily brief (on or off, at a quarter hour in its timezone) and urgent cards',
+      description: 'Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one daily push, at the first run after the time; an urgent push goes for each card stored with delivery immediate, after the PUT commits.',
       parameters: [idParam('id', 'A device id: the caller’s own')],
       body: S.DevicePatch,
       ok: ok(S.Device),

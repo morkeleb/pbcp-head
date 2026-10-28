@@ -17,6 +17,8 @@ import { load, persist, toCard, writeTx, type Stored, type Tx } from './store';
 export interface Outcome {
   status: number;
   card: Card;
+  /** submitCard: the card as stored before, null for a new one (an urgent push compares the two). */
+  previous?: Card | null;
 }
 
 // --- submit (§7.1) ----------------------------------------------------------
@@ -64,7 +66,7 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
     }
     // A.3: a stored outcome moves its order's exec_state only if it comes from the current lease.
     if (r.changed.length > 0 && ordered !== undefined) await applyOutcomeInTx(tx, ctx.headId, incoming, ordered);
-    return { status: r.status, card };
+    return { status: r.status, card, previous: stored?.card ?? null };
   });
 }
 
