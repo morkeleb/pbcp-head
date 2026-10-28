@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cards } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
+import { submitCard } from '../../lib/protocol';
 import { card, cardPath } from './cards';
 import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
@@ -65,11 +66,11 @@ describe('POST /api/pair', () => {
     expect([again.status, again.body.error]).toEqual([400, 'invalid_code']);
   });
 
-  it('records the pairing in the owner’s brief: a head:producer:<root> signal at log', async () => {
+  it('records the pairing in the owner’s brief: a head:producer:<root> artifact at log (RFC §4.1a: a producer connecting)', async () => {
     const c = await newCode();
     await pair({ code: c.code, root: 'agent-7', name: 'Night agent' });
     const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
-    expect(row!.producerDoc).toMatchObject({ kind: 'signal', urgency: 'log', producer: 'head', title: 'Night agent paired as `agent-7`' });
+    expect(row!.producerDoc).toMatchObject({ kind: 'artifact', urgency: 'log', producer: 'head', title: 'Night agent paired as `agent-7`' }); // §4.1a: a producer connecting
     expect((row!.producerDoc as { body: string }).body).toContain(`Paired at 2026-10-07T09:00:00Z from ${address}`);
     expect(row!.delivery).toBe('log');
     // Renamed later in Settings: the stored card keeps the words it was written with.
@@ -82,6 +83,15 @@ describe('POST /api/pair', () => {
     await pair({ code: d.code, root: 'agent-9' });
     const [nameless] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-9')));
     expect((nameless!.producerDoc as { title: string }).title).toBe('agent-9 paired as `agent-9`');
+  });
+
+  it('pairs a root again over its earlier record, even one written as a signal before §4.1a', async () => {
+    // As heads before this change wrote it: the same id, kind signal.
+    await submitCard(testDb(), { headId: OWNER, root: 'head', ceiling: 'brief' }, JSON.stringify(card('head:producer:agent-7', { producer: 'head', kind: 'signal', urgency: 'log', title: 'agent-7 paired as `agent-7`' })), encodeURIComponent('head:producer:agent-7'));
+    const c = await newCode();
+    expect((await pair({ code: c.code, root: 'agent-7', name: 'Night agent' })).status).toBe(201);
+    const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
+    expect(row!.producerDoc).toMatchObject({ kind: 'artifact', urgency: 'log', title: 'Night agent paired as `agent-7`' });
   });
 
   it('refuses an expired code', async () => {

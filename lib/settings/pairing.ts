@@ -10,7 +10,7 @@
 //   invalid_root) or taken (409 root_taken) is said so, and the code stays usable.
 // - The route is rate-limited per address (lib/rate-limit.ts `pair`). Neither the code nor the token is ever logged.
 //
-// A pairing is recorded on the token row (name, address, time) and as a `head:producer:<root>` signal at urgency log,
+// A pairing is recorded on the token row (name, address, time) and as a `head:producer:<root>` artifact at urgency log,
 // so it is in the owner's record.
 
 import { createHash, randomBytes, randomInt } from 'node:crypto';
@@ -113,11 +113,12 @@ export async function pair(db: Db, body: PairRequest, address: string, api: stri
     return mintProducerToken(tx as unknown as Db, { headId: held.headId, root, paired: { name, address, at } });
   });
 
-  // In the owner's record: a signal from the head at log urgency (A.1: the head owns the head: root).
+  // In the owner's record: an artifact from the head at log urgency, a routine record of a producer connecting (RFC
+  // §4.1a); A.1: the head owns the head: root.
   const card = {
     protocol: 'pbcp/1',
     id: `head:producer:${root}`,
-    kind: 'signal',
+    kind: 'artifact',
     to_person: held.headId,
     producer: 'head',
     urgency: 'log',
