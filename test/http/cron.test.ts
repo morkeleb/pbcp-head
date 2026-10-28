@@ -37,7 +37,7 @@ describe('GET /api/cron/brief', () => {
     expect(brief.daily.rendered_html).toContain(`href="/card/${encodeURIComponent('hermes:gmail:1')}"`);
     expect(brief.daily.rendered_html).not.toContain('/api/me/svg/'); // no chart: §8, counts are additions
     // Its lead is its opening paragraph: the leads of what is open and of yesterday's threads, each linked.
-    expect(brief.daily.lead).toMatch(/^1 decision: \[Card hermes:gmail:1\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\) — .+\. Yesterday: \[/);
+    expect(brief.daily.lead).toMatch(/^1 decision: \[Card hermes:gmail:1\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\) — .+\. What mattered yesterday: \[/);
     expect(brief.daily.lead_source).toBe('body');
     expect(brief.threads).toEqual([]); // the head's own card is the brief, not one of its folds
   });
@@ -108,14 +108,16 @@ describe('GET /api/cron/brief', () => {
     await testDb().delete(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, old.id)));
     expect((await cron()).body.minted).toEqual([{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }]);
     b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
-    expect(b.daily['x-pbcp-fold']).toBe(5);
+    expect(b.daily['x-pbcp-fold']).toBe(6);
     expect(b.daily_paragraph).toMatchObject({ so_far: false, html: b.daily.rendered_lead });
   });
 
-  it('mints no card on a day with nothing open and nothing new', async () => {
+  it('on a day with nothing open and nothing new, mints a card that says "Nothing waiting for you."', async () => {
     await clock('2026-10-07T06:00:00Z');
-    expect((await cron()).body).toEqual({ minted: [], notified: [] });
-    expect(await testDb().select({ id: cards.id }).from(cards).where(eq(cards.namespace, 'daily'))).toEqual([]);
+    expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }], notified: [] });
+    const [daily] = await testDb().select().from(cards).where(eq(cards.namespace, 'daily'));
+    expect((daily!.producerDoc as { body: string }).body.split('\n')[0]).toBe('Nothing waiting for you.');
+    expect((daily!.producerDoc as { body: string }).body).not.toMatch(/mattered|decided|updates? from/);
   });
 
   it('refuses anything but the cron secret', async () => {

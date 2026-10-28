@@ -13,9 +13,9 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { MastheadRow, useChrome, useChromeCards } from '../chrome';
+import { MastheadRow, MastheadTools, useChrome, useChromeCards } from '../chrome';
 import type { MeCard } from '../components';
-import { composeParagraph, matchesLabels } from '../../../lib/brief/paragraph';
+import { composeParagraphs, matchesLabels } from '../../../lib/brief/paragraph';
 import { DailyBrief } from './DailyBrief';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { clock, DecisionCard, type DecisionCardHandle, type Density } from './DecisionCard';
@@ -209,13 +209,12 @@ export function BriefView() {
   // The labels on the loaded days, each with how many cards on screen carry it (a card once, wherever it shows).
   const counts = new Map<string, number>();
   for (const c of new Map(allCards.map((c) => [c.id, c])).values()) for (const l of c.labels ?? []) counts.set(l, (counts.get(l) ?? 0) + 1);
-  const strip = (
-    <div className="relative">
-      <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />
-      <div className="absolute right-0 top-0">
-        <LabelFilter counts={counts} chosen={chosen} onChange={setChosen} />
-      </div>
-    </div>
+  const strip = <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />;
+  // Beside the density control in the masthead; nothing when no loaded card has a label and none is chosen.
+  const labelFilter = (counts.size > 0 || chosen.length > 0) && (
+    <MastheadTools>
+      <LabelFilter counts={counts} chosen={chosen} onChange={setChosen} compact={!wide} />
+    </MastheadTools>
   );
   const shownDays = chosen.length ? days.map((d) => filtered(d, chosen)) : days;
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
@@ -234,6 +233,7 @@ export function BriefView() {
   return (
     <div className="min-h-dvh pb-24">
       <MastheadRow>{strip}</MastheadRow>
+      {labelFilter}
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
         {shownDays
@@ -279,13 +279,12 @@ const shortDay = (date: string) => {
 function filtered(day: Day, chosen: string[]): Day {
   const keep = (c: MeCard) => matchesLabels(c.labels ?? [], chosen);
   const parts = day.paragraph?.parts;
-  const html = parts ? composeParagraph(parts, chosen) : '';
   return {
     ...day,
     decisions: day.decisions.filter(keep),
     updates: day.updates.filter((t) => keep(t.latest)),
     signals: day.signals.filter((t) => keep(t.latest)),
-    paragraph: day.paragraph && html ? { ...day.paragraph, html } : null,
+    paragraph: day.paragraph && parts ? { ...day.paragraph, parts: { ...parts }, chosen } : null,
   };
 }
 
@@ -296,7 +295,11 @@ function DaySection({ day, name, wide, density, tz, decision, update }: {
   // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
   const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'Morning brief' : '';
   const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0;
-  const brief = heading && <DailyBrief heading={heading} html={day.paragraph?.html ?? null} soFar={day.paragraph?.soFar} compact={density === 'ledger'} />;
+  // One short paragraph per part of the brief (lib/brief/paragraph.ts), filtered by the chosen labels; a paragraph the
+  // head did not keep in parts is the one run of prose it was written as.
+  const p = day.paragraph;
+  const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
+  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} compact={density === 'ledger'} />;
   const decisions = day.decisions.length > 0 && (
     <Group title="Decisions" count={day.decisions.length}>
       <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap={density === 'ledger' ? 'gap-2' : 'gap-3'} />

@@ -687,8 +687,31 @@ export interface components {
             }[];
             /** @description The labels of each snoozed decision: counted, never listed (§8) */
             snoozed: string[][];
-            /** @description The previous day’s threads, by their newest unsnoozed card */
-            yesterday: {
+            /** @description Decisions made the day before: "<title> — decided <value>" */
+            decided?: {
+                /** @description The card the entry is */
+                id: string;
+                /** @description Its labels (§4.1), for filtering */
+                labels: string[];
+                /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
+                text: string;
+            }[];
+            /** @description The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more" */
+            mattered?: {
+                /** @description The card the entry is */
+                id: string;
+                /** @description Its labels (§4.1), for filtering */
+                labels: string[];
+                /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
+                text: string;
+            }[];
+            /** @description Every other thread of the day before, counted by producer: "And 9 updates from mail, goalpath and hermes." */
+            rest?: {
+                producer: string;
+                labels: string[];
+            }[];
+            /** @description Folds before 6 only: the previous day’s threads, one list */
+            yesterday?: {
                 /** @description The card the entry is */
                 id: string;
                 /** @description Its labels (§4.1), for filtering */
@@ -871,9 +894,9 @@ export interface components {
             first_day: string | null;
             /** @description The latest `head:daily` card */
             daily: components["schemas"]["MeCard"] | null;
-            /** @description The paragraph today opens with; null when nothing is open and nothing arrived yesterday */
+            /** @description The brief today opens with ("Nothing waiting for you." on a quiet day) */
             daily_paragraph: {
-                /** @description Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8) */
+                /** @description Safe inline HTML, the parts’ sentences as one run of prose: "N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from …." with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8) */
                 html: string;
                 /** @description True until today’s `head:daily` card exists: the same fold, made now */
                 so_far: boolean;

@@ -33,7 +33,7 @@ export interface Day {
   date: string;
   kind: 'past' | 'today' | 'tomorrow';
   /** The day's paragraph; `parts` when the head kept its entries apart, so the label filter can follow it. */
-  paragraph: { html: string; soFar: boolean; parts?: ParagraphParts } | null;
+  paragraph: { html: string; soFar: boolean; parts?: ParagraphParts; /** The label filter's choice, when one is on. */ chosen?: string[] } | null;
   decisions: MeCard[];
   updates: UpdateThread[];
   signals: UpdateThread[];

@@ -38,6 +38,8 @@ interface Chrome {
   /** The broadsheet layout (≥ 900 px); null until known on the client. */
   wide: boolean | null;
   row: HTMLElement | null;
+  /** The page's own tool beside the density control (the brief's label filter); empty elsewhere. */
+  pageTools: HTMLElement | null;
   setCards: (cards: MeCard[]) => void;
   setAsOf: (asOf: { at: string | null; timezone?: string }) => void;
 }
@@ -67,6 +69,12 @@ export function useChromeCards(cards: MeCard[], asOf: { at: string | null; timez
 export function MastheadRow({ children }: { children: ReactNode }) {
   const { row } = useChrome();
   return row ? createPortal(children, row) : null;
+}
+
+/** Puts the page's own tool into the masthead, right of the density control (the brief's label filter). */
+export function MastheadTools({ children }: { children: ReactNode }) {
+  const { pageTools } = useChrome();
+  return pageTools ? createPortal(children, pageTools) : null;
 }
 
 /** "← Brief" and the page's own title: the row of every route but the brief. */
@@ -129,13 +137,14 @@ export function ChromeProvider({ children }: { children: ReactNode }) {
   const [density, setDensity] = useDensityState();
   const wide = useWide();
   const [row, setRow] = useState<HTMLElement | null>(null);
+  const [pageTools, setPageTools] = useState<HTMLElement | null>(null);
   const [cards, setCards] = useState<MeCard[]>([]);
   const [asOf, setAsOf] = useState<{ at: string | null; timezone?: string }>({ at: null });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setDensity is stable in effect (it only sets state and storage)
-  const value = useMemo<Chrome>(() => ({ density, setDensity, wide, row, setCards, setAsOf }), [density, wide, row]);
+  const value = useMemo<Chrome>(() => ({ density, setDensity, wide, row, pageTools, setCards, setAsOf }), [density, wide, row, pageTools]);
   return (
     <ChromeContext.Provider value={value}>
-      <Masthead density={density} onDensity={setDensity} wide={wide} cards={cards} asOf={asOf} rowRef={setRow} />
+      <Masthead density={density} onDensity={setDensity} wide={wide} cards={cards} asOf={asOf} rowRef={setRow} pageToolsRef={setPageTools} />
       {children}
     </ChromeContext.Provider>
   );
@@ -280,9 +289,10 @@ interface MastheadProps {
   cards: MeCard[];
   asOf: { at: string | null; timezone?: string };
   rowRef: (el: HTMLElement | null) => void;
+  pageToolsRef: (el: HTMLElement | null) => void;
 }
 
-function Masthead({ density, onDensity, wide, cards, asOf, rowRef }: MastheadProps) {
+function Masthead({ density, onDensity, wide, cards, asOf, rowRef, pageToolsRef }: MastheadProps) {
   const date = useDateline();
   const label = { comfortable: 'Comfortable', ledger: 'Ledger' } as const;
   // `data-masthead-shared`: the parts that are the same on every route (the UI tests compare them).
@@ -310,6 +320,8 @@ function Masthead({ density, onDensity, wide, cards, asOf, rowRef }: MastheadPro
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      {/* The page's own tool, if it has one (MastheadTools); takes no room when empty. */}
+      <span ref={pageToolsRef} className="contents" data-masthead-page-tools />
       <SearchDialog cards={cards} />
       <ThemeMenu />
       <PagesMenu />

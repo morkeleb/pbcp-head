@@ -68,7 +68,7 @@ export async function dailyPayload(db: Db, headId: string, date: string): Promis
       .select({ n: sql<number>`count(*)::int` })
       .from(cards)
       .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), ne(cards.producer, 'head'), sql`${cards.producerDoc}->>'kind' = 'decision'`, or(isNull(cards.snoozedUntil), lte(cards.snoozedUntil, at))))) as [{ n: number }];
-    body = n === 0 ? 'Nothing waiting' : `${n} decision${n === 1 ? '' : 's'} waiting`;
+    body = n === 0 ? 'Nothing waiting for you.' : `${n} decision${n === 1 ? '' : 's'} waiting`;
   }
   return { title: 'Brief', body, data: { url: '/brief' }, tag: 'pbcp-daily' };
 }

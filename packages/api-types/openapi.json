@@ -2627,7 +2627,8 @@
             },
             "description": "The labels of each snoozed decision: counted, never listed (§8)"
           },
-          "yesterday": {
+          "decided": {
+            "description": "Decisions made the day before: \"<title> — decided <value>\"",
             "type": "array",
             "items": {
               "type": "object",
@@ -2654,14 +2655,95 @@
                 "text"
               ],
               "additionalProperties": false
-            },
-            "description": "The previous day’s threads, by their newest unsnoozed card"
+            }
+          },
+          "mattered": {
+            "description": "The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then \"and N more\"",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rest": {
+            "description": "Every other thread of the day before, counted by producer: \"And 9 updates from mail, goalpath and hermes.\"",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "producer": {
+                  "type": "string"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "producer",
+                "labels"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "yesterday": {
+            "description": "Folds before 6 only: the previous day’s threads, one list",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
           "decisions",
-          "snoozed",
-          "yesterday"
+          "snoozed"
         ],
         "additionalProperties": false
       },
@@ -3281,7 +3363,7 @@
                 "properties": {
                   "html": {
                     "type": "string",
-                    "description": "Safe inline HTML: \"N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; ….\" with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)"
+                    "description": "Safe inline HTML, the parts’ sentences as one run of prose: \"N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from ….\" with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8)"
                   },
                   "so_far": {
                     "type": "boolean",
@@ -3302,7 +3384,7 @@
                 "type": "null"
               }
             ],
-            "description": "The paragraph today opens with; null when nothing is open and nothing arrived yesterday"
+            "description": "The brief today opens with (\"Nothing waiting for you.\" on a quiet day)"
           },
           "tomorrow": {
             "type": "object",

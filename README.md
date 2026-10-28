@@ -16,6 +16,8 @@ pnpm mint-token morten hermes    # creates head `morten`, prints a producer toke
 # afterwards, signed in: /settings mints and revokes tokens, enrols devices, and shows how to connect a producer
 pnpm enroll morten               # prints a /signin link to register the owner's first passkey
 pnpm dev                         # then open /signin from the enroll link, and /brief
+pnpm demo morten                 # example cards from each connector (docs/deploy.md, "Demo data"); --remove takes them out
+pnpm demo:purge --head morten    # the demo producers' cards and tokens, leaving real producers alone; --dry-run first
 ```
 
 `pnpm test` builds the head and runs everything: unit tests, the HTTP tests, and the conformance suite from `@pbcp/core/conformance` over HTTP against a head started in test mode on the `pbcp_test` database. CI runs the same suites inside the Docker image (`docker compose run --rm head pnpm test:gate`).

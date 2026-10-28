@@ -67,8 +67,11 @@ const ParagraphEntry = z.object({
 export const ParagraphParts = z.object({
   decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed'),
   snoozed: z.array(z.array(z.string())).describe('The labels of each snoozed decision: counted, never listed (§8)'),
-  yesterday: z.array(ParagraphEntry).describe('The previous day’s threads, by their newest unsnoozed card'),
-}).register(responses, { id: 'ParagraphParts', description: 'A daily paragraph in parts, so a view can keep only the entries of chosen labels and write the same sentence: "N decisions, M snoozed: <entry>; …. Yesterday: <entry>; …."' });
+  decided: z.array(ParagraphEntry).optional().describe('Decisions made the day before: "<title> — decided <value>"'),
+  mattered: z.array(ParagraphEntry).optional().describe('The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more"'),
+  rest: z.array(z.object({ producer: z.string(), labels: z.array(z.string()) })).optional().describe('Every other thread of the day before, counted by producer: "And 9 updates from mail, goalpath and hermes."'),
+  yesterday: z.array(ParagraphEntry).optional().describe('Folds before 6 only: the previous day’s threads, one list'),
+}).register(responses, { id: 'ParagraphParts', description: 'A daily brief in parts, so a view can keep only the entries of chosen labels and write the same sentences, one paragraph each: "N decisions: <entry>; …." (or "Nothing waiting for you."), "Yesterday you decided: …", "What mattered yesterday: …", "And N updates from …"' });
 
 export const MeCard = Card.extend({
   rendered_html: z.string().describe('The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.'),
@@ -147,12 +150,12 @@ export const Brief = z.object({
   daily: MeCard.nullable().describe('The latest `head:daily` card'),
   daily_paragraph: z
     .object({
-      html: z.string().describe('Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)'),
+      html: z.string().describe('Safe inline HTML, the parts’ sentences as one run of prose: "N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from …." with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8)'),
       so_far: z.boolean().describe('True until today’s `head:daily` card exists: the same fold, made now'),
       parts: ParagraphParts,
     })
     .nullable()
-    .describe('The paragraph today opens with; null when nothing is open and nothing arrived yesterday'),
+    .describe('The brief today opens with ("Nothing waiting for you." on a quiet day)'),
   tomorrow: z
     .object({ date: z.string().describe('YYYY-MM-DD in `timezone`'), cards: z.array(MeCard).describe('Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)') })
     .describe('What is already set for tomorrow'),
