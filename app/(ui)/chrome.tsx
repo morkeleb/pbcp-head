@@ -300,7 +300,8 @@ function Masthead({ density, onDensity, wide, cards, asOf, rowRef }: MastheadPro
 
   return (
     // Hidden, not absent, until the layout is known on the client: a phone's masthead must not flash on a broadsheet.
-    <header className={cn('sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85', wide === null && 'invisible')} data-masthead>
+    // Opaque: what scrolls under the masthead never shows through it.
+    <header className={cn('sticky top-0 z-20 border-b bg-background', wide === null && 'invisible')} data-masthead>
       <div className={cn('mx-auto max-w-[1440px]', wide ? 'flex items-center gap-8 px-6 py-3' : 'px-4 pt-3 pb-2')}>
         {wide ? (
           <div className="flex-none">

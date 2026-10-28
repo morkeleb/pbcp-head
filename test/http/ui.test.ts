@@ -401,6 +401,8 @@ describe('the brief: days, week strip, layouts', () => {
     expect(await page.$eval(`[data-day="${day}"]`, (e) => e.textContent)).toMatch(/^Yesterday · /);
     await page.evaluate(() => scrollTo(0, 0)); // up into yesterday
     await page.waitForSelector('xpath/.//button[contains(., "Back to today")]');
+    // Today is below the view now: the chip points down, the way to scroll.
+    expect(await page.$eval('[data-today-is]', (b) => [b.getAttribute('data-today-is'), !!b.querySelector('.lucide-arrow-down'), !!b.querySelector('.lucide-arrow-up')])).toEqual(['below', true, false]);
     await (await page.$('xpath/.//button[contains(., "Back to today")]'))!.click();
     await page.waitForFunction((t) => Math.abs(document.querySelector(`[data-day="${t}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, today);
   });
@@ -727,6 +729,69 @@ describe('settings at phone widths', () => {
       expect(r.rootLines, String(width)).toBe(1);
     }
     await page.setViewport({ width: 1280, height: 844 });
+  });
+});
+
+describe('iPhone Safari', () => {
+  it('gets 16px text in every field on a touch screen, so focusing one never zooms the page; the masthead and day headers are opaque', async () => {
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-day]');
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    for (const path of ['/orders', '/settings']) {
+      await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
+      await page.waitForSelector('textarea, input');
+      const sizes = await page.$$eval('input, textarea, select', (fs) => fs.map((f) => parseFloat(getComputedStyle(f).fontSize)));
+      expect(sizes.length, path).toBeGreaterThan(0);
+      expect(sizes.filter((x) => x < 16), path).toEqual([]);
+    }
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-day]');
+    const alpha = (sel: string) => page.$eval(sel, (e) => {
+      const c = getComputedStyle(e).backgroundColor;
+      const m = /rgba?\(([^)]+)\)|color\([^ ]+ [^ ]+ [^ ]+ [^ /]+(?: \/ ([\d.]+))?\)/.exec(c)!;
+      const parts = m[1]?.split(',') ?? [];
+      return parts.length === 4 ? Number(parts[3]) : m[2] !== undefined ? Number(m[2]) : 1;
+    });
+    expect(await alpha('[data-masthead]')).toBe(1);
+    expect(await page.$eval('[data-day]', (h) => getComputedStyle(h).position)).toBe('sticky');
+    expect(await alpha('[data-day]')).toBe(1);
+  });
+});
+
+describe('a producer’s table on a phone', () => {
+  it('keeps prices and headings whole and scrolls sideways in its own box, never widening the page', async () => {
+    const n8n = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'n8n' })}`;
+    const rows = [
+      ['[SuperSix EVO 2 · Mike’s Bikes (Tungsten Blue) (sold out)](https://mikesbikes.example/a)', '$5,599.95', '$5,599.95', '$5,599.95', '—'],
+      ['[SuperSix EVO 3 · Bike Attack (all sizes)](https://bikeattack.example/b)', '$6,999', '$6,999', '$6,999', '−$300'],
+    ];
+    const body = ['## Bikes (size 56)', '', '| Item | Today | Yesterday | 30-day low | Change |', '| --- | ---: | ---: | ---: | ---: |', ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
+    await call('PUT', cardPath('n8n:prices:1'), { auth: n8n, body: card('n8n:prices:1', { kind: 'artifact', title: 'Prices · Tue 27 Oct', body }) });
+    await until(async () => (await row('n8n:prices:1')).renderedHtml !== null);
+    for (const width of [360, 390]) {
+      await page.setViewport({ width, height: 844, isMobile: true, hasTouch: true });
+      await page.goto(`${headUrl()}/card/${encodeURIComponent('n8n:prices:1')}`, { waitUntil: 'networkidle0' });
+      await page.waitForSelector('.rendered table');
+      const r = await page.evaluate(() => {
+        const table = document.querySelector<HTMLElement>('.rendered table')!;
+        // Lines of a cell's text: the distinct tops of its rendered line boxes.
+        const line = (e: Element) => {
+          const range = document.createRange();
+          range.selectNodeContents(e);
+          return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+        };
+        const cells = [...table.querySelectorAll('th, td')].filter((c) => !c.querySelector('a') && c.textContent!.trim() !== 'Item');
+        return {
+          pageFits: document.documentElement.scrollWidth === document.documentElement.clientWidth,
+          tableInCard: table.getBoundingClientRect().right <= document.documentElement.clientWidth,
+          scrolls: getComputedStyle(table).overflowX,
+          multiLine: cells.filter((c) => line(c) > 1).map((c) => c.textContent),
+          rightAligned: getComputedStyle(table.querySelector('td:nth-child(2)')!).textAlign,
+        };
+      });
+      expect(r, String(width)).toEqual({ pageFits: true, tableInCard: true, scrolls: 'auto', multiLine: [], rightAligned: 'right' });
+    }
   });
 });
 
