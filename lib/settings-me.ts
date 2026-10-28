@@ -78,7 +78,7 @@ export async function updateProducer(db: Db, headId: string, root: string, body:
 }
 
 /**
- * GET /api/me/labels: every label on the head's cards (§4.1), with how many cards carry it and the ceiling the owner
+ * GET /api/me/settings/labels: every label on the head's cards (§4.1), with how many cards carry it and the ceiling the owner
  * set on it, if any (§9: a head MAY set ceilings per label), by label.
  */
 export async function listLabels(db: Db, headId: string) {
@@ -93,7 +93,7 @@ export async function listLabels(db: Db, headId: string) {
 }
 
 /**
- * PATCH /api/me/labels/{label} { ceiling: log | brief | immediate | null }: sets or clears the owner's ceiling on a
+ * PATCH /api/me/settings/labels/{label} { ceiling: log | brief | immediate | null }: sets or clears the owner's ceiling on a
  * label (§9). A card under a producer ceiling and label ceilings is stored with the lowest; like a producer ceiling it
  * applies to content stored from now on.
  */

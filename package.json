@@ -18,6 +18,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test:unit": "vitest run --project unit",
     "mint-token": "tsx --env-file-if-exists=.env scripts/mint-token.ts",
+    "revoke-token": "tsx --env-file-if-exists=.env scripts/revoke-token.ts",
     "enroll": "tsx --env-file-if-exists=.env scripts/enroll.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "test:gate": "vitest run",

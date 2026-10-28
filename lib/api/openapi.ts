@@ -15,7 +15,8 @@ const TIMEZONE_DESCRIPTION =
   '(for the brief and its days, snooze presets and the nightly card) unless the owner set an override in ' +
   '/api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.';
 
-const errors = (...statuses: number[]) =>
+/** `conflict`: what a 409 carries: the stored card (a decision on a card no longer open), or an error body. */
+const errors = (statuses: number[], conflict: 'card' | 'error' = 'card') =>
   Object.fromEntries(
     statuses.map((s) => [
       String(s),
@@ -25,11 +26,11 @@ const errors = (...statuses: number[]) =>
           401: '`unauthorized`: no session, an expired one, a signed-out device, or a producer token',
           403: '`forbidden`',
           404: '`not_found`',
-          409: 'The card is no longer open; the body is the stored card',
+          409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use`: the root already has a live token',
           413: '`too_large`: the body is over 1 MiB',
           502: '`image_unavailable`: the image could not be fetched, or is not an image of at most 2 MB',
         }[s],
-        ...(s === 409 ? json(S.Card) : json(S.ErrorBody)),
+        ...(s === 409 && conflict === 'card' ? json(S.Card) : json(S.ErrorBody)),
       },
     ]),
   );
@@ -44,6 +45,7 @@ interface Op {
   body?: z.ZodType;
   ok: Json;
   errors: number[];
+  conflict?: 'card' | 'error';
   public?: true;
 }
 
@@ -55,7 +57,7 @@ function operation(id: string, op: Op): Json {
     ...(op.public ? { security: [] } : {}),
     parameters: [...(op.public ? [] : [{ $ref: '#/components/parameters/XTimezone' }]), ...(op.parameters ?? [])],
     ...(op.body ? { requestBody: { required: true, ...json(op.body, S.requests) } } : {}),
-    responses: { ...op.ok, ...errors(...op.errors) },
+    responses: { ...op.ok, ...errors(op.errors, op.conflict) },
   };
 }
 
@@ -159,16 +161,50 @@ const PATHS: Record<string, Record<string, Json>> = {
       errors: [400, 401, 404, 413],
     }),
   },
-  '/api/me/labels': {
+  '/api/me/settings/head': {
+    get: operation('getHeadFacts', { summary: 'This head as a producer sees it: owner id, URL, protocol (§7.5)', ok: ok(S.HeadFacts), errors: [400, 401] }),
+  },
+  '/api/me/settings/producers': {
+    get: operation('listProducerTokens', { summary: 'The live producer tokens: root, created, last used, ceiling', ok: ok(S.ProducerTokenList), errors: [400, 401] }),
+    post: operation('mintProducerToken', {
+      summary: 'Mint a producer token for a root (§12); the token is in this response only',
+      body: S.MintTokenRequest,
+      ok: ok(S.MintedToken, 'Minted', 201),
+      errors: [400, 401, 409, 413],
+      conflict: 'error',
+    }),
+  },
+  '/api/me/settings/producers/{id}': {
+    patch: operation('setProducerCeiling', { summary: 'Set the ceiling of that token’s producer (§9)', parameters: [idParam('id', 'A token id from the list')], body: S.TokenPatch, ok: ok(S.ProducerToken), errors: [400, 401, 404, 413] }),
+    delete: operation('revokeProducerToken', { summary: 'Revoke a producer token (§12)', parameters: [idParam('id', 'A token id from the list')], ok: { 204: { description: 'Revoked' } }, errors: [400, 401, 404] }),
+  },
+  '/api/me/settings/labels': {
     get: operation('listLabels', { summary: 'The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)', ok: ok(S.LabelList), errors: [400, 401] }),
   },
-  '/api/me/labels/{label}': {
+  '/api/me/settings/labels/{label}': {
     patch: operation('updateLabel', {
       summary: 'Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s',
       parameters: [idParam('label', 'A label (§4.1): lowercase letters, digits and -')],
       body: S.LabelPatch,
       ok: ok(S.Label),
       errors: [400, 401, 413],
+    }),
+  },
+  '/api/me/settings/devices': {
+    get: operation('listSettingsDevices', { summary: 'The signed-in devices; `current` marks the caller', ok: ok(S.DeviceList), errors: [400, 401] }),
+  },
+  '/api/me/settings/devices/{id}': {
+    delete: operation('signOutDevice', { summary: 'Sign a device out', parameters: [idParam('id', 'A device id')], ok: { 204: { description: 'Signed out' } }, errors: [400, 401, 404] }),
+  },
+  '/api/me/settings/enrolment': {
+    post: operation('enrolDevice', { summary: 'A one-hour link that registers a passkey for another device', ok: ok(S.Enrolment, 'The link', 201), errors: [400, 401] }),
+  },
+  '/api/me/settings/snippets': {
+    get: operation('connectSnippets', {
+      summary: 'Ready-to-paste ways to connect a producer: curl, n8n, Hermes',
+      parameters: [{ name: 'root', in: 'query', description: 'The producer root to fill in (default my-producer)', schema: { type: 'string' } }],
+      ok: ok(S.ConnectSnippets),
+      errors: [400, 401],
     }),
   },
   '/api/me/devices': {

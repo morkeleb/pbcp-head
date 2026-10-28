@@ -33,6 +33,7 @@ export const producerTokens = pgTable('producer_tokens', {
   urgencyCeiling: text('urgency_ceiling').notNull().default('brief'), // §9: a new producer defaults to brief
   executor: boolean('executor').notNull().default(false), // eligible for to_producer '*' (A.1, milestone H3)
   createdAt: tstz('created_at').notNull().defaultNow(),
+  lastUsedAt: tstz('last_used_at'), // the last request it authenticated, to the minute (lib/auth/producer.ts)
   revokedAt: tstz('revoked_at'),
 });
 

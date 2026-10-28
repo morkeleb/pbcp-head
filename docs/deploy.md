@@ -205,14 +205,15 @@ A producer token is bound to one head and one namespace root (RFC §12). It is p
 ```sh
 # Vercel: with the production environment loaded, as in step 5
 pnpm mint-token morten hermes                       # ceiling `brief` (§9), the default for a new producer
-pnpm mint-token morten hermes --ceiling immediate   # or allow it to interrupt
+pnpm mint-token morten n8n --ceiling immediate      # one allowed to interrupt
 pnpm mint-token morten todoist --executor           # a producer that may claim orders (Appendix A)
+pnpm revoke-token morten n8n                        # revoke every live token of a root
 
 # Docker
 docker compose exec head pnpm mint-token morten hermes
 ```
 
-The owner can raise or lower a producer's ceiling later, or revoke it, from `PATCH /api/me/producers/{root}`.
+A root that already has a live token is refused (409): revoke it first, or pass `--instance <name>` for a second installation of the same connector (§12). The same is on the head's Settings page (`/settings` → Producers), which mints a token, shows it once, and revokes; it and these scripts share `lib/settings/producers.ts`. Ceilings are set there too, or from `PATCH /api/me/producers/{root}`.
 
 The producer routes live under `/api` (`PUT /api/cards/{id}`, `GET /api/changes`, and `GET /api` describes the head). So the head URL a producer uses is the origin plus `/api`.
 

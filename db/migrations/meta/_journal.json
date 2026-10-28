@@ -64,6 +64,13 @@
       "when": 1793143666330,
       "tag": "0008_card_day_and_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793145770518,
+      "tag": "0009_token_last_used",
+      "breakpoints": true
     }
   ]
 }

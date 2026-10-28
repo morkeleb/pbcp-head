@@ -52,6 +52,9 @@ beforeEach(async () => {
   // previous test's database into this one.
   const context = await browser.createBrowserContext();
   page = await context.newPage();
+  // The device's zone is the head's (X-Timezone); the fixtures date cards in UTC, so the browser lives in UTC too, or the
+  // two disagree on what today is for the hours around midnight.
+  await page.emulateTimezone('UTC');
   page.once('close', () => void context.close().catch(() => undefined));
   await page.setViewport({ width: 390, height: 844 });
   errors = [];
@@ -744,6 +747,32 @@ describe('the card page', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]![1]).toBe('ship-next“After the review.”');
     expect(rows[0]![2]).toBe('browser'); // the device that recorded it, by name
+  });
+});
+
+describe('settings', () => {
+  it('shows the sections in order, mints a token shown once and filled into the snippets, and is under the shared masthead', async () => {
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    expect(await page.$$eval('[data-section-settings]', (ss) => ss.map((s) => s.getAttribute('data-section-settings')))).toEqual(['this-head', 'producers', 'connect', 'devices', 'preferences']);
+    expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
+    expect(await page.$eval('[data-value="owner id"]', (v) => v.textContent)).toBe(OWNER);
+    expect(await page.$eval('[data-value="head URL"]', (v) => v.textContent)).toBe(`${headUrl()}/api`);
+    expect(await page.$eval('[data-this-device]', (d) => d.closest('tr')!.textContent)).toContain('browser');
+
+    await page.type('input[aria-label="New producer’s root"]', 'n8n');
+    await (await page.$('xpath/.//button[.="New producer"]'))!.click();
+    await page.waitForSelector('[data-minted]');
+    const token = (await page.$eval('[data-minted] [data-snippet="token"]', (t) => t.textContent))!;
+    expect(token).toMatch(/^pbcp_/);
+    expect(await page.$eval('[data-minted]', (m) => m.textContent)).toContain('This is the only time it is shown');
+    await page.waitForFunction((t) => document.querySelector('[data-snippet="curl"]')?.textContent?.includes(t), {}, token);
+    await page.waitForFunction(() => document.querySelector('[data-producer-tokens]')?.textContent?.includes('n8n'));
+
+    await page.reload({ waitUntil: 'networkidle0' });
+    expect(await page.$('[data-minted]')).toBeNull();
+    expect(await page.content()).not.toContain(token); // never shown again
+    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toContain('<producer token>');
+    expect(errors).toEqual([]);
   });
 });
 
