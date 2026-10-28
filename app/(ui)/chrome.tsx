@@ -300,9 +300,10 @@ function Masthead({ density, onDensity, wide, cards, asOf, rowRef, pageToolsRef 
     <div className="flex items-center gap-1" data-masthead-shared="tools">
       {wide ? (
         <Tabs value={density} onValueChange={(v) => onDensity(v as Density)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="comfortable" className="px-2 text-control">Comfortable</TabsTrigger>
-            <TabsTrigger value="ledger" className="px-2 text-control">Ledger</TabsTrigger>
+          {/* The size of the masthead's small buttons (the label filter's): 24 px tall, 12 px text. */}
+          <TabsList className="h-6 p-0.5 group-data-[orientation=horizontal]/tabs:h-6">
+            <TabsTrigger value="comfortable" className="px-2 py-0 text-xs">Comfortable</TabsTrigger>
+            <TabsTrigger value="ledger" className="px-2 py-0 text-xs">Ledger</TabsTrigger>
           </TabsList>
         </Tabs>
       ) : (

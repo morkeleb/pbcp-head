@@ -5,10 +5,14 @@ import { cn } from "cn"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
+// Not modal unless asked: a modal menu locks the page's scroll by setting overflow: hidden on <body>, which makes
+// <body> the sticky masthead's scroll container, and a page scrolled down then shows the masthead at the top of the
+// document, out of view, while the menu is open. A menu needs no scroll lock: it closes on a click outside.
 function DropdownMenu({
+  modal = false,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" modal={modal} {...props} />
 }
 
 function DropdownMenuPortal({
