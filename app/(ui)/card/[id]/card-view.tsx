@@ -7,6 +7,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { clock, DecisionCard } from '../../brief/DecisionCard';
@@ -53,13 +54,28 @@ const SHOWN = 3;
 const KIND: Record<string, string> = { decision: 'Decision', artifact: 'Update', signal: 'Signal', order: 'Order' };
 
 /** The id from the raw path, decoded once, so an id with %XX in it survives (§5). */
-const idFromPath = () => decodeURIComponent(location.pathname.split('/')[2] ?? '');
+/** The route's own id segment, decoded once (a card id has no `%` of its own, §5). */
+const decodeId = (segment: string) => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
 
 export function CardView() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
-  const [path] = useState(() => (typeof location === 'undefined' ? null : `/api/me/cards/${encodeURIComponent(idFromPath())}`));
+  // From the route, not from location: on a navigation inside the app this renders before the address bar changes, so
+  // location still names the page being left (the brief), and the card asked for was none.
+  const { id: segment } = useParams<{ id: string }>();
+  const path = segment ? `/api/me/cards/${encodeURIComponent(decodeId(segment))}` : null;
+  // Another card (a link in this one's thread): start from nothing rather than show the last one under its address.
+  useEffect(() => {
+    setDetail(null);
+    setStatus(null);
+  }, [path]);
 
   const show = useCallback((d: Detail, at: string | null) => {
     setDetail(d);

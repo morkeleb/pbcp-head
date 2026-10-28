@@ -1103,6 +1103,20 @@ describe('one masthead', () => {
 });
 
 describe('the card page', () => {
+  it('opens from a link in the brief without a reload: the card, not "No such card."', async () => {
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const before = await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
+    const link = await page.waitForSelector('xpath/.//article[contains(@class,"update-row")]//a[normalize-space(.)="Burndown"]', { timeout: 5000 });
+    await link!.click();
+    await page.waitForFunction(() => location.pathname === `/card/${encodeURIComponent('goalpath:report:1')}`, { timeout: 5000 });
+    await page.waitForFunction(() => document.querySelector('main')?.textContent?.includes('Burndown') || document.body.textContent?.includes('No such card.'));
+    expect(await page.evaluate(() => document.body.textContent?.includes('No such card.'))).toBe(false);
+    expect(await page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(before); // a client navigation, not a reload
+    expect(errors).toEqual([]);
+  });
+
+
   it('shows the card as the brief does, body open, then its decision log as a table', async () => {
     const id = 'goalpath:item:1:ship';
     await call('POST', `/api/me/cards/${encodeURIComponent(id)}/decision`, { auth: `Session ${session.access_token}`, body: { decision: 'ship-next', comment: 'After the review.' } });
