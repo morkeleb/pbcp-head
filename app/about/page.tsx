@@ -45,6 +45,9 @@ export default async function FrontDoor() {
           <a href={DOCS_URL} className={link} rel="noopener">The protocol documentation</a> <span className="text-muted-foreground">— {new URL(DOCS_URL).host}</span>
         </li>
         <li>
+          <Link href="/connect" className={link}>Connect a producer</Link> <span className="text-muted-foreground">— the head’s URL, owner id, and a first card</span>
+        </li>
+        <li>
           <a href="/api/openapi.json" className={link}>This head’s API</a> <span className="text-muted-foreground">— /api/openapi.json</span>
         </li>
       </ul>

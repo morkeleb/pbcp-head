@@ -5109,78 +5109,197 @@ extension Components {
         }
         /// - Remark: Generated from `#/components/schemas/ConnectSnippets`.
         public struct ConnectSnippets: Codable, Hashable, Sendable {
-            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/root`.
-            public var root: Swift.String
-            /// The placeholder in the snippets: replace it with a token just minted
+            /// The base URL of the producer operations (§7.5 `api`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/api`.
+            public var api: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/owner`.
+            public var owner: Swift.String
+            /// The placeholder in `config` and `curl`: replace it with a token just minted
             ///
             /// - Remark: Generated from `#/components/schemas/ConnectSnippets/token`.
             public var token: Swift.String
+            /// `producerConfig` (@pbcp/client): the three values every producer needs
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/config`.
+            public struct ConfigPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ConnectSnippets/config/PBCP_HEAD_URL`.
+                public var pbcpHeadUrl: Swift.String
+                /// - Remark: Generated from `#/components/schemas/ConnectSnippets/config/PBCP_TO_PERSON`.
+                public var pbcpToPerson: Swift.String
+                /// - Remark: Generated from `#/components/schemas/ConnectSnippets/config/PBCP_TOKEN`.
+                public var pbcpToken: Swift.String
+                /// Creates a new `ConfigPayload`.
+                ///
+                /// - Parameters:
+                ///   - pbcpHeadUrl:
+                ///   - pbcpToPerson:
+                ///   - pbcpToken:
+                public init(
+                    pbcpHeadUrl: Swift.String,
+                    pbcpToPerson: Swift.String,
+                    pbcpToken: Swift.String
+                ) {
+                    self.pbcpHeadUrl = pbcpHeadUrl
+                    self.pbcpToPerson = pbcpToPerson
+                    self.pbcpToken = pbcpToken
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case pbcpHeadUrl = "PBCP_HEAD_URL"
+                    case pbcpToPerson = "PBCP_TO_PERSON"
+                    case pbcpToken = "PBCP_TOKEN"
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.pbcpHeadUrl = try container.decode(
+                        Swift.String.self,
+                        forKey: .pbcpHeadUrl
+                    )
+                    self.pbcpToPerson = try container.decode(
+                        Swift.String.self,
+                        forKey: .pbcpToPerson
+                    )
+                    self.pbcpToken = try container.decode(
+                        Swift.String.self,
+                        forKey: .pbcpToken
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "PBCP_HEAD_URL",
+                        "PBCP_TO_PERSON",
+                        "PBCP_TOKEN"
+                    ])
+                }
+            }
+            /// `producerConfig` (@pbcp/client): the three values every producer needs
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/config`.
+            public var config: Components.Schemas.ConnectSnippets.ConfigPayload
+            /// `curlSnippet` (@pbcp/client): a curl that PUTs a card
+            ///
             /// - Remark: Generated from `#/components/schemas/ConnectSnippets/curl`.
             public var curl: Swift.String
-            /// An HTTP Request node, as n8n pastes it
+            /// The root of the curl’s card: its token must be bound to it (§12)
             ///
-            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/n8n`.
-            public var n8n: Swift.String
-            /// The MCP server command, its two variables, and connectors/hermes’s mcp.json
-            ///
-            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/hermes`.
-            public var hermes: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/curl_root`.
+            public var curlRoot: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/ConnectorsPayload`.
+            public struct ConnectorsPayloadPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ConnectSnippets/ConnectorsPayload/name`.
+                public var name: Swift.String
+                /// Its README’s Setup section in the protocol repository
+                ///
+                /// - Remark: Generated from `#/components/schemas/ConnectSnippets/ConnectorsPayload/url`.
+                public var url: Swift.String
+                /// Creates a new `ConnectorsPayloadPayload`.
+                ///
+                /// - Parameters:
+                ///   - name:
+                ///   - url: Its README’s Setup section in the protocol repository
+                public init(
+                    name: Swift.String,
+                    url: Swift.String
+                ) {
+                    self.name = name
+                    self.url = url
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case name
+                    case url
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.name = try container.decode(
+                        Swift.String.self,
+                        forKey: .name
+                    )
+                    self.url = try container.decode(
+                        Swift.String.self,
+                        forKey: .url
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "name",
+                        "url"
+                    ])
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/connectors`.
+            public typealias ConnectorsPayload = [Components.Schemas.ConnectSnippets.ConnectorsPayloadPayload]
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/connectors`.
+            public var connectors: Components.Schemas.ConnectSnippets.ConnectorsPayload
             /// Creates a new `ConnectSnippets`.
             ///
             /// - Parameters:
-            ///   - root:
-            ///   - token: The placeholder in the snippets: replace it with a token just minted
-            ///   - curl:
-            ///   - n8n: An HTTP Request node, as n8n pastes it
-            ///   - hermes: The MCP server command, its two variables, and connectors/hermes’s mcp.json
+            ///   - api: The base URL of the producer operations (§7.5 `api`)
+            ///   - owner:
+            ///   - token: The placeholder in `config` and `curl`: replace it with a token just minted
+            ///   - config: `producerConfig` (@pbcp/client): the three values every producer needs
+            ///   - curl: `curlSnippet` (@pbcp/client): a curl that PUTs a card
+            ///   - curlRoot: The root of the curl’s card: its token must be bound to it (§12)
+            ///   - connectors:
             public init(
-                root: Swift.String,
+                api: Swift.String,
+                owner: Swift.String,
                 token: Swift.String,
+                config: Components.Schemas.ConnectSnippets.ConfigPayload,
                 curl: Swift.String,
-                n8n: Swift.String,
-                hermes: Swift.String
+                curlRoot: Swift.String,
+                connectors: Components.Schemas.ConnectSnippets.ConnectorsPayload
             ) {
-                self.root = root
+                self.api = api
+                self.owner = owner
                 self.token = token
+                self.config = config
                 self.curl = curl
-                self.n8n = n8n
-                self.hermes = hermes
+                self.curlRoot = curlRoot
+                self.connectors = connectors
             }
             public enum CodingKeys: String, CodingKey {
-                case root
+                case api
+                case owner
                 case token
+                case config
                 case curl
-                case n8n
-                case hermes
+                case curlRoot = "curl_root"
+                case connectors
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
-                self.root = try container.decode(
+                self.api = try container.decode(
                     Swift.String.self,
-                    forKey: .root
+                    forKey: .api
+                )
+                self.owner = try container.decode(
+                    Swift.String.self,
+                    forKey: .owner
                 )
                 self.token = try container.decode(
                     Swift.String.self,
                     forKey: .token
                 )
+                self.config = try container.decode(
+                    Components.Schemas.ConnectSnippets.ConfigPayload.self,
+                    forKey: .config
+                )
                 self.curl = try container.decode(
                     Swift.String.self,
                     forKey: .curl
                 )
-                self.n8n = try container.decode(
+                self.curlRoot = try container.decode(
                     Swift.String.self,
-                    forKey: .n8n
+                    forKey: .curlRoot
                 )
-                self.hermes = try container.decode(
-                    Swift.String.self,
-                    forKey: .hermes
+                self.connectors = try container.decode(
+                    Components.Schemas.ConnectSnippets.ConnectorsPayload.self,
+                    forKey: .connectors
                 )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
-                    "root",
+                    "api",
+                    "owner",
                     "token",
+                    "config",
                     "curl",
-                    "n8n",
-                    "hermes"
+                    "curl_root",
+                    "connectors"
                 ])
             }
         }
@@ -5240,6 +5359,8 @@ extension Components {
             }
             /// - Remark: Generated from `#/components/schemas/HeadDescription/render`.
             public var render: Components.Schemas.HeadDescription.RenderPayload
+            /// - Remark: Generated from `#/components/schemas/HeadDescription/api`.
+            public var api: Swift.String?
             /// A container of undocumented properties.
             public var additionalProperties: [String: OpenAPIRuntime.OpenAPIValueContainer]
             /// Creates a new `HeadDescription`.
@@ -5250,6 +5371,7 @@ extension Components {
             ///   - seq:
             ///   - extensions:
             ///   - render:
+            ///   - api:
             ///   - additionalProperties: A container of undocumented properties.
             public init(
                 _protocol: Components.Schemas.HeadDescription._ProtocolPayload,
@@ -5257,6 +5379,7 @@ extension Components {
                 seq: Swift.Int,
                 extensions: [Swift.String],
                 render: Components.Schemas.HeadDescription.RenderPayload,
+                api: Swift.String? = nil,
                 additionalProperties: [String: OpenAPIRuntime.OpenAPIValueContainer] = .init()
             ) {
                 self._protocol = _protocol
@@ -5264,6 +5387,7 @@ extension Components {
                 self.seq = seq
                 self.extensions = extensions
                 self.render = render
+                self.api = api
                 self.additionalProperties = additionalProperties
             }
             public enum CodingKeys: String, CodingKey {
@@ -5272,6 +5396,7 @@ extension Components {
                 case seq
                 case extensions
                 case render
+                case api
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -5295,12 +5420,17 @@ extension Components {
                     Components.Schemas.HeadDescription.RenderPayload.self,
                     forKey: .render
                 )
+                self.api = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .api
+                )
                 additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [
                     "protocol",
                     "owner",
                     "seq",
                     "extensions",
-                    "render"
+                    "render",
+                    "api"
                 ])
             }
             public func encode(to encoder: any Swift.Encoder) throws {
@@ -5324,6 +5454,10 @@ extension Components {
                 try container.encode(
                     self.render,
                     forKey: .render
+                )
+                try container.encodeIfPresent(
+                    self.api,
+                    forKey: .api
                 )
                 try encoder.encodeAdditionalProperties(additionalProperties)
             }

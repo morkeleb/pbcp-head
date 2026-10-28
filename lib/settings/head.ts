@@ -5,7 +5,9 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { changeCounter } from '../../db/schema';
+import type { ConnectFacts } from '../connect';
 import { describeHead } from '../describe';
+import { defaultHead } from '../heads';
 
 /** The head's public origin (WEBAUTHN_ORIGIN, else the request's). */
 export function headOrigin(fallback?: string): string {
@@ -23,6 +25,16 @@ export const producerUrl = (origin: string) => `${origin}/api`;
 
 export async function headFacts(db: Db, headId: string, url: string) {
   const [counter] = await db.select({ seq: changeCounter.seq }).from(changeCounter).where(eq(changeCounter.headId, headId));
-  const d = describeHead(headId, counter?.seq ?? 0);
-  return { owner: d.owner, url, protocol: d.protocol, extensions: d.extensions, render: d.render };
+  const d = describeHead(headId, counter?.seq ?? 0, url);
+  return { owner: d.owner, url: d.api ?? url, protocol: d.protocol, extensions: d.extensions, render: d.render };
+}
+
+/**
+ * The facts a producer needs, as the description gives them (§7.5), for /connect and /llms.txt: the single head's, or
+ * on a deployment with several heads (no owner without a token), the same with the owner left to the owner to give.
+ */
+export async function connectFacts(db: Db, origin: string): Promise<ConnectFacts> {
+  const owner = await defaultHead(db);
+  const d = describeHead(owner ?? '', 0, producerUrl(origin));
+  return { api: d.api!, owner, protocol: d.protocol, extensions: d.extensions };
 }

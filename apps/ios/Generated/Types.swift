@@ -158,7 +158,7 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/me/settings/enrolment`.
     /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)`.
     func enrolDevice(_ input: Operations.EnrolDevice.Input) async throws -> Operations.EnrolDevice.Output
-    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    /// How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup
     ///
     /// - Remark: HTTP `GET /api/me/settings/snippets`.
     /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
@@ -492,7 +492,7 @@ extension APIProtocol {
     public func enrolDevice(headers: Operations.EnrolDevice.Input.Headers = .init()) async throws -> Operations.EnrolDevice.Output {
         try await enrolDevice(Operations.EnrolDevice.Input(headers: headers))
     }
-    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    /// How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup
     ///
     /// - Remark: HTTP `GET /api/me/settings/snippets`.
     /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
