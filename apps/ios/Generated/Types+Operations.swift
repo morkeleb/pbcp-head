@@ -4811,6 +4811,528 @@ public enum Operations {
             }
         }
     }
+    /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
+    ///
+    /// - Remark: HTTP `GET /api/me/labels`.
+    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
+    public enum ListLabels {
+        public static let id: Swift.String = "listLabels"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/labels/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/labels/GET/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListLabels.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListLabels.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ListLabels.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.ListLabels.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.LabelList)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.LabelList {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListLabels.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListLabels.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ListLabels.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ListLabels.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListLabels.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListLabels.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.ListLabels.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.ListLabels.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListLabels.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListLabels.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ListLabels.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.ListLabels.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
+    ///
+    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    public enum UpdateLabel {
+        public static let id: Swift.String = "updateLabel"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/path`.
+            public struct Path: Sendable, Hashable {
+                /// A label (§4.1): lowercase letters, digits and -
+                ///
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/path/label`.
+                public var label: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - label: A label (§4.1): lowercase letters, digits and -
+                public init(label: Swift.String) {
+                    self.label = label
+                }
+            }
+            public var path: Operations.UpdateLabel.Input.Path
+            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.UpdateLabel.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.UpdateLabel.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.UpdateLabel.Input.Headers
+            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/requestBody`.
+            @frozen public enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/requestBody/content/application\/json`.
+                case json(Components.Schemas.LabelPatch)
+            }
+            public var body: Operations.UpdateLabel.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            ///   - body:
+            public init(
+                path: Operations.UpdateLabel.Input.Path,
+                headers: Operations.UpdateLabel.Input.Headers = .init(),
+                body: Operations.UpdateLabel.Input.Body
+            ) {
+                self.path = path
+                self.headers = headers
+                self.body = body
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/200/content/application\/json`.
+                    case json(Components.Schemas.Label)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.Label {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.UpdateLabel.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.UpdateLabel.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.UpdateLabel.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.UpdateLabel.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.UpdateLabel.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.UpdateLabel.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.UpdateLabel.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.UpdateLabel.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.UpdateLabel.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.UpdateLabel.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.UpdateLabel.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.UpdateLabel.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct ContentTooLarge: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/413/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/413/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.UpdateLabel.Output.ContentTooLarge.Body
+                /// Creates a new `ContentTooLarge`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.UpdateLabel.Output.ContentTooLarge.Body) {
+                    self.body = body
+                }
+            }
+            /// `too_large`: the body is over 1 MiB
+            ///
+            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/413`.
+            ///
+            /// HTTP response code: `413 contentTooLarge`.
+            case contentTooLarge(Operations.UpdateLabel.Output.ContentTooLarge)
+            /// The associated value of the enum case if `self` is `.contentTooLarge`.
+            ///
+            /// - Throws: An error if `self` is not `.contentTooLarge`.
+            /// - SeeAlso: `.contentTooLarge`.
+            public var contentTooLarge: Operations.UpdateLabel.Output.ContentTooLarge {
+                get throws {
+                    switch self {
+                    case let .contentTooLarge(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "contentTooLarge",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
     /// The signed-in devices
     ///
     /// - Remark: HTTP `GET /api/me/devices`.

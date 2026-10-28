@@ -159,6 +159,18 @@ const PATHS: Record<string, Record<string, Json>> = {
       errors: [400, 401, 404, 413],
     }),
   },
+  '/api/me/labels': {
+    get: operation('listLabels', { summary: 'The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)', ok: ok(S.LabelList), errors: [400, 401] }),
+  },
+  '/api/me/labels/{label}': {
+    patch: operation('updateLabel', {
+      summary: 'Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s',
+      parameters: [idParam('label', 'A label (§4.1): lowercase letters, digits and -')],
+      body: S.LabelPatch,
+      ok: ok(S.Label),
+      errors: [400, 401, 413],
+    }),
+  },
   '/api/me/devices': {
     get: operation('listDevices', { summary: 'The signed-in devices', ok: ok(S.DeviceList), errors: [400, 401] }),
   },

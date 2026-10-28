@@ -1,10 +1,10 @@
 // The human API's writes that are not card operations: the last-visit cursor, producer settings
 // (ceilings, revoke), devices, and the head's settings (display name, timezone override).
 
-import { URGENCIES, type Urgency } from '@pbcp/core';
+import { isLabel, URGENCIES, type Urgency } from '@pbcp/core';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { changeCounter, devices, heads, producerTokens } from '../db/schema';
+import { cards, changeCounter, devices, heads, labelCeilings, producerTokens } from '../db/schema';
 import { iso, now } from './clock';
 import { HttpError } from './http';
 import { addDays, localDate, localMinutes, zonedInstant } from './time';
@@ -75,6 +75,33 @@ export async function updateProducer(db: Db, headId: string, root: string, body:
     if (body.revoked !== true) throw new HttpError(400, 'invalid_request', 'revoked can only be set to true; mint a new token to bring a producer back');
     await db.update(producerTokens).set({ revokedAt: new Date() }).where(live);
   }
+}
+
+/**
+ * GET /api/me/labels: every label on the head's cards (§4.1), with how many cards carry it and the ceiling the owner
+ * set on it, if any (§9: a head MAY set ceilings per label), by label.
+ */
+export async function listLabels(db: Db, headId: string) {
+  const used = await db.execute<{ label: string; cards: number }>(
+    sql`select l as label, count(*)::int as cards from ${cards}, jsonb_array_elements_text(coalesce(${cards.producerDoc}->'labels', '[]'::jsonb)) as l where ${cards.headId} = ${headId} group by l`,
+  );
+  const set = await db.select().from(labelCeilings).where(eq(labelCeilings.headId, headId));
+  const ceilings = new Map(set.map((r) => [r.label, r.ceiling as Urgency]));
+  const names = [...new Set([...used.map((u) => u.label), ...ceilings.keys()])].sort();
+  const counts = new Map(used.map((u) => [u.label, u.cards]));
+  return names.map((label) => ({ label, cards: counts.get(label) ?? 0, ceiling: ceilings.get(label) ?? null }));
+}
+
+/**
+ * PATCH /api/me/labels/{label} { ceiling: log | brief | immediate | null }: sets or clears the owner's ceiling on a
+ * label (§9). A card under a producer ceiling and label ceilings is stored with the lowest; like a producer ceiling it
+ * applies to content stored from now on.
+ */
+export async function setLabelCeiling(db: Db, headId: string, label: string, ceiling: Urgency | null) {
+  if (!isLabel(label)) throw new HttpError(400, 'invalid_request', 'a label is 1 to 32 lowercase letters, digits or - (§4.1)');
+  if (ceiling === null) await db.delete(labelCeilings).where(and(eq(labelCeilings.headId, headId), eq(labelCeilings.label, label)));
+  else await db.insert(labelCeilings).values({ headId, label, ceiling }).onConflictDoUpdate({ target: [labelCeilings.headId, labelCeilings.label], set: { ceiling } });
+  return (await listLabels(db, headId)).find((l) => l.label === label) ?? { label, cards: 0, ceiling };
 }
 
 /** DELETE /api/me/devices/{id}: signs that device out (its refresh token and access tokens stop working). */

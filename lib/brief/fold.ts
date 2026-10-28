@@ -9,6 +9,9 @@
 import { leadOf, type Card, type ProducerCard } from '@pbcp/core';
 import { cutSummary, inlineLead } from '../render/lead';
 import { FOLD_FIELD, FOLD_VERSION } from './fold-version';
+import { composeParagraph, plural, type ParagraphParts } from './paragraph';
+
+export { plural };
 
 export interface FoldInput {
   owner: string;
@@ -32,6 +35,8 @@ export interface FoldLine {
   phrase: string;
   count: number;
   snoozed: boolean;
+  /** The card's labels (§4.1), in the producer's order: the paragraph's entries keep them for filtering. */
+  labels: string[];
 }
 
 export interface FoldLines {
@@ -54,7 +59,6 @@ export function escapeMarkdown(s: string, max = MAX_TITLE): string {
 
 const longDate = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${date}T00:00:00Z`));
-export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A card's lead as markdown in a brief line: a summary is text (§3.1), so it is escaped; a body lead stays markdown, inline. */
 export function leadMarkdown(c: { summary?: string; body: string }): string {
@@ -85,6 +89,7 @@ const line = (c: Card, at: string, count = 1): FoldLine => ({
   lead: leadMarkdown(c),
   phrase: phrase(c),
   count,
+  labels: [...(c.labels ?? [])],
   // Snoozed now: a snooze that has run out leaves the decision open like any other (§4.2 `snoozed_until`).
   snoozed: !!c.snoozed_until && Date.parse(c.snoozed_until) > Date.parse(at),
 });
@@ -138,12 +143,17 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
  * before: no sentence for its own sake.
  */
 export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'threads'>, cardUrl: (id: string) => string): string {
-  const link = (l: FoldLine) => `[${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${l.phrase ? ` — ${l.phrase}` : ''}`;
-  const sentences: string[] = [];
-  const awake = lines.decisions.filter((l) => !l.snoozed);
-  if (lines.decisions.length > 0) sentences.push(`${decisionCount(lines.decisions, 'decision')}${awake.length ? `: ${awake.map(link).join('; ')}` : ''}.`);
-  if (lines.threads.length > 0) sentences.push(`Yesterday: ${lines.threads.slice(0, MAX_THREADS).map(link).join('; ')}.`);
-  return sentences.join(' ');
+  return composeParagraph(paragraphParts(lines, cardUrl));
+}
+
+/** The paragraph's entries as markdown, each with its card's id and labels (lib/brief/paragraph.ts composes them). */
+export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'threads'>, cardUrl: (id: string) => string): ParagraphParts {
+  const entry = (l: FoldLine) => ({ id: l.id, labels: l.labels, text: `[${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)${l.phrase ? ` — ${l.phrase}` : ''}` });
+  return {
+    decisions: lines.decisions.filter((l) => !l.snoozed).map(entry),
+    snoozed: lines.decisions.filter((l) => l.snoozed).map((l) => l.labels),
+    yesterday: lines.threads.slice(0, MAX_THREADS).map(entry),
+  };
 }
 
 /** The nightly card, or null for a day with nothing open and nothing new (no card says nothing). */

@@ -57,6 +57,18 @@ export const Visual = z.object({
   caption: z.string(),
 }).register(responses, { id: 'Visual' });
 
+const ParagraphEntry = z.object({
+  id: z.string().describe('The card the entry is'),
+  labels: z.array(z.string()).describe('Its labels (§4.1), for filtering'),
+  text: z.string().describe('Safe inline HTML: "<title> — <lead>", the title linked to the card'),
+});
+
+export const ParagraphParts = z.object({
+  decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed'),
+  snoozed: z.array(z.array(z.string())).describe('The labels of each snoozed decision: counted, never listed (§8)'),
+  yesterday: z.array(ParagraphEntry).describe('The previous day’s threads, by their newest unsnoozed card'),
+}).register(responses, { id: 'ParagraphParts', description: 'A daily paragraph in parts, so a view can keep only the entries of chosen labels and write the same sentence: "N decisions, M snoozed: <entry>; …. Yesterday: <entry>; …."' });
+
 export const MeCard = Card.extend({
   rendered_html: z.string().describe('The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.'),
   lead: z.string().describe('The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.'),
@@ -65,6 +77,8 @@ export const MeCard = Card.extend({
   rendered_actions: z.record(z.string(), z.string()).optional().describe('Rendered bodies of choice options (§4.4), by action id'),
   first_visual: Visual.optional().describe('The first diagram or image in the body, for a thumbnail'),
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),
+  day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored'),
+  paragraph: ParagraphParts.optional().describe('On a `head:daily` card: its paragraph in parts'),
 }).register(responses, { id: 'MeCard', description: 'A card as the owner’s devices show it: the protocol card plus what the head rendered.' });
 
 export const CardSummary = z.object({
@@ -134,6 +148,7 @@ export const Brief = z.object({
     .object({
       html: z.string().describe('Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)'),
       so_far: z.boolean().describe('True until today’s `head:daily` card exists: the same fold, made now'),
+      parts: ParagraphParts,
     })
     .nullable()
     .describe('The paragraph today opens with; null when nothing is open and nothing arrived yesterday'),
@@ -217,6 +232,18 @@ export const ProducerPatch = z.object({
   ceiling: z.enum(URGENCIES).optional().describe('Applies to content stored from now on (§9)'),
   revoked: z.literal(true).optional().describe('Revokes every token of the root; mint a new one to bring it back'),
 }).register(requests, { id: 'ProducerPatch' });
+
+export const Label = z.object({
+  label: z.string(),
+  cards: z.number().int().nonnegative().describe('How many of the head’s cards carry it'),
+  ceiling: z.enum(URGENCIES).nullable().describe('The owner’s ceiling on it (§9), or null'),
+}).register(responses, { id: 'Label' });
+
+export const LabelList = z.object({ labels: z.array(Label) }).register(responses, { id: 'LabelList' });
+
+export const LabelPatch = z.object({
+  ceiling: z.enum(URGENCIES).nullable().describe('Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)'),
+}).register(requests, { id: 'LabelPatch' });
 
 export const Device = z.object({
   id: z.string(),

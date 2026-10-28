@@ -5,26 +5,26 @@
 // the next: a day is neither doubled nor, once its 05:30 is reached in the zone the owner is in, skipped.
 // The card goes through the same submit path as any producer's (A.1: the head owns the `head:` root).
 
-import { and, desc, eq, gte, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { cards, heads } from '../../db/schema';
 import { now } from '../clock';
 import { submitCard } from '../protocol';
-import { renderAfterCommit } from '../render';
+import { renderAfterCommit, renderBody } from '../render';
 import { ownOrigin } from '../render/markdown';
 import { load, toCard } from '../store';
-import { addDays, dayRange, localDate, localMinutes } from '../time';
+import { addDays, localDate, localMinutes } from '../time';
 import { effectiveTimezone } from '../timezone';
-import { dailyLines, dailyParagraph, foldDaily } from './fold';
+import { dailyLines, foldDaily, paragraphParts } from './fold';
+import type { ParagraphParts } from './paragraph';
 
 export const BRIEF_AT_MINUTES = 5 * 60 + 30;
 
 /** The head's page for a card: absolute, on the head's own origin, which the renderer keeps as an in-app link. */
 const cardUrl = (id: string) => `${ownOrigin()}/card/${encodeURIComponent(id)}`;
 
-/** What the brief for `date` folds (§8): every open decision, and the previous local day's cards. */
-export async function gatherDaily(db: Db, headId: string, timezone: string, date: string) {
-  const [start, end] = dayRange(addDays(date, -1), timezone);
+/** What the brief for `date` folds (§8): every open decision, and the cards whose day (§8) is the day before. */
+export async function gatherDaily(db: Db, headId: string, _timezone: string, date: string) {
   const open = await db
     .select()
     .from(cards)
@@ -34,25 +34,39 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
   const yesterday = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), gte(cards.receivedAt, start), lt(cards.receivedAt, end)));
+    // Received by now, as above: a card about yesterday that arrives after the brief is in no brief of it.
+    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), eq(cards.day, addDays(date, -1)), lte(cards.receivedAt, new Date(now()))));
   return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard) };
 }
 
 /**
- * The daily paragraph for `date` as it stands now, before the nightly card exists ("so far today"): the same fold,
- * as markdown. Empty when nothing is open and nothing arrived the day before.
+ * The daily paragraph for `date` as it stands now, before the nightly card exists ("so far today"): the same fold, in
+ * parts, each entry rendered to safe inline HTML (lib/brief/paragraph.ts composes them).
  */
-export async function dailyParagraphNow(db: Db, headId: string, timezone: string, date: string): Promise<string> {
+export async function dailyParagraphNow(db: Db, headId: string, timezone: string, date: string): Promise<ParagraphParts> {
   const { openDecisions, yesterday } = await gatherDaily(db, headId, timezone, date);
-  return dailyParagraph(dailyLines({ openDecisions, yesterday, at: now() }), cardUrl);
+  return renderParts(db, paragraphParts(dailyLines({ openDecisions, yesterday, at: now() }), cardUrl));
+}
+
+/** Each entry's markdown rendered inline by the same pipeline and sanitiser as bodies. */
+export async function renderParts(db: Db, parts: ParagraphParts): Promise<ParagraphParts> {
+  const inline = async (md: string) => (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
+  const each = (es: ParagraphParts['decisions']) => Promise.all(es.map(async (e) => ({ ...e, text: await inline(e.text) })));
+  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, yesterday: await each(parts.yesterday) };
 }
 
 /** Mints `head:daily:<date>`; null on a day with nothing open and nothing new, which gets no card. */
 export async function mintDailyCard(db: Db, headId: string, timezone: string, date: string) {
-  const card = foldDaily({ owner: headId, date, emittedAt: now(), ...(await gatherDaily(db, headId, timezone, date)), cardUrl });
+  const emittedAt = now();
+  const gathered = await gatherDaily(db, headId, timezone, date);
+  const card = foldDaily({ owner: headId, date, emittedAt, ...gathered, cardUrl });
   if (!card) return null;
   const r = await submitCard(db, { headId, root: 'head', ceiling: 'brief' }, JSON.stringify(card), encodeURIComponent(card.id));
   await renderAfterCommit(db, headId, r.card);
+  // The paragraph in parts, beside the card's own rendering: head-owned display state, never synced, so a view can
+  // show only the entries of the labels the owner filters by.
+  const parts = await renderParts(db, paragraphParts(dailyLines({ ...gathered, at: emittedAt }), cardUrl));
+  await db.update(cards).set({ renderedParagraph: parts }).where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
   return r;
 }
 

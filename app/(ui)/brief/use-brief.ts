@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
 import { hasParagraph } from '../../../lib/brief/fold-version';
+import type { ParagraphParts } from '../../../lib/brief/paragraph';
 import type { UpdateThread } from './UpdateRow';
 
 export interface BriefResponse {
@@ -18,7 +19,7 @@ export interface BriefResponse {
   last_visit: { seq: number; at: string | null };
   first_day: string | null;
   daily: MeCard | null;
-  daily_paragraph: { html: string; so_far: boolean } | null;
+  daily_paragraph: { html: string; so_far: boolean; parts: ParagraphParts } | null;
   tomorrow: { date: string; cards: MeCard[] };
   decisions: MeCard[];
   threads: Array<{ producer: string; thread: string | null; count: number; latest: MeCard; cards: UpdateThread['earlier'] }>;
@@ -31,7 +32,8 @@ export interface BriefResponse {
 export interface Day {
   date: string;
   kind: 'past' | 'today' | 'tomorrow';
-  paragraph: { html: string; soFar: boolean } | null;
+  /** The day's paragraph; `parts` when the head kept its entries apart, so the label filter can follow it. */
+  paragraph: { html: string; soFar: boolean; parts?: ParagraphParts } | null;
   decisions: MeCard[];
   updates: UpdateThread[];
   signals: UpdateThread[];
@@ -72,7 +74,7 @@ function todayOf(b: BriefResponse): Day {
   return {
     date: b.date,
     kind: 'today',
-    paragraph: b.daily_paragraph ? { html: b.daily_paragraph.html, soFar: b.daily_paragraph.so_far } : null,
+    paragraph: b.daily_paragraph ? { html: b.daily_paragraph.html, soFar: b.daily_paragraph.so_far, parts: b.daily_paragraph.parts } : null,
     decisions: b.decisions,
     ...split(ts),
   };
@@ -85,7 +87,7 @@ function pastOf(date: string, cards: MeCard[]): Day {
   return {
     date,
     kind: 'past',
-    paragraph: daily?.rendered_lead ? { html: daily.rendered_lead, soFar: false } : null,
+    paragraph: daily?.rendered_lead ? { html: daily.rendered_lead, soFar: false, ...(daily.paragraph ? { parts: daily.paragraph } : {}) } : null,
     decisions: cards.filter((c) => c.kind === 'decision' && c.state !== 'open'),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head'))),
     ...(cards.length === 0 ? { nothing: true } : {}),
@@ -183,7 +185,7 @@ export function useBrief() {
         setPast((p) => {
           const next = new Map(p);
           for (const c of cards) {
-            const day = localDay(c.received_at, tz);
+            const day = c.day ?? localDay(c.received_at, tz); // §8: the head's day for the card
             next.set(day, [...(next.get(day) ?? []), c]);
           }
           if (date && !next.has(date)) next.set(date, []); // a day jumped to is shown even when nothing came that day

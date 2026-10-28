@@ -101,6 +101,10 @@ extension Components {
             public var urgency: Components.Schemas.Card.UrgencyPayload?
             /// - Remark: Generated from `#/components/schemas/Card/thread`.
             public var thread: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/Card/labels`.
+            public var labels: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/Card/about`.
+            public var about: Swift.String?
             /// - Remark: Generated from `#/components/schemas/Card/references`.
             public var references: [Swift.String]?
             /// - Remark: Generated from `#/components/schemas/Card/supersedes`.
@@ -386,6 +390,8 @@ extension Components {
             ///   - body:
             ///   - urgency:
             ///   - thread:
+            ///   - labels:
+            ///   - about:
             ///   - references:
             ///   - supersedes:
             ///   - actions:
@@ -423,6 +429,8 @@ extension Components {
                 body: Swift.String,
                 urgency: Components.Schemas.Card.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
+                labels: [Swift.String]? = nil,
+                about: Swift.String? = nil,
                 references: [Swift.String]? = nil,
                 supersedes: Swift.String? = nil,
                 actions: Components.Schemas.Card.ActionsPayload? = nil,
@@ -460,6 +468,8 @@ extension Components {
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
+                self.labels = labels
+                self.about = about
                 self.references = references
                 self.supersedes = supersedes
                 self.actions = actions
@@ -498,6 +508,8 @@ extension Components {
                 case body
                 case urgency
                 case thread
+                case labels
+                case about
                 case references
                 case supersedes
                 case actions
@@ -565,6 +577,14 @@ extension Components {
                 self.thread = try container.decodeIfPresent(
                     Swift.String.self,
                     forKey: .thread
+                )
+                self.labels = try container.decodeIfPresent(
+                    [Swift.String].self,
+                    forKey: .labels
+                )
+                self.about = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .about
                 )
                 self.references = try container.decodeIfPresent(
                     [Swift.String].self,
@@ -677,6 +697,8 @@ extension Components {
                     "body",
                     "urgency",
                     "thread",
+                    "labels",
+                    "about",
                     "references",
                     "supersedes",
                     "actions",
@@ -745,6 +767,14 @@ extension Components {
                 try container.encodeIfPresent(
                     self.thread,
                     forKey: .thread
+                )
+                try container.encodeIfPresent(
+                    self.labels,
+                    forKey: .labels
+                )
+                try container.encodeIfPresent(
+                    self.about,
+                    forKey: .about
                 )
                 try container.encodeIfPresent(
                     self.references,
@@ -905,6 +935,179 @@ extension Components {
                 ])
             }
         }
+        /// - Remark: Generated from `#/components/schemas/ParagraphParts`.
+        public struct ParagraphParts: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/DecisionsPayload`.
+            public struct DecisionsPayloadPayload: Codable, Hashable, Sendable {
+                /// The card the entry is
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/DecisionsPayload/id`.
+                public var id: Swift.String
+                /// Its labels (§4.1), for filtering
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/DecisionsPayload/labels`.
+                public var labels: [Swift.String]
+                /// Safe inline HTML: "<title> — <lead>", the title linked to the card
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/DecisionsPayload/text`.
+                public var text: Swift.String
+                /// Creates a new `DecisionsPayloadPayload`.
+                ///
+                /// - Parameters:
+                ///   - id: The card the entry is
+                ///   - labels: Its labels (§4.1), for filtering
+                ///   - text: Safe inline HTML: "<title> — <lead>", the title linked to the card
+                public init(
+                    id: Swift.String,
+                    labels: [Swift.String],
+                    text: Swift.String
+                ) {
+                    self.id = id
+                    self.labels = labels
+                    self.text = text
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case id
+                    case labels
+                    case text
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.id = try container.decode(
+                        Swift.String.self,
+                        forKey: .id
+                    )
+                    self.labels = try container.decode(
+                        [Swift.String].self,
+                        forKey: .labels
+                    )
+                    self.text = try container.decode(
+                        Swift.String.self,
+                        forKey: .text
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "id",
+                        "labels",
+                        "text"
+                    ])
+                }
+            }
+            /// Open decisions that are not snoozed
+            ///
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/decisions`.
+            public typealias DecisionsPayload = [Components.Schemas.ParagraphParts.DecisionsPayloadPayload]
+            /// Open decisions that are not snoozed
+            ///
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/decisions`.
+            public var decisions: Components.Schemas.ParagraphParts.DecisionsPayload
+            /// The labels of each snoozed decision: counted, never listed (§8)
+            ///
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/snoozed`.
+            public var snoozed: [[Swift.String]]
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/YesterdayPayload`.
+            public struct YesterdayPayloadPayload: Codable, Hashable, Sendable {
+                /// The card the entry is
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/YesterdayPayload/id`.
+                public var id: Swift.String
+                /// Its labels (§4.1), for filtering
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/YesterdayPayload/labels`.
+                public var labels: [Swift.String]
+                /// Safe inline HTML: "<title> — <lead>", the title linked to the card
+                ///
+                /// - Remark: Generated from `#/components/schemas/ParagraphParts/YesterdayPayload/text`.
+                public var text: Swift.String
+                /// Creates a new `YesterdayPayloadPayload`.
+                ///
+                /// - Parameters:
+                ///   - id: The card the entry is
+                ///   - labels: Its labels (§4.1), for filtering
+                ///   - text: Safe inline HTML: "<title> — <lead>", the title linked to the card
+                public init(
+                    id: Swift.String,
+                    labels: [Swift.String],
+                    text: Swift.String
+                ) {
+                    self.id = id
+                    self.labels = labels
+                    self.text = text
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case id
+                    case labels
+                    case text
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.id = try container.decode(
+                        Swift.String.self,
+                        forKey: .id
+                    )
+                    self.labels = try container.decode(
+                        [Swift.String].self,
+                        forKey: .labels
+                    )
+                    self.text = try container.decode(
+                        Swift.String.self,
+                        forKey: .text
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "id",
+                        "labels",
+                        "text"
+                    ])
+                }
+            }
+            /// The previous day’s threads, by their newest unsnoozed card
+            ///
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/yesterday`.
+            public typealias YesterdayPayload = [Components.Schemas.ParagraphParts.YesterdayPayloadPayload]
+            /// The previous day’s threads, by their newest unsnoozed card
+            ///
+            /// - Remark: Generated from `#/components/schemas/ParagraphParts/yesterday`.
+            public var yesterday: Components.Schemas.ParagraphParts.YesterdayPayload
+            /// Creates a new `ParagraphParts`.
+            ///
+            /// - Parameters:
+            ///   - decisions: Open decisions that are not snoozed
+            ///   - snoozed: The labels of each snoozed decision: counted, never listed (§8)
+            ///   - yesterday: The previous day’s threads, by their newest unsnoozed card
+            public init(
+                decisions: Components.Schemas.ParagraphParts.DecisionsPayload,
+                snoozed: [[Swift.String]],
+                yesterday: Components.Schemas.ParagraphParts.YesterdayPayload
+            ) {
+                self.decisions = decisions
+                self.snoozed = snoozed
+                self.yesterday = yesterday
+            }
+            public enum CodingKeys: String, CodingKey {
+                case decisions
+                case snoozed
+                case yesterday
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.decisions = try container.decode(
+                    Components.Schemas.ParagraphParts.DecisionsPayload.self,
+                    forKey: .decisions
+                )
+                self.snoozed = try container.decode(
+                    [[Swift.String]].self,
+                    forKey: .snoozed
+                )
+                self.yesterday = try container.decode(
+                    Components.Schemas.ParagraphParts.YesterdayPayload.self,
+                    forKey: .yesterday
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "decisions",
+                    "snoozed",
+                    "yesterday"
+                ])
+            }
+        }
         /// - Remark: Generated from `#/components/schemas/MeCard`.
         public struct MeCard: Codable, Hashable, Sendable {
             /// - Remark: Generated from `#/components/schemas/MeCard/protocol`.
@@ -946,6 +1149,10 @@ extension Components {
             public var urgency: Components.Schemas.MeCard.UrgencyPayload?
             /// - Remark: Generated from `#/components/schemas/MeCard/thread`.
             public var thread: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/MeCard/labels`.
+            public var labels: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/MeCard/about`.
+            public var about: Swift.String?
             /// - Remark: Generated from `#/components/schemas/MeCard/references`.
             public var references: [Swift.String]?
             /// - Remark: Generated from `#/components/schemas/MeCard/supersedes`.
@@ -1278,6 +1485,14 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/MeCard/order_outcome`.
             public var orderOutcome: Components.Schemas.MeCard.OrderOutcomePayload?
+            /// The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/day`.
+            public var day: Swift.String
+            /// On a `head:daily` card: its paragraph in parts
+            ///
+            /// - Remark: Generated from `#/components/schemas/MeCard/paragraph`.
+            public var paragraph: Components.Schemas.ParagraphParts?
             /// A container of undocumented properties.
             public var additionalProperties: [String: OpenAPIRuntime.OpenAPIValueContainer]
             /// Creates a new `MeCard`.
@@ -1293,6 +1508,8 @@ extension Components {
             ///   - body:
             ///   - urgency:
             ///   - thread:
+            ///   - labels:
+            ///   - about:
             ///   - references:
             ///   - supersedes:
             ///   - actions:
@@ -1325,6 +1542,8 @@ extension Components {
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
+            ///   - day: The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored
+            ///   - paragraph: On a `head:daily` card: its paragraph in parts
             ///   - additionalProperties: A container of undocumented properties.
             public init(
                 _protocol: Components.Schemas.MeCard._ProtocolPayload,
@@ -1337,6 +1556,8 @@ extension Components {
                 body: Swift.String,
                 urgency: Components.Schemas.MeCard.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
+                labels: [Swift.String]? = nil,
+                about: Swift.String? = nil,
                 references: [Swift.String]? = nil,
                 supersedes: Swift.String? = nil,
                 actions: Components.Schemas.MeCard.ActionsPayload? = nil,
@@ -1369,6 +1590,8 @@ extension Components {
                 renderedActions: Components.Schemas.MeCard.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.MeCard.OrderOutcomePayload? = nil,
+                day: Swift.String,
+                paragraph: Components.Schemas.ParagraphParts? = nil,
                 additionalProperties: [String: OpenAPIRuntime.OpenAPIValueContainer] = .init()
             ) {
                 self._protocol = _protocol
@@ -1381,6 +1604,8 @@ extension Components {
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
+                self.labels = labels
+                self.about = about
                 self.references = references
                 self.supersedes = supersedes
                 self.actions = actions
@@ -1413,6 +1638,8 @@ extension Components {
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
+                self.day = day
+                self.paragraph = paragraph
                 self.additionalProperties = additionalProperties
             }
             public enum CodingKeys: String, CodingKey {
@@ -1426,6 +1653,8 @@ extension Components {
                 case body
                 case urgency
                 case thread
+                case labels
+                case about
                 case references
                 case supersedes
                 case actions
@@ -1458,6 +1687,8 @@ extension Components {
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
+                case day
+                case paragraph
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -1500,6 +1731,14 @@ extension Components {
                 self.thread = try container.decodeIfPresent(
                     Swift.String.self,
                     forKey: .thread
+                )
+                self.labels = try container.decodeIfPresent(
+                    [Swift.String].self,
+                    forKey: .labels
+                )
+                self.about = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .about
                 )
                 self.references = try container.decodeIfPresent(
                     [Swift.String].self,
@@ -1629,6 +1868,14 @@ extension Components {
                     Components.Schemas.MeCard.OrderOutcomePayload.self,
                     forKey: .orderOutcome
                 )
+                self.day = try container.decode(
+                    Swift.String.self,
+                    forKey: .day
+                )
+                self.paragraph = try container.decodeIfPresent(
+                    Components.Schemas.ParagraphParts.self,
+                    forKey: .paragraph
+                )
                 additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [
                     "protocol",
                     "id",
@@ -1640,6 +1887,8 @@ extension Components {
                     "body",
                     "urgency",
                     "thread",
+                    "labels",
+                    "about",
                     "references",
                     "supersedes",
                     "actions",
@@ -1671,7 +1920,9 @@ extension Components {
                     "rendered_lead",
                     "rendered_actions",
                     "first_visual",
-                    "order_outcome"
+                    "order_outcome",
+                    "day",
+                    "paragraph"
                 ])
             }
             public func encode(to encoder: any Swift.Encoder) throws {
@@ -1715,6 +1966,14 @@ extension Components {
                 try container.encodeIfPresent(
                     self.thread,
                     forKey: .thread
+                )
+                try container.encodeIfPresent(
+                    self.labels,
+                    forKey: .labels
+                )
+                try container.encodeIfPresent(
+                    self.about,
+                    forKey: .about
                 )
                 try container.encodeIfPresent(
                     self.references,
@@ -1843,6 +2102,14 @@ extension Components {
                 try container.encodeIfPresent(
                     self.orderOutcome,
                     forKey: .orderOutcome
+                )
+                try container.encode(
+                    self.day,
+                    forKey: .day
+                )
+                try container.encodeIfPresent(
+                    self.paragraph,
+                    forKey: .paragraph
                 )
                 try encoder.encodeAdditionalProperties(additionalProperties)
             }
@@ -2515,21 +2782,27 @@ extension Components {
                 ///
                 /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph/so_far`.
                 public var soFar: Swift.Bool
+                /// - Remark: Generated from `#/components/schemas/Brief/daily_paragraph/parts`.
+                public var parts: Components.Schemas.ParagraphParts
                 /// Creates a new `DailyParagraphPayload`.
                 ///
                 /// - Parameters:
                 ///   - html: Safe inline HTML: "N decisions: <title> — <lead>; …. Yesterday: <title> — <lead>; …." with each title linked to its card; the lead is left out when empty or the same as the title (RFC 0.6 §8)
                 ///   - soFar: True until today’s `head:daily` card exists: the same fold, made now
+                ///   - parts:
                 public init(
                     html: Swift.String,
-                    soFar: Swift.Bool
+                    soFar: Swift.Bool,
+                    parts: Components.Schemas.ParagraphParts
                 ) {
                     self.html = html
                     self.soFar = soFar
+                    self.parts = parts
                 }
                 public enum CodingKeys: String, CodingKey {
                     case html
                     case soFar = "so_far"
+                    case parts
                 }
                 public init(from decoder: any Swift.Decoder) throws {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -2541,9 +2814,14 @@ extension Components {
                         Swift.Bool.self,
                         forKey: .soFar
                     )
+                    self.parts = try container.decode(
+                        Components.Schemas.ParagraphParts.self,
+                        forKey: .parts
+                    )
                     try decoder.ensureNoAdditionalProperties(knownKeys: [
                         "html",
-                        "so_far"
+                        "so_far",
+                        "parts"
                     ])
                 }
             }
@@ -2802,6 +3080,10 @@ extension Components {
             public var urgency: Components.Schemas.OrderWithProgress.UrgencyPayload?
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/thread`.
             public var thread: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/labels`.
+            public var labels: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/about`.
+            public var about: Swift.String?
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/references`.
             public var references: [Swift.String]?
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/supersedes`.
@@ -3134,6 +3416,14 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/order_outcome`.
             public var orderOutcome: Components.Schemas.OrderWithProgress.OrderOutcomePayload?
+            /// The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/day`.
+            public var day: Swift.String
+            /// On a `head:daily` card: its paragraph in parts
+            ///
+            /// - Remark: Generated from `#/components/schemas/OrderWithProgress/paragraph`.
+            public var paragraph: Components.Schemas.ParagraphParts?
             /// - Remark: Generated from `#/components/schemas/OrderWithProgress/progress`.
             public struct ProgressPayload: Codable, Hashable, Sendable {
                 /// - Remark: Generated from `#/components/schemas/OrderWithProgress/progress/count`.
@@ -3189,6 +3479,8 @@ extension Components {
             ///   - body:
             ///   - urgency:
             ///   - thread:
+            ///   - labels:
+            ///   - about:
             ///   - references:
             ///   - supersedes:
             ///   - actions:
@@ -3221,6 +3513,8 @@ extension Components {
             ///   - renderedActions: Rendered bodies of choice options (§4.4), by action id
             ///   - firstVisual: The first diagram or image in the body, for a thumbnail
             ///   - orderOutcome: On an outcome card: whether it moved its order, or came late or from an earlier claim
+            ///   - day: The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored
+            ///   - paragraph: On a `head:daily` card: its paragraph in parts
             ///   - progress:
             ///   - additionalProperties: A container of undocumented properties.
             public init(
@@ -3234,6 +3528,8 @@ extension Components {
                 body: Swift.String,
                 urgency: Components.Schemas.OrderWithProgress.UrgencyPayload? = nil,
                 thread: Swift.String? = nil,
+                labels: [Swift.String]? = nil,
+                about: Swift.String? = nil,
                 references: [Swift.String]? = nil,
                 supersedes: Swift.String? = nil,
                 actions: Components.Schemas.OrderWithProgress.ActionsPayload? = nil,
@@ -3266,6 +3562,8 @@ extension Components {
                 renderedActions: Components.Schemas.OrderWithProgress.RenderedActionsPayload? = nil,
                 firstVisual: Components.Schemas.Visual? = nil,
                 orderOutcome: Components.Schemas.OrderWithProgress.OrderOutcomePayload? = nil,
+                day: Swift.String,
+                paragraph: Components.Schemas.ParagraphParts? = nil,
                 progress: Components.Schemas.OrderWithProgress.ProgressPayload,
                 additionalProperties: [String: OpenAPIRuntime.OpenAPIValueContainer] = .init()
             ) {
@@ -3279,6 +3577,8 @@ extension Components {
                 self.body = body
                 self.urgency = urgency
                 self.thread = thread
+                self.labels = labels
+                self.about = about
                 self.references = references
                 self.supersedes = supersedes
                 self.actions = actions
@@ -3311,6 +3611,8 @@ extension Components {
                 self.renderedActions = renderedActions
                 self.firstVisual = firstVisual
                 self.orderOutcome = orderOutcome
+                self.day = day
+                self.paragraph = paragraph
                 self.progress = progress
                 self.additionalProperties = additionalProperties
             }
@@ -3325,6 +3627,8 @@ extension Components {
                 case body
                 case urgency
                 case thread
+                case labels
+                case about
                 case references
                 case supersedes
                 case actions
@@ -3357,6 +3661,8 @@ extension Components {
                 case renderedActions = "rendered_actions"
                 case firstVisual = "first_visual"
                 case orderOutcome = "order_outcome"
+                case day
+                case paragraph
                 case progress
             }
             public init(from decoder: any Swift.Decoder) throws {
@@ -3400,6 +3706,14 @@ extension Components {
                 self.thread = try container.decodeIfPresent(
                     Swift.String.self,
                     forKey: .thread
+                )
+                self.labels = try container.decodeIfPresent(
+                    [Swift.String].self,
+                    forKey: .labels
+                )
+                self.about = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .about
                 )
                 self.references = try container.decodeIfPresent(
                     [Swift.String].self,
@@ -3529,6 +3843,14 @@ extension Components {
                     Components.Schemas.OrderWithProgress.OrderOutcomePayload.self,
                     forKey: .orderOutcome
                 )
+                self.day = try container.decode(
+                    Swift.String.self,
+                    forKey: .day
+                )
+                self.paragraph = try container.decodeIfPresent(
+                    Components.Schemas.ParagraphParts.self,
+                    forKey: .paragraph
+                )
                 self.progress = try container.decode(
                     Components.Schemas.OrderWithProgress.ProgressPayload.self,
                     forKey: .progress
@@ -3544,6 +3866,8 @@ extension Components {
                     "body",
                     "urgency",
                     "thread",
+                    "labels",
+                    "about",
                     "references",
                     "supersedes",
                     "actions",
@@ -3576,6 +3900,8 @@ extension Components {
                     "rendered_actions",
                     "first_visual",
                     "order_outcome",
+                    "day",
+                    "paragraph",
                     "progress"
                 ])
             }
@@ -3620,6 +3946,14 @@ extension Components {
                 try container.encodeIfPresent(
                     self.thread,
                     forKey: .thread
+                )
+                try container.encodeIfPresent(
+                    self.labels,
+                    forKey: .labels
+                )
+                try container.encodeIfPresent(
+                    self.about,
+                    forKey: .about
                 )
                 try container.encodeIfPresent(
                     self.references,
@@ -3748,6 +4082,14 @@ extension Components {
                 try container.encodeIfPresent(
                     self.orderOutcome,
                     forKey: .orderOutcome
+                )
+                try container.encode(
+                    self.day,
+                    forKey: .day
+                )
+                try container.encodeIfPresent(
+                    self.paragraph,
+                    forKey: .paragraph
                 )
                 try container.encode(
                     self.progress,
@@ -4219,6 +4561,92 @@ extension Components {
                 )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "producers"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/Label`.
+        public struct Label: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/Label/label`.
+            public var label: Swift.String
+            /// How many of the head’s cards carry it
+            ///
+            /// - Remark: Generated from `#/components/schemas/Label/cards`.
+            public var cards: Swift.Int
+            /// The owner’s ceiling on it (§9), or null
+            ///
+            /// - Remark: Generated from `#/components/schemas/Label/ceiling`.
+            @frozen public enum CeilingPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case immediate = "immediate"
+                case brief = "brief"
+                case log = "log"
+            }
+            /// The owner’s ceiling on it (§9), or null
+            ///
+            /// - Remark: Generated from `#/components/schemas/Label/ceiling`.
+            public var ceiling: Components.Schemas.Label.CeilingPayload?
+            /// Creates a new `Label`.
+            ///
+            /// - Parameters:
+            ///   - label:
+            ///   - cards: How many of the head’s cards carry it
+            ///   - ceiling: The owner’s ceiling on it (§9), or null
+            public init(
+                label: Swift.String,
+                cards: Swift.Int,
+                ceiling: Components.Schemas.Label.CeilingPayload? = nil
+            ) {
+                self.label = label
+                self.cards = cards
+                self.ceiling = ceiling
+            }
+            public enum CodingKeys: String, CodingKey {
+                case label
+                case cards
+                case ceiling
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.label = try container.decode(
+                    Swift.String.self,
+                    forKey: .label
+                )
+                self.cards = try container.decode(
+                    Swift.Int.self,
+                    forKey: .cards
+                )
+                self.ceiling = try container.decodeIfPresent(
+                    Components.Schemas.Label.CeilingPayload.self,
+                    forKey: .ceiling
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "label",
+                    "cards",
+                    "ceiling"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/LabelList`.
+        public struct LabelList: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/LabelList/labels`.
+            public var labels: [Components.Schemas.Label]
+            /// Creates a new `LabelList`.
+            ///
+            /// - Parameters:
+            ///   - labels:
+            public init(labels: [Components.Schemas.Label]) {
+                self.labels = labels
+            }
+            public enum CodingKeys: String, CodingKey {
+                case labels
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.labels = try container.decode(
+                    [Components.Schemas.Label].self,
+                    forKey: .labels
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "labels"
                 ])
             }
         }
@@ -4778,6 +5206,31 @@ extension Components {
             public enum CodingKeys: String, CodingKey {
                 case ceiling
                 case revoked
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/LabelPatch`.
+        public struct LabelPatch: Codable, Hashable, Sendable {
+            /// Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelPatch/ceiling`.
+            @frozen public enum CeilingPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case immediate = "immediate"
+                case brief = "brief"
+                case log = "log"
+            }
+            /// Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)
+            ///
+            /// - Remark: Generated from `#/components/schemas/LabelPatch/ceiling`.
+            public var ceiling: Components.Schemas.LabelPatch.CeilingPayload?
+            /// Creates a new `LabelPatch`.
+            ///
+            /// - Parameters:
+            ///   - ceiling: Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)
+            public init(ceiling: Components.Schemas.LabelPatch.CeilingPayload? = nil) {
+                self.ceiling = ceiling
+            }
+            public enum CodingKeys: String, CodingKey {
+                case ceiling
             }
         }
     }

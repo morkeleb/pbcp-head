@@ -108,6 +108,16 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `PATCH /api/me/producers/{root}`.
     /// - Remark: Generated from `#/paths//api/me/producers/{root}/patch(updateProducer)`.
     func updateProducer(_ input: Operations.UpdateProducer.Input) async throws -> Operations.UpdateProducer.Output
+    /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
+    ///
+    /// - Remark: HTTP `GET /api/me/labels`.
+    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
+    func listLabels(_ input: Operations.ListLabels.Input) async throws -> Operations.ListLabels.Output
+    /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
+    ///
+    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    func updateLabel(_ input: Operations.UpdateLabel.Input) async throws -> Operations.UpdateLabel.Output
     /// The signed-in devices
     ///
     /// - Remark: HTTP `GET /api/me/devices`.
@@ -328,6 +338,28 @@ extension APIProtocol {
         body: Operations.UpdateProducer.Input.Body
     ) async throws -> Operations.UpdateProducer.Output {
         try await updateProducer(Operations.UpdateProducer.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
+    }
+    /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
+    ///
+    /// - Remark: HTTP `GET /api/me/labels`.
+    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
+    public func listLabels(headers: Operations.ListLabels.Input.Headers = .init()) async throws -> Operations.ListLabels.Output {
+        try await listLabels(Operations.ListLabels.Input(headers: headers))
+    }
+    /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
+    ///
+    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    public func updateLabel(
+        path: Operations.UpdateLabel.Input.Path,
+        headers: Operations.UpdateLabel.Input.Headers = .init(),
+        body: Operations.UpdateLabel.Input.Body
+    ) async throws -> Operations.UpdateLabel.Output {
+        try await updateLabel(Operations.UpdateLabel.Input(
             path: path,
             headers: headers,
             body: body

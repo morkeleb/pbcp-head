@@ -87,6 +87,72 @@ describe('GET /api/me/brief', () => {
   });
 });
 
+describe('a card’s day (RFC 0.7 §8)', () => {
+  it('places a card on its `about` day, whenever it was received; without one, on the day it was received', async () => {
+    await put('hermes:gmail:about-past', { kind: 'artifact', about: '2026-10-03' }); // received the 7th, about the 3rd
+    await put('hermes:gmail:plain', { kind: 'artifact' });
+    expect(ids((await me('GET', '/api/me/cards?date=2026-10-03')).body.cards)).toEqual(['hermes:gmail:about-past']);
+    expect(ids((await me('GET', '/api/me/cards?date=2026-10-07')).body.cards)).toEqual(['hermes:gmail:plain']);
+    const week = (await me('GET', '/api/me/cards?from=2026-09-30&to=2026-10-06')).body;
+    expect(week.cards[0]).toMatchObject({ id: 'hermes:gmail:about-past', about: '2026-10-03', day: '2026-10-03' });
+    const b = (await me('GET', '/api/me/brief')).body;
+    expect(b.threads.map((t: { latest: { id: string } }) => t.latest.id)).toEqual(['hermes:gmail:plain']); // today: only today's day
+    expect(b.first_day).toBe('2026-10-03');
+  });
+
+  it('puts a card about tomorrow in Tomorrow, not today; a decision about a later day is still listed among the open ones', async () => {
+    await put('hermes:cal:tomorrow', { kind: 'artifact', about: '2026-10-08', labels: ['calendar'] });
+    await put('hermes:cal:friday', { kind: 'decision', about: '2026-10-09' });
+    const b = (await me('GET', '/api/me/brief')).body;
+    expect(ids(b.tomorrow.cards)).toEqual(['hermes:cal:tomorrow']);
+    expect(b.tomorrow.cards[0]).toMatchObject({ labels: ['calendar'], about: '2026-10-08', day: '2026-10-08' });
+    expect(b.threads).toEqual([]);
+    expect(b.decisions).toEqual([expect.objectContaining({ id: 'hermes:cal:friday', day: '2026-10-09' })]);
+  });
+
+  it('keeps a card’s day when it is decided after the owner moved timezone', async () => {
+    await clock('2026-10-07T23:30:00Z'); // the 7th in UTC
+    await put('hermes:gmail:late');
+    await me('PATCH', '/api/me/settings', { timezone: 'Asia/Tokyo' }); // where it is already the 8th
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:late')}/decision`, { decision: 'approve' });
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent('hermes:gmail:late')}`)).body.card.day).toBe('2026-10-07');
+  });
+});
+
+describe('ceilings per label (RFC 0.7 §9)', () => {
+  const delivered = async (id: string) => (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card.delivery;
+
+  it('stores a card under a producer ceiling and label ceilings with the lowest of them', async () => {
+    // hermes's ceiling is immediate.
+    expect((await me('PATCH', '/api/me/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log' });
+    await me('PATCH', '/api/me/labels/billing-revamp', { ceiling: 'brief' });
+    await put('hermes:gmail:n1', { kind: 'signal', urgency: 'immediate', labels: ['newsletters'] });
+    await put('hermes:gmail:n2', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp', 'newsletters'] }); // both: the lowest
+    await put('hermes:gmail:n3', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp'] });
+    await put('hermes:gmail:n4', { kind: 'signal', urgency: 'immediate', labels: ['other'] }); // no label ceiling: the producer's
+    expect([await delivered('hermes:gmail:n1'), await delivered('hermes:gmail:n2'), await delivered('hermes:gmail:n3'), await delivered('hermes:gmail:n4')]).toEqual(['log', 'log', 'brief', 'immediate']);
+    // A producer ceiling below a label's still wins: the lower of the two.
+    await me('PATCH', '/api/me/producers/hermes', { ceiling: 'log' });
+    await me('PATCH', '/api/me/labels/other', { ceiling: 'immediate' });
+    await put('hermes:gmail:n5', { kind: 'signal', urgency: 'immediate', labels: ['other'] });
+    expect(await delivered('hermes:gmail:n5')).toBe('log');
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent('hermes:gmail:n1')}`)).body.card.urgency).toBe('immediate'); // urgency as sent
+  });
+
+  it('lists labels with their counts and ceilings, clears a ceiling with null, and refuses a malformed label', async () => {
+    await put('hermes:gmail:l1', { kind: 'artifact', labels: ['b-label', 'a-label'] });
+    await put('hermes:gmail:l2', { kind: 'artifact', labels: ['a-label'] });
+    await me('PATCH', '/api/me/labels/a-label', { ceiling: 'brief' });
+    expect((await me('GET', '/api/me/labels')).body.labels).toEqual([
+      { label: 'a-label', cards: 2, ceiling: 'brief' },
+      { label: 'b-label', cards: 1, ceiling: null },
+    ]);
+    expect((await me('PATCH', '/api/me/labels/a-label', { ceiling: null })).body.ceiling).toBeNull();
+    expect((await me('PATCH', '/api/me/labels/Not_A_Label', { ceiling: 'log' })).status).toBe(400);
+    expect((await me('PATCH', '/api/me/labels/a-label', { ceiling: 'loud' })).status).toBe(400);
+  });
+});
+
 describe('GET /api/me/cards', () => {
   it("lists a local day in the head's timezone, in change_seq order, paginated", async () => {
     expect((await me('PATCH', '/api/me/settings', { timezone: 'Europe/Copenhagen' })).body.timezone).toBe('Europe/Copenhagen');

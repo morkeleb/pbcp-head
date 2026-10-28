@@ -81,6 +81,9 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('GET', `/api/me/cards/${enc('hermes:gmail:2')}`);
     await api('GET', '/api/me/producers');
     await api('PATCH', '/api/me/producers/hermes', { ceiling: 'brief' });
+    await api('PATCH', '/api/me/labels/billing-revamp', { ceiling: 'log' });
+    await api('GET', '/api/me/labels');
+    await api('PATCH', '/api/me/labels/Not_A_Label', { ceiling: 'log' }); // 400
     await api('GET', '/api/me/devices');
     await api('POST', '/api/me/visit', {});
     await api('POST', '/api/me/visit', { seq: 1 });
