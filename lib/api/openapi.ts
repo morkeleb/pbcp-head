@@ -85,6 +85,14 @@ const PATHS: Record<string, Record<string, Json>> = {
   '/api/me/brief': {
     get: operation('getBrief', { summary: 'Everything the Brief screen shows, in one call', ok: ok(S.Brief), errors: [400, 401] }),
   },
+  '/api/me/seq': {
+    get: operation('getBriefStamp', {
+      summary: 'Whether the brief has changed: the change counter and the head’s local date',
+      description: 'Cheap enough to ask often: a client that shows the brief compares both with the brief it has, and loads the brief again only when one has moved.',
+      ok: ok(S.BriefStamp),
+      errors: [400, 401],
+    }),
+  },
   '/api/me/visit': {
     post: operation('postVisit', {
       summary: 'The owner left the brief: advance the last-visit cursor',

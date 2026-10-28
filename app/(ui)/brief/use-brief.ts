@@ -10,6 +10,10 @@ import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
 import { hasParagraph } from '../../../lib/brief/fold-version';
 import type { ParagraphParts } from '../../../lib/brief/paragraph';
+
+/** How often an open brief asks whether it changed, and the least time between two asks (focus and visibility fire together). */
+const LIVE_EVERY_MS = 60_000;
+const LIVE_MIN_GAP_MS = 15_000;
 import type { UpdateThread } from './UpdateRow';
 
 export interface BriefResponse {
@@ -111,8 +115,10 @@ export function useBrief() {
   const loading = useRef<Promise<boolean> | null>(null);
   const seq = useRef<number | null>(null);
 
-  const load = useCallback(async (network = false) => {
+  const load = useCallback(async (network = false, quiet = false) => {
     const r = await api<BriefResponse>('/api/me/brief', { network });
+    // A refresh that fails leaves the brief on screen as it was; only a first load reports.
+    if (r.status !== 200 && quiet) return;
     if (r.status !== 200) return setError(r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of the brief yet.' : `Could not load the brief (${r.status}).`);
     setBrief(r.body);
     setCachedAt(r.cachedAt ?? null);
@@ -125,6 +131,44 @@ export function useBrief() {
   }, []);
   const stale = useCallback(() => void load(true), [load]);
   useFresh('/api/me/brief', fresh, stale);
+
+  // Live: whatever the device's notification settings, the brief looks for changes when the app comes back to the
+  // foreground and once a minute while it is on screen, and at once when a push arrives (the service worker says so;
+  // only a device with notifications on gets pushes). It asks the head's change counter and date (GET /api/me/seq), and
+  // loads the brief again only when one has moved: what is on screen (scroll, open cards, the label filter) stays.
+  const current = useRef<BriefResponse | null>(null);
+  current.current = brief;
+  useEffect(() => {
+    let last = 0;
+    let busy = false;
+    const check = async (now = false) => {
+      if (document.visibilityState !== 'visible' || busy || !current.current) return;
+      if (!now && Date.now() - last < LIVE_MIN_GAP_MS) return;
+      last = Date.now();
+      busy = true;
+      try {
+        const r = await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
+        const b = current.current;
+        if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) await load(true, true);
+      } catch {
+        // offline, or signed out: the next check tries again
+      } finally {
+        busy = false;
+      }
+    };
+    const onVisible = () => void check();
+    const onMessage = (e: MessageEvent) => void ((e.data as { type?: string } | null)?.type === 'pbcp-push' && check(true));
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    const timer = setInterval(() => void check(), LIVE_EVERY_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+      clearInterval(timer);
+    };
+  }, [load]);
 
   // Leaving the brief advances the global last-visit cursor to what was on screen (mobile PRD: on close).
   useEffect(() => {

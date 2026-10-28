@@ -85,6 +85,61 @@ async function briefThroughWorker() {
   await page.waitForFunction(() => document.body.innerText.includes('When should M4 ship?'));
 }
 
+describe('a live brief', () => {
+  const shows = (title: string) => page.waitForFunction((t) => document.body.innerText.includes(t), { timeout: 10_000 }, title);
+  let loads = 0;
+  const countLoads = () => page.on('request', (r) => void (new URL(r.url()).pathname === '/api/me/brief' && loads++));
+
+  it('looks for changes when the app comes back, and when a push arrives; loads the brief again only when something changed', async () => {
+    const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
+    const put = (id: string, title: string) => call('PUT', cardPath(id), { auth: cal, body: card(id, { title }) });
+    await briefThroughWorker();
+    loads = 0;
+    countLoads();
+
+    // Back in the foreground, with a card that arrived meanwhile: it shows, without a reload of the page.
+    await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
+    await put('cal:event:1', 'Moved: the call is now at 16:00');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await shows('Moved: the call is now at 16:00');
+    expect(await page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(1); // the same page
+    const after = loads;
+
+    // A push with nothing new: it asks, and loads nothing.
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'pbcp-push', url: '/brief' } })));
+    await wait(1500);
+    expect(loads).toBe(after);
+
+    // A push after a new card: it shows at once, with no wait for the next minute's check.
+    await put('cal:event:2', 'Dinner with Lena moved to 19:30');
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'pbcp-push', url: '/brief' } })));
+    await shows('Dinner with Lena moved to 19:30');
+    expect(await page.evaluate(() => document.body.innerText.includes('When should M4 ship?'))).toBe(true); // what was there stays
+    expect(errors).toEqual([]);
+  });
+
+  it('is told by the service worker when a real push arrives', async () => {
+    await page.browserContext().overridePermissions(headUrl(), ['notifications']);
+    await briefThroughWorker();
+    const cdp = await page.createCDPSession();
+    const registration = new Promise<string>((resolve) => {
+      cdp.on('ServiceWorker.workerRegistrationUpdated', (e: { registrations: Array<{ registrationId: string; scopeURL: string; isDeleted: boolean }> }) => {
+        const r = e.registrations.find((x) => !x.isDeleted && x.scopeURL === `${headUrl()}/`);
+        if (r) resolve(r.registrationId);
+      });
+    });
+    await cdp.send('ServiceWorker.enable');
+    const registrationId = await registration;
+    await page.evaluate(() => {
+      (window as unknown as { pushes: unknown[] }).pushes = [];
+      navigator.serviceWorker.addEventListener('message', (e) => (window as unknown as { pushes: unknown[] }).pushes.push(e.data));
+    });
+    await cdp.send('ServiceWorker.deliverPushMessage', { origin: headUrl(), registrationId, data: JSON.stringify({ title: 'db-1 disk at 91%', body: 'Full in two days', data: { url: '/card/x' } }) });
+    await page.waitForFunction(() => (window as unknown as { pushes: Array<{ type?: string }> }).pushes.some((m) => m.type === 'pbcp-push'));
+    expect(await page.evaluate(() => (window as unknown as { pushes: unknown[] }).pushes)).toContainEqual({ type: 'pbcp-push', url: '/card/x' });
+  });
+});
+
 describe('a new version', () => {
   it('says nothing when the worker first takes over, and offers a reload when a new one replaces it', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });

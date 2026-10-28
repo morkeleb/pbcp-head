@@ -87,6 +87,19 @@ describe('GET /api/me/brief', () => {
   });
 });
 
+describe('GET /api/me/seq', () => {
+  it('gives the change counter and the local date, which move with a new card and at midnight, and needs a session', async () => {
+    await clock('2026-10-07T09:00:00Z');
+    const before = (await call('GET', '/api/me/seq', { auth: owner.auth })).body;
+    expect(before).toEqual({ seq: (await call('GET', '/api/me/brief', { auth: owner.auth })).body.seq, date: '2026-10-07' });
+    await put('hermes:gmail:new');
+    expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.seq).toBeGreaterThan(before.seq);
+    await clock('2026-10-08T00:30:00Z');
+    expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.date).toBe('2026-10-08');
+    expect((await call('GET', '/api/me/seq', { auth: hermes })).status).toBe(401);
+  });
+});
+
 describe('a card’s day (RFC 0.7 §8)', () => {
   it('places a card on its `about` day, whenever it was received; without one, on the day it was received', async () => {
     await put('hermes:gmail:about-past', { kind: 'artifact', about: '2026-10-03' }); // received the 7th, about the 3rd

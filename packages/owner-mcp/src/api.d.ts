@@ -73,6 +73,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/seq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the brief has changed: the change counter and the head’s local date
+         * @description Cheap enough to ask often: a client that shows the brief compares both with the brief it has, and loads the brief again only when one has moved.
+         */
+        get: operations["getBriefStamp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/visit": {
         parameters: {
             query?: never;
@@ -921,6 +941,12 @@ export interface components {
             /** @description Ids changed since the last visit */
             new: string[];
         };
+        BriefStamp: {
+            /** @description The highest change_seq the head has assigned: it moves with every card stored and every decision */
+            seq: number;
+            /** @description The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight */
+            date: string;
+        };
         OrderWithProgress: {
             /** @constant */
             protocol: "pbcp/1";
@@ -1532,6 +1558,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Brief"];
+                };
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getBriefStamp: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefStamp"];
                 };
             };
             /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */

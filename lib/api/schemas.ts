@@ -167,6 +167,11 @@ export const Brief = z.object({
   new: z.array(z.string()).describe('Ids changed since the last visit'),
 }).register(responses, { id: 'Brief' });
 
+export const BriefStamp = z.object({
+  seq: Seq.describe('The highest change_seq the head has assigned: it moves with every card stored and every decision'),
+  date: z.string().describe('The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight'),
+}).register(responses, { id: 'BriefStamp' });
+
 export const Visit = LastVisit;
 
 // --- orders ---------------------------------------------------------------------------------------------

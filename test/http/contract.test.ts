@@ -76,6 +76,7 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('PATCH', '/api/me/settings', { display_name: 'Morten', timezone: 'Europe/Copenhagen' });
     await api('PATCH', '/api/me/settings', { timezone: null });
     await api('GET', '/api/me/brief');
+    await api('GET', '/api/me/seq');
     await api('GET', '/api/me/cards?date=2026-10-07');
     await api('GET', '/api/me/cards?since=2026-10-01T00:00:00Z&limit=2');
     await api('GET', `/api/me/cards/${enc('hermes:gmail:4')}`);
