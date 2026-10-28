@@ -1,15 +1,16 @@
 'use client';
 
 // LabelFilter: the brief's filter by label (RFC 0.7 §4.1: a head SHOULD let the owner filter the brief by label), in the
-// masthead row beside the week strip. It lists the labels on the loaded days with how many cards carry each; choosing
+// masthead right of the density control (MastheadTools), and only when there are labels to choose from. On a phone it
+// is a tag icon, so the masthead's tools still fit on one line. It lists the labels on the loaded days with how many cards carry each; choosing
 // one or more shows only the cards that carry any of them, in decisions, updates and signals, and the daily paragraph
 // keeps only their entries. The choice is remembered on this device and shown as a chip with a clear control while it
 // is on. Labels filter; they never group (§8). The iOS app mirrors this component.
 //
-//   [Labels ⌄]                   off
-//   [billing-revamp +1 ×]        on: the first chosen label, how many more, clear
+//   [Labels ⌄]                   off              phone: [⌗]
+//   [billing-revamp +1 ×]        on: the first chosen label, how many more, clear   phone: [⌗ 2]
 
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, Tag, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,9 +47,11 @@ export interface LabelFilterProps {
   counts: Map<string, number>;
   chosen: string[];
   onChange: (labels: string[]) => void;
+  /** A phone's masthead: an icon, with how many labels are chosen. */
+  compact?: boolean;
 }
 
-export function LabelFilter({ counts, chosen, onChange }: LabelFilterProps) {
+export function LabelFilter({ counts, chosen, onChange, compact }: LabelFilterProps) {
   // A chosen label stays listed even when no loaded card carries it now, so it can be unchosen.
   const labels = [...new Set([...counts.keys(), ...chosen])].sort();
   const toggle = (l: string, on: boolean) => onChange(on ? [...chosen, l] : chosen.filter((c) => c !== l));
@@ -56,8 +59,13 @@ export function LabelFilter({ counts, chosen, onChange }: LabelFilterProps) {
     <div className="flex items-center gap-1" data-label-filter>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="xs" aria-label={chosen.length ? `Labels: ${chosen.join(', ')}` : 'Filter by label'} className="max-w-48">
-            {chosen.length ? (
+          <Button variant={compact ? 'ghost' : 'outline'} size={compact ? 'icon-sm' : 'xs'} aria-label={chosen.length ? `Labels: ${chosen.join(', ')}` : 'Filter by label'} className={compact ? 'relative' : 'max-w-48'}>
+            {compact ? (
+              <>
+                <Tag />
+                {chosen.length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground" data-label-chip>{chosen.length}</span>}
+              </>
+            ) : chosen.length ? (
               <span className="truncate" data-label-chip>
                 {chosen[0]}
                 {chosen.length > 1 && ` +${chosen.length - 1}`}
@@ -65,7 +73,7 @@ export function LabelFilter({ counts, chosen, onChange }: LabelFilterProps) {
             ) : (
               'Labels'
             )}
-            <ChevronDown />
+            {!compact && <ChevronDown />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-52">
@@ -85,7 +93,7 @@ export function LabelFilter({ counts, chosen, onChange }: LabelFilterProps) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {chosen.length > 0 && (
+      {chosen.length > 0 && !compact && (
         <Button variant="ghost" size="icon-xs" aria-label="Clear the label filter" onClick={() => onChange([])} data-label-clear>
           <X />
         </Button>

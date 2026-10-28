@@ -134,7 +134,7 @@ describe('the cron sends the daily notification', () => {
     expect((await cron()).notified).toEqual([{ device: on.deviceId, date: '2026-10-07', result: 'sent' }]);
     expect(received.map((r) => r.path)).toEqual([on.sub.path]);
     expect(received[0]!.headers).toMatchObject({ 'content-encoding': 'aes128gcm', ttl: expect.any(String), authorization: expect.stringMatching(/^vapid t=.+, k=/) });
-    expect(decrypt(received[0]!, on.sub)).toEqual({ title: 'Brief', body: 'Nothing waiting', data: { url: '/brief' }, tag: 'pbcp-daily' });
+    expect(decrypt(received[0]!, on.sub)).toEqual({ title: 'Brief', body: 'Nothing waiting for you.', data: { url: '/brief' }, tag: 'pbcp-daily' }); // the quiet day's card
 
     // The same run again, a later one the same day, and a run that went back over the time: nothing more.
     expect((await cron()).notified).toEqual([]);

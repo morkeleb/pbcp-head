@@ -8,9 +8,11 @@
 //   3  snoozed decisions left out of the paragraph and counted apart ("4 decisions, 1 snoozed")
 //   4  each paragraph entry is the card's title, linked, then " — " and its lead
 //   5  no snoozed card in the entries either (RFC 0.6 §8 correction); a thread shows its newest unsnoozed card
+//   6  the day before in three parts weighted by delivery: what was decided, what mattered (named, six at most), the
+//      rest counted by producer; "Nothing waiting for you." on a quiet day
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 5;
+export const FOLD_VERSION = 6;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

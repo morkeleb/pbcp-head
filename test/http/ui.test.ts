@@ -609,6 +609,7 @@ describe('labels and a card’s day (RFC 0.7)', () => {
 
   it('filters by label: decisions, updates, signals and the daily paragraph all narrow; remembered on the device; cleared', async () => {
     await seed();
+    await page.setViewport({ width: 1280, height: 844 }); // the filter as a button with its chip (a phone has the icon)
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const section = (await today())!;
     expect(await section.$$eval('[data-card]', (cs) => cs.length)).toBeGreaterThanOrEqual(5); // goalpath's two + the four above
@@ -655,6 +656,30 @@ describe('labels and a card’s day (RFC 0.7)', () => {
     expect(await page.$('[data-label-chip]')).toBeNull();
     expect(await page.evaluate(() => localStorage.getItem('pbcp.labels'))).toBeNull();
     expect(errors).toEqual([]);
+  });
+
+  it('puts the label filter right of the density toggle in the masthead, as an icon on a phone, and not at all with no labels', async () => {
+    await page.setViewport({ width: 1280, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-day]');
+    expect(await page.$('[data-label-filter]')).toBeNull(); // the fixtures carry no labels
+    await seed();
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-masthead-page-tools] [data-label-filter]');
+    const place = await page.evaluate(() => {
+      const density = document.querySelector('[data-masthead] [role="tablist"]')!.getBoundingClientRect();
+      const filter = document.querySelector('[data-label-filter]')!.getBoundingClientRect();
+      const search = document.querySelector('[data-masthead] button[aria-label="Search"]')!.getBoundingClientRect();
+      return { afterDensity: filter.left >= density.right, beforeSearch: filter.right <= search.left, sameLine: Math.abs((filter.top + filter.bottom) / 2 - (density.top + density.bottom) / 2) < 4, inRow: !!document.querySelector('[data-masthead-row] [data-label-filter]') };
+    });
+    expect(place).toEqual({ afterDensity: true, beforeSearch: true, sameLine: true, inRow: false });
+    await page.setViewport({ width: 360, height: 800, isMobile: true, hasTouch: true });
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-label-filter] button[aria-label="Filter by label"]');
+    expect(await page.$eval('[data-label-filter]', (f) => f.textContent)).toBe(''); // an icon
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+    const tools = await page.$$eval('[data-masthead-shared="tools"] > *, [data-masthead-page-tools] > *', (es) => es.map((e) => Math.round(e.getBoundingClientRect().right)).filter((r) => r > 0));
+    expect(Math.max(...tools)).toBeLessThanOrEqual(360);
   });
 
   it('puts a card about tomorrow under Tomorrow, and marks a decision about a later day under today with its day', async () => {
@@ -942,6 +967,7 @@ describe('one masthead', () => {
     page.evaluate(() => {
       const parts = [...document.querySelectorAll('[data-masthead-shared]')].map((e) => {
         const c = e.cloneNode(true) as Element;
+        c.querySelector('[data-masthead-page-tools]')?.replaceChildren(); // the page's own tool (the brief's label filter)
         for (const el of [c, ...c.querySelectorAll('*')]) for (const a of ['id', 'aria-controls', 'aria-labelledby', 'aria-describedby']) el.removeAttribute(a);
         return c.outerHTML;
       });

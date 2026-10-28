@@ -6,7 +6,8 @@
 // tokens and the owner's actions use a session, so the head renders, folds and orders them exactly as it would
 // real ones. The database is used only to mint those credentials, which are revoked when the script ends.
 // Every demo card's id has `demo` as its namespace (`goalpath:demo:…`), and every demo order says so in its
-// body; `--remove` deletes them all, with the executors' cards in their threads.
+// body; `--remove` deletes them all, with the executors' cards in their threads. The roots it seeds are in
+// scripts/demo-data.ts; `pnpm demo:purge` also removes their tokens and the cards of roots no real producer holds.
 //
 // Run it with the deployment's DATABASE_URL and SESSION_SECRET (docs/deploy.md, "Demo data").
 
@@ -18,6 +19,7 @@ import { mintProducerToken } from '../lib/auth/producer';
 import { startSession } from '../lib/auth/session';
 import { effectiveTimezone } from '../lib/timezone';
 import { addDays, localDate } from '../lib/time';
+import { DEMO_INSTANCE, DEMO_MARK, DEMO_NAMESPACE, DEMO_ROOTS } from './demo-data';
 
 const { positionals, values } = parseArgs({ allowPositionals: true, options: { url: { type: 'string' }, remove: { type: 'boolean', default: false } } });
 const [head] = positionals;
@@ -28,7 +30,6 @@ if (!head) {
 }
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-const DEMO_MARK = '_Example data (pnpm demo)._';
 const db = openDb(process.env.DATABASE_URL, 1);
 
 async function remove() {
@@ -43,7 +44,7 @@ async function remove() {
     .where(
       and(
         eq(cards.headId, head!),
-        or(eq(cards.namespace, 'demo'), orderIds.length ? inArray(cards.id, orderIds) : sql`false`, orderIds.length ? inArray(sql`${cards.producerDoc}->>'thread'`, orderIds) : sql`false`),
+        or(eq(cards.namespace, DEMO_NAMESPACE), orderIds.length ? inArray(cards.id, orderIds) : sql`false`, orderIds.length ? inArray(sql`${cards.producerDoc}->>'thread'`, orderIds) : sql`false`),
       ),
     );
   const ids = doomed.map((d) => d.id);
@@ -62,9 +63,9 @@ async function seed() {
   const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
   // Credentials, minted the way `pnpm mint-token` does, and revoked at the end.
-  const roots = { cal: { ceiling: 'immediate' }, goalpath: { ceiling: 'immediate' }, hermes: { executor: true }, mail: {}, n8n: {}, obsidian: {}, todoist: { executor: true } } as const;
+  const roots = DEMO_ROOTS;
   const tokens: Record<string, string> = {};
-  for (const [root, opts] of Object.entries(roots)) tokens[root] = await mintProducerToken(db, { headId: head!, root, instance: 'demo', ...opts });
+  for (const [root, opts] of Object.entries(roots)) tokens[root] = await mintProducerToken(db, { headId: head!, root, instance: DEMO_INSTANCE, ...opts });
   const session = await startSession(db, { headId: head!, identityId: null, platform: 'web', name: 'demo seed' });
   const owner = `Session ${session.access_token}`;
 

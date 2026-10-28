@@ -3,13 +3,14 @@ import { parseCard } from '@pbcp/core';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
-import { dailyLines, dailyParagraph, escapeMarkdown, foldDaily } from '../lib/brief/fold';
+import { dailyLines, dailyParagraph, escapeMarkdown, foldDaily, paragraphParts } from '../lib/brief/fold';
+import { composeParagraphs } from '../lib/brief/paragraph';
 
 let seq = 0;
 function stored(id: string, extra: Partial<Card> = {}): Card {
   const producer = id.split(':')[0]!;
   return {
-    protocol: 'pbcp/1', id, kind: 'artifact', to_person: 'morten', producer, title: `Title ${id}`, body: 'x',
+    protocol: 'pbcp/1', id, kind: 'artifact', to_person: 'morten', producer, title: `Title ${id}`, body: 'x', urgency: 'brief', delivery: 'brief',
     emitted_at: '2026-10-06T06:00:00Z', state: 'open', change_seq: ++seq, received_at: '2026-10-06T08:00:00Z', changed_at: '2026-10-06T08:00:00Z',
     ...extra,
   } as Card;
@@ -34,7 +35,7 @@ describe('the nightly fold', () => {
     ],
   };
 
-  const fold = (i = input) => foldDaily(i)!;
+  const fold = (i: Parameters<typeof foldDaily>[0] = input) => foldDaily(i);
   const entries = (body: string) => body.split('\n').filter((l) => l.startsWith('- '));
 
   it('is a valid artifact card under head:daily, brief urgency, referencing the open decisions', () => {
@@ -44,16 +45,16 @@ describe('the nightly fold', () => {
     expect(card).not.toHaveProperty('summary'); // its lead is its opening paragraph
   });
 
-  it('opens with the daily paragraph: each decision as its linked title — lead, then one sentence of yesterday’s the same way, nothing else', () => {
+  it('opens with the daily paragraph: each decision as its linked title — lead, then what mattered yesterday the same way, nothing else', () => {
     const [paragraph] = fold().body.split('\n');
     expect(paragraph).toMatch(
-      /^1 decision, 1 snoozed: \[Reply to Anna re \\\[invoice\\\]\\\(https:\/\/evil\\\.example\\\)\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\) — Anna asks whether the invoice can wait until the \*\*20th\*\*\. Yesterday: \[/,
+      /^1 decision, 1 snoozed: \[Reply to Anna re \\\[invoice\\\]\\\(https:\/\/evil\\\.example\\\)\]\(<https:\/\/head\.example\/card\/hermes%3Agmail%3A1>\) — Anna asks whether the invoice can wait until the \*\*20th\*\*\. What mattered yesterday: \[/,
     );
     expect(paragraph).toMatch(/\.$/);
     expect(paragraph).toContain('[Sent](<https://head.example/card/hermes%3Agmail%3Ab>) — The reply went out at 09:12');
     // A lead's own links are unwrapped in the paragraph, whose links are to cards.
     const withLink = fold({ ...input, yesterday: [stored('cal:x:1', { body: 'Moved to [Room 3](https://rooms.example/3) at 10.' })] });
-    expect(withLink.body.split('\n')[0]).toContain('Yesterday: [Title cal:x:1](<https://head.example/card/cal%3Ax%3A1>) — Moved to Room 3 at 10.');
+    expect(withLink.body.split('\n')[0]).toContain('What mattered yesterday: [Title cal:x:1](<https://head.example/card/cal%3Ax%3A1>) — Moved to Room 3 at 10.');
   });
 
   it('names a card with a weak lead by its title, and writes the title alone when the lead is empty or repeats it', () => {
@@ -100,14 +101,14 @@ describe('the nightly fold', () => {
   it('keeps every lead in the paragraph a well-formed link, however the lead ends', () => {
     const ends = ['Ends with a stop.', 'Ends with a colon:', 'Ends (with a bracket)', 'Ends with \\'].map((summary, i) => stored(`mail:x:${i}`, { kind: 'decision', summary } as Partial<Card>));
     const [paragraph] = fold({ ...input, openDecisions: ends }).body.split('\n');
-    // What a markdown parser finds: one link per lead, each to its card (4 decisions + yesterday's 4 threads).
+    // What a markdown parser finds: one link per entry, each to its card (4 decisions + the 2 threads that mattered yesterday).
     const links: string[] = [];
     const walk = (n: { type: string; url?: string; children?: unknown[] }) => {
       if (n.type === 'link') links.push(n.url!);
       for (const c of (n.children ?? []) as Array<typeof n>) walk(c);
     };
     walk(unified().use(remarkParse).parse(paragraph!) as never);
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(6);
     expect(links.every((u) => u.startsWith('https://head.example/card/'))).toBe(true);
   });
 
@@ -128,20 +129,20 @@ describe('the nightly fold', () => {
     expect(fold({ ...input, openDecisions: decisions.slice(0, 4), yesterday: [] }).body.split('\n')[0]).toMatch(/^4 decisions: /);
     // All of them snoozed: the count, and no list.
     const asleep = dailyLines({ openDecisions: decisions.slice(4), yesterday: [], at: input.emittedAt });
-    expect(dailyParagraph(asleep, input.cardUrl)).toBe('0 decisions, 1 snoozed.');
+    expect(dailyParagraph(asleep, input.cardUrl)).toBe('Nothing waiting for you; 1 decision snoozed.');
   });
 
   it('shows each of yesterday’s threads by its newest card that is not snoozed, and leaves out a thread snoozed throughout', () => {
     const later = '2026-10-09T08:00:00Z';
     const yesterday = [
-      stored('mail:t:1', { thread: 'mail:a', summary: 'First in A' } as Partial<Card>),
-      stored('mail:t:2', { thread: 'mail:a', summary: 'Second in A', snoozed_until: later } as Partial<Card>),
-      stored('mail:t:3', { thread: 'mail:b', summary: 'Only in B', snoozed_until: later } as Partial<Card>),
-      stored('mail:t:4', { thread: 'mail:c', summary: 'Only in C' } as Partial<Card>),
+      stored('mail:t:1', { kind: 'signal', thread: 'mail:a', summary: 'First in A' } as Partial<Card>),
+      stored('mail:t:2', { kind: 'signal', thread: 'mail:a', summary: 'Second in A', snoozed_until: later } as Partial<Card>),
+      stored('mail:t:3', { kind: 'signal', thread: 'mail:b', summary: 'Only in B', snoozed_until: later } as Partial<Card>),
+      stored('mail:t:4', { kind: 'signal', thread: 'mail:c', summary: 'Only in C' } as Partial<Card>),
     ];
     const card = fold({ ...input, openDecisions: [], yesterday });
     const [paragraph] = card.body.split('\n');
-    expect(paragraph).toBe('Yesterday: [Title mail:t:4](<https://head.example/card/mail%3At%3A4>) — Only in C; [Title mail:t:1](<https://head.example/card/mail%3At%3A1>) — First in A.');
+    expect(paragraph).toBe('Nothing waiting for you. What mattered yesterday: [Title mail:t:4](<https://head.example/card/mail%3At%3A4>) — Only in C; [Title mail:t:1](<https://head.example/card/mail%3At%3A1>) — First in A.');
     const listed = entries(card.body.split('**Yesterday**')[1]!);
     expect(listed).toEqual([
       '- [Title mail:t:4](<https://head.example/card/mail%3At%3A4>) — Only in C',
@@ -155,10 +156,64 @@ describe('the nightly fold', () => {
     expect(fold({ ...input, openDecisions: [woke], yesterday: [] }).body.split('\n')[0]).toBe('1 decision: [Title mail:d:w](<https://head.example/card/mail%3Ad%3Aw>) — Awake again.');
   });
 
-  it('mints nothing on a day with nothing open and nothing new; says only what there is otherwise', () => {
-    expect(foldDaily({ ...input, openDecisions: [], yesterday: [] })).toBeNull();
-    expect(dailyParagraph({ decisions: [], threads: [] }, input.cardUrl)).toBe('');
-    const quiet = fold({ ...input, openDecisions: [] });
-    expect(quiet.body.split('\n')[0]).toMatch(/^Yesterday: /);
+  it('on a quiet day says "Nothing waiting for you." and nothing of yesterday', () => {
+    const quiet = foldDaily({ ...input, openDecisions: [], yesterday: [] });
+    expect(quiet.body.split('\n')[0]).toBe('Nothing waiting for you.');
+    expect(quiet.body).not.toMatch(/decided|mattered|updates? from/);
+    expect(dailyParagraph({ decisions: [], decided: [], mattered: [], rest: [] }, input.cardUrl)).toBe('Nothing waiting for you.');
+    // Nothing open, something new: it says only what there is.
+    expect(fold({ ...input, openDecisions: [] }).body.split('\n')[0]).toMatch(/^Nothing waiting for you\. What mattered yesterday: /);
+  });
+
+  it('weighs the day before by delivery: what was decided, what mattered, and the rest counted, in three paragraphs', () => {
+    let at = 0;
+    const card = (id: string, extra: Partial<Card>) => stored(id, { received_at: `2026-10-06T${String(8 + Math.floor(at / 60)).padStart(2, '0')}:${String(at++ % 60).padStart(2, '0')}:00Z`, ...extra } as Partial<Card>);
+    const decided = [
+      card('mail:inbox:anna', { kind: 'decision', title: 'Reply to Anna re invoice timing', state: 'decided', decision: 'agree', decided_at: '2026-10-06T09:10:00Z', actions: [{ id: 'agree', label: 'Agree', default: true }, 'reject'] } as Partial<Card>),
+      card('goalpath:item:12', { kind: 'decision', title: 'Accept GP-12?', state: 'decided', decision: 'dismissed', decided_at: '2026-10-06T10:00:00Z' } as Partial<Card>),
+    ];
+    const yesterday = [
+      card('cal:event:7', { kind: 'signal', delivery: 'immediate', urgency: 'immediate', title: 'Moved: Call with Anna now at 16:00', summary: 'It starts at 16:00 (was 16:30)' } as Partial<Card>),
+      card('goalpath:alert:db1', { kind: 'signal', delivery: 'immediate', urgency: 'immediate', title: 'db-1 disk at 91%', summary: 'Full in about two days' } as Partial<Card>),
+      card('obsidian:daily:6', { kind: 'artifact', title: 'Daily note 2026-10-06', summary: 'Reviewed the billing forecast with Sara' } as Partial<Card>),
+      ...['a', 'b', 'c', 'd', 'e'].map((k) => card(`mail:inbox:${k}`, { kind: 'signal', delivery: 'log', urgency: 'log', title: `Newsletter ${k}` } as Partial<Card>)),
+      ...['a', 'b', 'c'].map((k) => card(`goalpath:commit:${k}`, { kind: 'signal', delivery: 'log', urgency: 'log', title: `Commit ${k}` } as Partial<Card>)),
+      ...['a', 'b'].map((k) => card(`hermes:sync:${k}`, { kind: 'signal', delivery: 'log', urgency: 'log', title: `Synced ${k}` } as Partial<Card>)),
+      ...decided,
+    ];
+    const lines = dailyLines({ openDecisions: [], yesterday, decidedYesterday: decided, at: input.emittedAt });
+    const parts = paragraphParts(lines, input.cardUrl);
+    const url = (id: string) => `<https://head.example/card/${encodeURIComponent(id)}>`;
+    expect(composeParagraphs(parts)).toEqual([
+      'Nothing waiting for you.',
+      `Yesterday you decided: [Reply to Anna re invoice timing](${url('mail:inbox:anna')}) — decided Agree; [Accept GP\\-12?](${url('goalpath:item:12')}) — decided dismissed.`,
+      `What mattered yesterday: [Daily note 2026\\-10\\-06](${url('obsidian:daily:6')}) — Reviewed the billing forecast with Sara; ` +
+        `[db\\-1 disk at 91%](${url('goalpath:alert:db1')}) — Full in about two days; [Moved: Call with Anna now at 16:00](${url('cal:event:7')}) — It starts at 16:00 \\(was 16:30\\).`,
+      'And 10 updates from mail, goalpath and hermes.',
+    ]);
+    // The card's lead is the same sentences as one paragraph; the counted ones are only in the body's full list.
+    const nightly = foldDaily({ ...input, openDecisions: [], yesterday, decidedYesterday: decided });
+    expect(nightly.body.split('\n')[0]).toBe(composeParagraphs(parts).join(' '));
+    expect(nightly.body).toContain('**Decided yesterday**');
+    expect(nightly.body.split('**Yesterday**')[1]).toContain('Newsletter a');
+    expect(composeParagraphs(parts)[3]).not.toContain('Newsletter');
+  });
+
+  it('names at most six that mattered, then "and N more"; counts a busy producer’s artifacts with the rest', () => {
+    const signals = Array.from({ length: 8 }, (_, i) => stored(`cal:alert:${i}`, { kind: 'signal', title: `Alert ${i}` }));
+    const busy = Array.from({ length: 4 }, (_, i) => stored(`n8n:prices:${i}`, { kind: 'artifact', title: `Prices ${i}` }));
+    const quiet = stored('obsidian:daily:1', { kind: 'artifact', title: 'Daily note' });
+    const [, mattered, rest] = composeParagraphs(paragraphParts(dailyLines({ openDecisions: [], yesterday: [...signals, ...busy, quiet], at: input.emittedAt }), input.cardUrl));
+    expect(mattered!.match(/\]\(</g)).toHaveLength(6);
+    expect(mattered).toMatch(/; and 3 more\.$/);
+    expect(mattered).toContain('Daily note');
+    expect(mattered).not.toContain('Prices');
+    expect(rest).toBe('And 4 updates from n8n.');
+    // Only counted: "Yesterday: …" when nothing is named before it.
+    expect(composeParagraphs(paragraphParts(dailyLines({ openDecisions: [], yesterday: busy, at: input.emittedAt }), input.cardUrl))).toEqual(['Nothing waiting for you.', 'Yesterday: 4 updates from n8n.']);
+  });
+
+  it('still writes a day folded before fold 6 its own way', () => {
+    expect(composeParagraphs({ decisions: [], snoozed: [], yesterday: [{ id: 'x', labels: [], text: 'Old' }] })).toEqual(['Nothing waiting for you.', 'Yesterday: Old.']);
   });
 });
