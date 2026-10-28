@@ -137,12 +137,18 @@
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* A backstop: nothing makes the page wider than the device. iOS Safari widens the whole layout to fit any box that
+       overflows, which pushed the masthead's tools and every row's right edge off a phone's screen. */
+    overflow-x: clip;
     /* A control scrolled to (focus, scrollIntoView) clears the sticky masthead and the fixed footer of the brief. */
     scroll-padding-top: var(--masthead-h, 0px);
     scroll-padding-bottom: 3rem;
   }
   body {
     @apply bg-background text-foreground font-sans text-body;
+    /* A word too long for its line (a URL in a lead, an id in a title, a code span) breaks rather than running past the
+       edge. Only such words: ordinary text wraps as before, and what is nowrap (buttons, truncated lines) is unaffected. */
+    overflow-wrap: anywhere;
     /* The brief pins what is on screen itself when earlier days load above (app/(ui)/brief/brief-view.tsx). */
     overflow-anchor: none;
   }

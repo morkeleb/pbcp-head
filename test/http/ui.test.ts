@@ -672,6 +672,36 @@ describe('labels and a card’s day (RFC 0.7)', () => {
   });
 });
 
+describe('no horizontal overflow', () => {
+  it('keeps every card on the screen at phone widths, however long its words: the page never gets wider than the device', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', ceiling: 'immediate' })}`;
+    const word = 'Supercalifragilistic'.repeat(6); // 120 characters, no break
+    const url = `https://example.com/${'a'.repeat(90)}/${'b'.repeat(40)}`;
+    const put = (id: string, extra: Record<string, unknown>) => call('PUT', cardPath(id), { auth: hermes, body: card(id, extra) });
+    await put('hermes:long:decision', { title: `Decide ${word}`, body: `Lead with ${url} and \`${word}\` in it.\n\n## Proposal\n\n${word}`, labels: ['a-very-long-label-of-32-chars-xx', 'another-long-label-32-characters'], source: { url: `https://${'sub'.repeat(12)}.example.com/x`, label: word } });
+    await put('hermes:long:update', { kind: 'artifact', title: word, summary: `${url} ${word}` });
+    await put('hermes:long:signal', { kind: 'signal', title: `Signal ${word}`, body: `| ${word} | ${word} |\n| --- | --- |\n| a | b |` });
+    await call('POST', `/api/me/cards/${encodeURIComponent('hermes:long:update')}/ack`, { auth: `Session ${session.access_token}` });
+    for (const width of [360, 390]) {
+      await page.setViewport({ width, height: 844, isMobile: true, hasTouch: true });
+      await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+      await page.waitForSelector('article[data-card="hermes:long:decision"]');
+      const r = await page.evaluate(() => {
+        const W = document.documentElement.clientWidth;
+        // Boxes past the right edge, except inside something that scrolls or clips its own overflow (a table, a pre).
+        const contained = (e: Element) => {
+          for (let a = e.parentElement; a; a = a.parentElement) if (['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(a).overflowX) && a !== document.documentElement && a !== document.body) return true;
+          return false;
+        };
+        const wide = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > W + 1 && !contained(e)).map((e) => `${e.tagName}.${String(e.className).slice(0, 40)}`);
+        return { W, scrollW: document.documentElement.scrollWidth, wide: wide.slice(0, 5) };
+      });
+      expect(r.wide, String(width)).toEqual([]);
+      expect(r.scrollW, String(width)).toBe(r.W);
+    }
+  });
+});
+
 describe('one masthead', () => {
   /** The masthead's shared parts, with the ids Radix generates per render taken out, and its height. */
   const shared = () =>
