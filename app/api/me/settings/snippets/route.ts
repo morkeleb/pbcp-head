@@ -1,16 +1,21 @@
-// GET /api/me/settings/snippets?root=<root> — ready-to-paste ways to connect a producer (curl, n8n, Hermes), filled
-// with this head's URL and owner id and a token placeholder the client replaces with a token it just minted
-// (lib/settings/snippets.ts).
+// GET /api/me/settings/snippets?root=<root> — how a producer connects (lib/connect.ts): the three values
+// (`producerConfig`) and a curl that PUTs a card (`curlSnippet`, @pbcp/client), with this head's api and owner id and the
+// placeholder <token>, which the client replaces with the token it just minted; and each connector's setup, by link.
+// The curl's card is the §3 example (root hermes), or, for another root, a one-line artifact under that root.
 
+import { db } from '../../../../../db/client';
+import { connectLinks, connectSnippets, TOKEN } from '../../../../../lib/connect';
 import { HttpError, json } from '../../../../../lib/http';
 import { meHandler } from '../../../../../lib/owner';
-import { headOrigin, producerUrl } from '../../../../../lib/settings/head';
-import { snippets, TOKEN_PLACEHOLDER } from '../../../../../lib/settings/snippets';
+import { headFacts, headOrigin, producerUrl } from '../../../../../lib/settings/head';
 
 export const dynamic = 'force-dynamic';
 
 export const GET = meHandler(async (s, req) => {
-  const root = new URL(req.url).searchParams.get('root') ?? 'my-producer';
-  if (!/^[A-Za-z0-9-]{1,64}$/.test(root)) throw new HttpError(400, 'invalid_root', 'a producer root is letters, digits or - (§5)');
-  return json({ root, token: TOKEN_PLACEHOLDER, ...snippets({ url: producerUrl(headOrigin(req.url)), owner: s.headId, root, token: TOKEN_PLACEHOLDER }) });
+  const root = new URL(req.url).searchParams.get('root') ?? undefined;
+  if (root !== undefined && !/^[A-Za-z0-9-]{1,64}$/.test(root)) throw new HttpError(400, 'invalid_root', 'a producer root is letters, digits or - (§5)');
+  const origin = headOrigin(req.url);
+  const facts = await headFacts(db(), s.headId, producerUrl(origin));
+  const { config, curl, curlRoot } = connectSnippets({ api: facts.url, owner: facts.owner, protocol: facts.protocol, extensions: facts.extensions }, TOKEN, root);
+  return json({ api: facts.url, owner: facts.owner, token: TOKEN, config, curl, curl_root: curlRoot, connectors: connectLinks(origin).connectors.map((l) => ({ name: l.label, url: l.href })) });
 });

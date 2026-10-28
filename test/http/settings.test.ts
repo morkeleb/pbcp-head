@@ -1,10 +1,9 @@
 // /api/me/settings/*: the owner's settings over the human API, Session only. Producer tokens are minted and revoked
-// here (lib/settings/producers.ts, as the scripts do); the snippets come from lib/settings/snippets.ts.
+// here (lib/settings/producers.ts, as the scripts do); how a producer connects comes from lib/connect.ts.
 
-import { HeadClient } from '@pbcp/client';
+import { curlSnippet, HeadClient, producerConfig } from '@pbcp/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mintProducerToken } from '../../lib/auth/producer';
-import { snippets, TOKEN_PLACEHOLDER } from '../../lib/settings/snippets';
 import { card, cardPath } from './cards';
 import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
@@ -72,35 +71,35 @@ describe('producer tokens', () => {
   });
 });
 
-describe('connect a producer: snippets', () => {
-  it('fills curl, n8n and Hermes with the head URL, the owner id and the root; the route leaves a placeholder for the token', async () => {
-    const r = await me('GET', '/api/me/settings/snippets?root=n8n');
+describe('connect a producer', () => {
+  it('gives the three values and a curl from @pbcp/client with the api, owner and <token>, and each connector’s setup', async () => {
+    const r = await me('GET', '/api/me/settings/snippets');
     expect(r.status).toBe(200);
-    expect(r.body.token).toBe(TOKEN_PLACEHOLDER);
-    for (const key of ['curl', 'n8n', 'hermes'] as const) {
-      expect(r.body[key], key).toContain(`${headUrl()}/api`);
-      expect(r.body[key], key).toContain(TOKEN_PLACEHOLDER);
-    }
-    expect(r.body.curl).toContain(`"to_person": "${OWNER}"`);
-    expect(r.body.curl).toContain(`PUT "${headUrl()}/api/cards/n8n:hello:first"`);
-    const node = JSON.parse(r.body.n8n).nodes[0];
-    expect(node).toMatchObject({ type: 'n8n-nodes-base.httpRequest', parameters: { method: 'PUT' } });
-    expect(node.parameters.url).toBe(`=${headUrl()}/api/cards/n8n:daily:{{ $now.toFormat('yyyy-MM-dd') }}`);
-    expect(node.parameters.headerParameters.parameters[0]).toEqual({ name: 'Authorization', value: `Bearer ${TOKEN_PLACEHOLDER}` });
-    expect(node.parameters.jsonBody).toContain(`"to_person": "${OWNER}"`);
-    expect(r.body.hermes).toContain(`export PBCP_HEAD_URL=${headUrl()}/api`);
-    expect(r.body.hermes).toContain('"args": [\n');
-    expect(r.body.hermes).toContain('@pbcp/mcp');
+    const api = `${headUrl()}/api`;
+    expect(r.body).toMatchObject({ api, owner: OWNER, token: '<token>', curl_root: 'hermes' });
+    expect(r.body.config).toEqual(producerConfig({ api, owner: OWNER, token: '<token>' }));
+    expect(r.body.curl).toBe(curlSnippet({ api, owner: OWNER, token: '<token>' }));
+    expect(r.body.connectors.map((c: { name: string }) => c.name)).toEqual(['hermes', 'n8n', 'imap', 'caldav', 'todoist', 'goalpath']);
+    expect(r.body.connectors[1].url).toBe('https://github.com/morkeleb/pbcp/blob/main/connectors/n8n/README.md#setup');
+    // For a token of another root, the curl's card is under that root.
+    const n8n = (await me('GET', '/api/me/settings/snippets?root=n8n')).body;
+    expect(n8n.curl_root).toBe('n8n');
+    expect(n8n.curl).toContain(`/cards/${encodeURIComponent('n8n:hello:first')}`);
+    expect(n8n.curl).toContain('"title": "Hello from n8n"');
     expect((await me('GET', '/api/me/settings/snippets?root=a:b')).status).toBe(400);
   });
 
-  it('gives a curl snippet that, run with a real token, stores its card', async () => {
-    const { token } = (await me('POST', '/api/me/settings/producers', { root: 'shell' })).body;
-    const s = snippets({ url: `${headUrl()}/api`, owner: OWNER, root: 'shell', token });
-    const body = s.curl.slice(s.curl.indexOf('{'), s.curl.lastIndexOf('}') + 1).replace('$(date -u +%Y-%m-%dT%H:%M:%SZ)', '2026-10-07T09:00:00Z');
-    const url = /PUT "([^"]+)"/.exec(s.curl)![1]!;
-    const res = await fetch(url, { method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body });
-    expect(res.status).toBe(201);
+  it('gives a curl that, run with the token just minted, stores its card: for the §3 example’s root and for another', async () => {
+    for (const root of ['hermes', 'shell']) {
+      const { token } = (await me('POST', '/api/me/settings/producers', { root })).body;
+      const { curl } = (await me('GET', `/api/me/settings/snippets${root === 'hermes' ? '' : `?root=${root}`}`)).body;
+      const filled = (curl as string).split('<token>').join(token);
+      const url = /^curl -s -X PUT '([^']+)'/.exec(filled)![1]!;
+      const auth = /-H 'Authorization: ([^']+)'/.exec(filled)![1]!;
+      const body = filled.slice(filled.indexOf("<<'CARD'\n") + 8, filled.lastIndexOf('\nCARD'));
+      const res = await fetch(url, { method: 'PUT', headers: { authorization: auth, 'content-type': 'application/json' }, body });
+      expect(res.status, root).toBe(201);
+    }
   });
 });
 

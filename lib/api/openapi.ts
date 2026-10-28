@@ -201,8 +201,8 @@ const PATHS: Record<string, Record<string, Json>> = {
   },
   '/api/me/settings/snippets': {
     get: operation('connectSnippets', {
-      summary: 'Ready-to-paste ways to connect a producer: curl, n8n, Hermes',
-      parameters: [{ name: 'root', in: 'query', description: 'The producer root to fill in (default my-producer)', schema: { type: 'string' } }],
+      summary: 'How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup',
+      parameters: [{ name: 'root', in: 'query', description: 'The root of the token just minted: the curl’s card goes under it (default: the §3 example, root hermes)', schema: { type: 'string' } }],
       ok: ok(S.ConnectSnippets),
       errors: [400, 401],
     }),

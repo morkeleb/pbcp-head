@@ -98,7 +98,7 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | `GET /api/me/settings/head` | Owner id, the head URL a producer is given (origin + `/api`), protocol, extensions, mermaid tiers (§7.5) | Settings → This head |
 | `GET`/`POST /api/me/settings/producers`, `PATCH`/`DELETE …/{id}` | Live producer tokens (root, created, last used, ceiling); mint one (shown once, 409 when the root has a live token); set its producer's ceiling; revoke it | Settings → Producers |
 | `GET /api/me/settings/labels`, `PATCH …/{label}` | Labels with counts and the owner's ceiling on each (§9) | Settings → Producers |
-| `GET /api/me/settings/snippets?root=` | curl, n8n and Hermes snippets with this head's URL and owner id and a token placeholder (`lib/settings/snippets.ts`) | Settings → Connect a producer |
+| `GET /api/me/settings/snippets?root=` | The three values (`producerConfig`) and a curl (`curlSnippet`, @pbcp/client) with this head's api and owner id and `<token>`, the curl's card under `root`; links to each connector's README Setup (`lib/connect.ts`, as `/connect` and `/llms.txt`, which are public) | Settings → Connect a producer |
 | `GET /api/me/settings/devices`, `DELETE …/{id}`; `POST /api/me/settings/enrolment` | Devices, signing one out, a one-hour enrolment link for another | Settings → Devices |
 | `GET /api/me/settings` / `PATCH` | Head id, display name, effective timezone and its override | Settings. Every `/api/me` request may send `X-Timezone: <IANA zone>`; the head follows the device most recently seen unless the override is set |
 | `POST /api/me/devices/{id}/push` | Registers or clears an APNs/FCM token | See Push |

@@ -3591,7 +3591,7 @@ public struct Client: APIProtocol {
             }
         )
     }
-    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    /// How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup
     ///
     /// - Remark: HTTP `GET /api/me/settings/snippets`.
     /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.

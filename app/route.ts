@@ -8,6 +8,7 @@ import { authenticateProducer, bearerToken } from '../lib/auth/producer';
 import { describeHead } from '../lib/describe';
 import { defaultHead } from '../lib/heads';
 import { handle, HttpError, json } from '../lib/http';
+import { headOrigin, producerUrl } from '../lib/settings/head';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,6 @@ export function GET(req: Request): Promise<Response> {
     const owner = bearerToken(req) !== null ? (await authenticateProducer(db(), req)).headId : await defaultHead(db());
     if (owner === null) throw new HttpError(404, 'no_head', 'this deployment serves no single head; send a producer token');
     const [counter] = await db().select({ seq: changeCounter.seq }).from(changeCounter).where(eq(changeCounter.headId, owner));
-    return json(describeHead(owner, counter?.seq ?? 0), 200, { vary: 'Accept' });
+    return json(describeHead(owner, counter?.seq ?? 0, producerUrl(headOrigin(req.url))), 200, { vary: 'Accept' });
   });
 }

@@ -4,13 +4,11 @@
 // /api/me/settings for the timezone), so the phone does the same. In order: this head, producers (tokens, ceilings,
 // label ceilings), connecting a producer, devices, and this device's preferences.
 
-import { Check, Copy } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { SNIPPET_TABS, TOKEN_PLACEHOLDER, type Snippets } from '../../../lib/settings/snippets';
 import type { Density } from '../brief/DecisionCard';
+import { Copyable } from '../copy';
 import { PageRow, savedTheme, setTheme, useChrome, type ThemeChoice } from '../chrome';
 import { api, OfflineError, saveTokens, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred } from '../components';
@@ -63,40 +61,6 @@ function Section({ id, title, children, intro }: { id: string; title: string; in
   );
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [done, setDone] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setDone(true);
-      setTimeout(() => setDone(false), 1500);
-    } catch {
-      // no clipboard (an insecure origin, a denied permission): the text is selectable
-    }
-  };
-  return (
-    <Button variant="ghost" size="icon-xs" aria-label={done ? `Copied ${label}` : `Copy ${label}`} onClick={() => void copy()} data-copy={label}>
-      {done ? <Check /> : <Copy />}
-    </Button>
-  );
-}
-
-/** A value shown whole, selectable, with a copy control. */
-function Copyable({ text, label, block = false, wrap = false }: { text: string; label: string; block?: boolean; wrap?: boolean }) {
-  return block ? (
-    <div className="relative rounded-md border bg-inset">
-      {/* A token or a link wraps, whole and selectable; a snippet keeps its lines and scrolls. */}
-      <pre className={cn('p-3 pr-10 text-[12px] leading-relaxed', wrap ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto')} data-snippet={label}>{text}</pre>
-      <div className="absolute right-1.5 top-1.5"><CopyButton text={text} label={label} /></div>
-    </div>
-  ) : (
-    <span className="flex min-w-0 items-center gap-1">
-      <code className="min-w-0 truncate text-body" data-value={label}>{text}</code>
-      <CopyButton text={text} label={label} />
-    </span>
-  );
-}
-
 // --- 1. this head --------------------------------------------------------------------------------------------
 
 function ThisHead() {
@@ -113,7 +77,7 @@ function ThisHead() {
             {rows.map(([k, v, label]) => (
               <tr key={k}>
                 <th scope="row" className="w-28 py-2 pr-3 text-left align-middle font-normal text-muted-foreground">{k}</th>
-                <td className="max-w-0 py-2"><Copyable text={v} label={label} /></td>
+                <td className="max-w-0 py-2"><Copyable text={v} label={label} wrap /></td>
               </tr>
             ))}
           </tbody>
@@ -256,29 +220,62 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
 
 // --- 3. connect a producer -------------------------------------------------------------------------------------
 
+interface Connection {
+  api: string;
+  owner: string;
+  token: string;
+  config: Record<string, string>;
+  curl: string;
+  curl_root: string;
+  connectors: Array<{ name: string; url: string }>;
+}
+
+/**
+ * The three values a producer needs and a curl that PUTs a card (@pbcp/client's producerConfig and curlSnippet, served
+ * by /api/me/settings/snippets), for the token just minted; each connector's own setup is in its README, by link. The
+ * curl's card is under the minted root, so the command works with that token; with none minted, the §3 example
+ * (root hermes) and the placeholder.
+ */
 function Connect({ minted }: { minted: { root: string; token: string } | null }) {
-  const [s, setS] = useState<(Snippets & { token: string }) | null>(null);
-  const root = minted?.root ?? 'my-producer';
+  const [c, setC] = useState<Connection | null>(null);
   useEffect(() => {
-    void api<Snippets & { token: string }>(`/api/me/settings/snippets?root=${encodeURIComponent(root)}`).then((r) => r.status === 200 && setS(r.body));
-  }, [root]);
+    void api<Connection>(`/api/me/settings/snippets${minted ? `?root=${encodeURIComponent(minted.root)}` : ''}`).then((r) => r.status === 200 && setC(r.body));
+  }, [minted]);
   // The token just minted, while this page is open; the placeholder once it has been shown and the page left.
-  const fill = (text: string) => (minted && s ? text.split(s.token).join(minted.token) : text);
+  const fill = (text: string) => (minted && c ? text.split(c.token).join(minted.token) : text);
   return (
-    <Section id="connect" title="Connect a producer" intro={minted ? `Filled in with ${minted.root}’s token.` : `Mint a token above and it is filled in here; until then the snippets say ${TOKEN_PLACEHOLDER}.`}>
-      {!s ? (
+    <Section
+      id="connect"
+      title="Connect a producer"
+      intro={minted ? `Filled in with ${minted.root}’s token.` : `Mint a token above and it is filled in here; until then these say ${c?.token ?? '<token>'}.`}
+    >
+      {!c ? (
         <p className="text-lead text-muted-foreground">Loading…</p>
       ) : (
-        <Tabs defaultValue="curl">
-          <TabsList>
-            {SNIPPET_TABS.map((t) => <TabsTrigger key={t.key} value={t.key} className="px-3 text-control">{t.label}</TabsTrigger>)}
-          </TabsList>
-          {SNIPPET_TABS.map((t) => (
-            <TabsContent key={t.key} value={t.key} className="mt-2">
-              <Copyable text={fill(s[t.key])} label={t.key} block />
-            </TabsContent>
-          ))}
-        </Tabs>
+        <div data-connect>
+          <table className="w-full text-body" data-producer-config>
+            <tbody className="divide-y border-y">
+              {Object.entries(c.config).map(([k, v]) => (
+                <tr key={k}>
+                  <th scope="row" className="w-40 py-2 pr-3 text-left align-middle font-normal"><code className="text-lead text-muted-foreground">{k}</code></th>
+                  <td className="max-w-0 py-2"><Copyable text={fill(v)} label={k} wrap /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="pb-2 pt-4 text-lead text-muted-foreground">
+            A first card with curl. Its id is under the root <code>{c.curl_root}</code>, so it needs a token for that root (§12).
+          </p>
+          <Copyable text={fill(c.curl)} label="curl" block />
+          <p className="pb-1 pt-4 text-lead text-muted-foreground">Each connector’s setup, with these three values:</p>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-body" data-connectors>
+            {c.connectors.map((l) => (
+              <li key={l.name}>
+                <a href={l.url} target="_blank" rel="noopener" className="underline decoration-border underline-offset-2 hover:decoration-foreground">{l.name}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Section>
   );

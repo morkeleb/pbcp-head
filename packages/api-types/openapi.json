@@ -1638,7 +1638,7 @@
     "/api/me/settings/snippets": {
       "get": {
         "operationId": "connectSnippets",
-        "summary": "Ready-to-paste ways to connect a producer: curl, n8n, Hermes",
+        "summary": "How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup",
         "parameters": [
           {
             "$ref": "#/components/parameters/XTimezone"
@@ -1646,7 +1646,7 @@
           {
             "name": "root",
             "in": "query",
-            "description": "The producer root to fill in (default my-producer)",
+            "description": "The root of the token just minted: the curl’s card goes under it (default: the §3 example, root hermes)",
             "schema": {
               "type": "string"
             }
@@ -3796,31 +3796,75 @@
       "ConnectSnippets": {
         "type": "object",
         "properties": {
-          "root": {
+          "api": {
+            "type": "string",
+            "description": "The base URL of the producer operations (§7.5 `api`)"
+          },
+          "owner": {
             "type": "string"
           },
           "token": {
             "type": "string",
-            "description": "The placeholder in the snippets: replace it with a token just minted"
+            "description": "The placeholder in `config` and `curl`: replace it with a token just minted"
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "PBCP_HEAD_URL": {
+                "type": "string"
+              },
+              "PBCP_TO_PERSON": {
+                "type": "string"
+              },
+              "PBCP_TOKEN": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "PBCP_HEAD_URL",
+              "PBCP_TO_PERSON",
+              "PBCP_TOKEN"
+            ],
+            "additionalProperties": false,
+            "description": "`producerConfig` (@pbcp/client): the three values every producer needs"
           },
           "curl": {
-            "type": "string"
-          },
-          "n8n": {
             "type": "string",
-            "description": "An HTTP Request node, as n8n pastes it"
+            "description": "`curlSnippet` (@pbcp/client): a curl that PUTs a card"
           },
-          "hermes": {
+          "curl_root": {
             "type": "string",
-            "description": "The MCP server command, its two variables, and connectors/hermes’s mcp.json"
+            "description": "The root of the curl’s card: its token must be bound to it (§12)"
+          },
+          "connectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Its README’s Setup section in the protocol repository"
+                }
+              },
+              "required": [
+                "name",
+                "url"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
-          "root",
+          "api",
+          "owner",
           "token",
+          "config",
           "curl",
-          "n8n",
-          "hermes"
+          "curl_root",
+          "connectors"
         ],
         "additionalProperties": false
       },
@@ -3859,6 +3903,10 @@
               "mermaid"
             ],
             "additionalProperties": {}
+          },
+          "api": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [

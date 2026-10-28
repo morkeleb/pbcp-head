@@ -302,11 +302,13 @@ export const Enrolment = z.object({
 }).register(responses, { id: 'Enrolment' });
 
 export const ConnectSnippets = z.object({
-  root: z.string(),
-  token: z.string().describe('The placeholder in the snippets: replace it with a token just minted'),
-  curl: z.string(),
-  n8n: z.string().describe('An HTTP Request node, as n8n pastes it'),
-  hermes: z.string().describe('The MCP server command, its two variables, and connectors/hermes’s mcp.json'),
+  api: z.string().describe('The base URL of the producer operations (§7.5 `api`)'),
+  owner: z.string(),
+  token: z.string().describe('The placeholder in `config` and `curl`: replace it with a token just minted'),
+  config: z.object({ PBCP_HEAD_URL: z.string(), PBCP_TO_PERSON: z.string(), PBCP_TOKEN: z.string() }).describe('`producerConfig` (@pbcp/client): the three values every producer needs'),
+  curl: z.string().describe('`curlSnippet` (@pbcp/client): a curl that PUTs a card'),
+  curl_root: z.string().describe('The root of the curl’s card: its token must be bound to it (§12)'),
+  connectors: z.array(z.object({ name: z.string(), url: z.string().describe('Its README’s Setup section in the protocol repository') })),
 }).register(responses, { id: 'ConnectSnippets' });
 
 // --- GET / ----------------------------------------------------------------------------------------------

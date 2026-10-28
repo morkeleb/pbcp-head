@@ -70,7 +70,10 @@ function withoutPresentation(calls: Call[]): Call[] {
   return calls.map((c) =>
     c.op === 'order' && c.body && typeof c.body === 'object'
       ? { ...c, body: Object.fromEntries(Object.entries(c.body).filter(([k]) => !PRESENTATION.includes(k))) }
-      : c,
+      : // §7.5: `api` is a head's MAY (where it serves the producer operations); the in-process head serves them in place.
+        c.op === 'describe' && c.body && typeof c.body === 'object'
+        ? { ...c, body: Object.fromEntries(Object.entries(c.body).filter(([k]) => k !== 'api')) }
+        : c,
   );
 }
 

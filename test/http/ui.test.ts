@@ -801,8 +801,21 @@ describe('settings', () => {
     await page.reload({ waitUntil: 'networkidle0' });
     expect(await page.$('[data-minted]')).toBeNull();
     expect(await page.content()).not.toContain(token); // never shown again
-    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toContain('<producer token>');
+    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toContain('<token>');
     expect(errors).toEqual([]);
+  });
+
+  it('shows the same curl as /connect, with the token just minted in place of <token>', async () => {
+    await page.goto(`${headUrl()}/connect`, { waitUntil: 'networkidle0' });
+    const pub = (await page.$eval('[data-snippet="curl"]', (c) => c.textContent))!;
+    expect(pub).toContain('Bearer <token>');
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    await page.type('input[aria-label="New producer’s root"]', 'hermes'); // the §3 example's root: the same card
+    await (await page.$('xpath/.//button[.="New producer"]'))!.click();
+    const token = (await (await page.waitForSelector('[data-minted] [data-snippet="token"]'))!.evaluate((t) => t.textContent))!;
+    await page.waitForFunction((t) => document.querySelector('[data-snippet="curl"]')?.textContent?.includes(t), {}, token);
+    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toBe(pub.split('<token>').join(token));
+    expect(await page.$eval('[data-value="PBCP_TOKEN"]', (c) => c.textContent)).toBe(token);
   });
 });
 

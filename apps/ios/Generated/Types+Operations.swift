@@ -7455,7 +7455,7 @@ public enum Operations {
             }
         }
     }
-    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    /// How a producer connects: the three values, a curl that PUTs a card, and each connector’s setup
     ///
     /// - Remark: HTTP `GET /api/me/settings/snippets`.
     /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
@@ -7464,14 +7464,14 @@ public enum Operations {
         public struct Input: Sendable, Hashable {
             /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/query`.
             public struct Query: Sendable, Hashable {
-                /// The producer root to fill in (default my-producer)
+                /// The root of the token just minted: the curl’s card goes under it (default: the §3 example, root hermes)
                 ///
                 /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/query/root`.
                 public var root: Swift.String?
                 /// Creates a new `Query`.
                 ///
                 /// - Parameters:
-                ///   - root: The producer root to fill in (default my-producer)
+                ///   - root: The root of the token just minted: the curl’s card goes under it (default: the §3 example, root hermes)
                 public init(root: Swift.String? = nil) {
                     self.root = root
                 }
