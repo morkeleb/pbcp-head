@@ -140,47 +140,37 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
       ) : tokens.length === 0 ? (
         <p className="text-lead text-muted-foreground">No producer has a token yet.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-body" data-producer-tokens>
-            <thead>
-              <tr className="text-left text-meta uppercase tracking-meta text-muted-foreground">
-                <th className="pb-1 pr-3 font-normal">Root</th>
-                <th className="pb-1 pr-3 font-normal">Created</th>
-                <th className="pb-1 pr-3 font-normal">Last used</th>
-                <th className="pb-1 pr-3 font-normal">Ceiling</th>
-                <th className="pb-1 font-normal"><span className="sr-only">Revoke</span></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y border-y">
-              {tokens.map((t) => (
-                <tr key={t.id} data-token={t.root}>
-                  <td className="py-2 pr-3 font-medium">
-                    {t.root}{t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}
-                    {t.paired && (
-                      <span className="block text-lead font-normal text-muted-foreground" data-paired>
-                        paired{t.paired.name ? ` · ${t.paired.name}` : ''} · {when(t.paired.at)}{t.paired.address ? ` · ${t.paired.address}` : ''}
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{when(t.created_at)}</td>
-                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{t.last_used_at ? when(t.last_used_at) : 'never'}</td>
-                  <td className="py-2 pr-3">
-                    <select aria-label={`Ceiling for ${t.root}`} className={field} value={t.ceiling} disabled={!online}
-                      onChange={(e) => void act(() => call(`/api/me/settings/producers/${t.id}`, 'PATCH', { ceiling: e.target.value }))}>
-                      {URGENCIES.map((u) => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </td>
-                  <td className="py-2 text-right">
-                    <Button size="xs" variant="ghost" className="text-destructive" disabled={!online || deferred.pending}
-                      onClick={() => deferred.schedule(`Revoking ${t.root}’s token`, () => void act(() => call(`/api/me/settings/producers/${t.id}`, 'DELETE')))}>
-                      Revoke
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        // Rows that wrap rather than a table: at a phone's width a table squeezed the root to a letter a line.
+        <ul className="divide-y border-y text-body" data-producer-tokens>
+          {tokens.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-token={t.root}>
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="font-medium" data-root>
+                  {t.root}{t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}
+                </p>
+                {t.paired && (
+                  <p className="text-lead text-muted-foreground" data-paired>
+                    paired{t.paired.name ? ` · ${t.paired.name}` : ''} · {when(t.paired.at)}{t.paired.address ? ` · ${t.paired.address}` : ''}
+                  </p>
+                )}
+                <p className="text-lead text-muted-foreground">
+                  created {when(t.created_at)} · last used {t.last_used_at ? when(t.last_used_at) : 'never'}
+                </p>
+              </div>
+              <label className="flex items-center gap-2">
+                <span className="text-meta uppercase tracking-meta text-muted-foreground">Ceiling</span>
+                <select aria-label={`Ceiling for ${t.root}`} className={field} value={t.ceiling} disabled={!online}
+                  onChange={(e) => void act(() => call(`/api/me/settings/producers/${t.id}`, 'PATCH', { ceiling: e.target.value }))}>
+                  {URGENCIES.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </label>
+              <Button size="xs" variant="ghost" className="ml-auto text-destructive" disabled={!online || deferred.pending}
+                onClick={() => deferred.schedule(`Revoking ${t.root}’s token`, () => void act(() => call(`/api/me/settings/producers/${t.id}`, 'DELETE')))}>
+                Revoke
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <form className="mt-3 flex flex-wrap items-start gap-2" onSubmit={(e) => { e.preventDefault(); if (valid) void mint(); }} data-new-producer>
@@ -406,31 +396,22 @@ function Devices({ onError }: { onError: (e: unknown) => void }) {
       {devices === null ? (
         <p className="text-lead text-muted-foreground">Loading…</p>
       ) : (
-        <table className="w-full text-body" data-devices>
-          <thead>
-            <tr className="text-left text-meta uppercase tracking-meta text-muted-foreground">
-              <th className="pb-1 pr-3 font-normal">Name</th>
-              <th className="pb-1 pr-3 font-normal">Platform</th>
-              <th className="pb-1 pr-3 font-normal">Last seen</th>
-              <th className="pb-1 font-normal"><span className="sr-only">Sign out</span></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y border-y">
-            {devices.map((d) => (
-              <tr key={d.id} data-device={d.id}>
-                <td className="py-2 pr-3">
+        <ul className="divide-y border-y text-body" data-devices>
+          {devices.map((d) => (
+            <li key={d.id} className="flex items-center gap-3 py-2" data-device={d.id}>
+              <div className="min-w-0 flex-1">
+                <p>
                   {d.name ?? 'Unnamed device'}
-                  {d.current && <span className="ml-2 rounded-full border px-1.5 text-meta text-muted-foreground" data-this-device>this device</span>}
-                </td>
-                <td className="py-2 pr-3 text-muted-foreground">{d.platform === 'mcp' ? 'assistant' : d.platform}</td>
-                <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{d.last_seen_at ? when(d.last_seen_at) : '—'}</td>
-                <td className="py-2 text-right">
-                  <Button size="xs" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void signOut(d)}>Sign out</Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {d.current && <span className="ml-2 whitespace-nowrap rounded-full border px-1.5 text-meta text-muted-foreground" data-this-device>this device</span>}
+                </p>
+                <p className="text-lead text-muted-foreground">
+                  {d.platform === 'mcp' ? 'assistant' : d.platform} · last seen {d.last_seen_at ? when(d.last_seen_at) : '—'}
+                </p>
+              </div>
+              <Button size="xs" variant="ghost" className="shrink-0 text-muted-foreground" disabled={!online} onClick={() => void signOut(d)}>Sign out</Button>
+            </li>
+          ))}
+        </ul>
       )}
       <div className="mt-3">
         <Button size="sm" variant="outline" disabled={!online} onClick={() => void enrol()}>Enrol another device</Button>
