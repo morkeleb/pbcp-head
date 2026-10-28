@@ -218,6 +218,7 @@ function PagesMenu() {
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild><Link href="/brief">Brief</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/orders">Orders</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/settings/ceilings">Ceilings</Link></DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

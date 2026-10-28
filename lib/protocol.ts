@@ -6,9 +6,9 @@ import {
   acknowledge, CARD_LIMIT_BYTES, checkOutcome, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
   snooze, submit, unsnooze, type Card, type Decision, type Urgency,
 } from '@pbcp/core';
-import { and, asc, eq, gt, max, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, max, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { cards, decisionLog } from '../db/schema';
+import { cards, decisionLog, labelCeilings } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
 import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
@@ -53,8 +53,10 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
   return writeTx(db, ctx.headId, async (tx) => {
     const stored = await load(tx, ctx.headId, incoming.id);
     const target = incoming.supersedes === undefined ? null : await load(tx, ctx.headId, incoming.supersedes);
-    // §9: core clamps the stored content's `delivery` to the producer's ceiling; `urgency` stays as sent.
-    const r = submit(stored?.card ?? null, incoming, now(), target?.card ?? null, ctx.ceiling);
+    // §9: core clamps the stored content's `delivery` to the ceiling; `urgency` stays as sent. The ceiling is the
+    // producer's, lowered by any the owner set on the card's labels: a card under both takes the lower.
+    const ceiling = await ceilingFor(tx, ctx.headId, ctx.ceiling, incoming.labels ?? []);
+    const r = submit(stored?.card ?? null, incoming, now(), target?.card ?? null, ceiling);
     let card = r.card;
     for (const c of r.changed) {
       const saved = await persist(tx, ctx.headId, c);
@@ -64,6 +66,18 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
     if (r.changed.length > 0 && ordered !== undefined) await applyOutcomeInTx(tx, ctx.headId, incoming, ordered);
     return { status: r.status, card };
   });
+}
+
+const URGENCY_ORDER: Urgency[] = ['log', 'brief', 'immediate'];
+
+/** The lowest of the producer's ceiling and the owner's ceilings on any of `labels` (§9). */
+export async function ceilingFor(tx: Tx, headId: string, producer: Urgency, labels: readonly string[]): Promise<Urgency> {
+  if (labels.length === 0) return producer;
+  const rows = await tx
+    .select({ ceiling: labelCeilings.ceiling })
+    .from(labelCeilings)
+    .where(and(eq(labelCeilings.headId, headId), inArray(labelCeilings.label, [...labels])));
+  return [producer, ...rows.map((r) => r.ceiling as Urgency)].reduce((low, c) => (URGENCY_ORDER.indexOf(c) < URGENCY_ORDER.indexOf(low) ? c : low));
 }
 
 // --- sync (§7.2) ------------------------------------------------------------

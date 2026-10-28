@@ -2,6 +2,7 @@
 
 import { ArrowUpRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import type { ParagraphParts } from '../../lib/brief/paragraph';
 import { api, OfflineError, when } from './client';
 
 // --- types: the /api/me card shape ----------------------------------------------------
@@ -48,6 +49,14 @@ export interface MeCard {
   lead_source?: 'summary' | 'body';
   /** The lead as safe inline HTML, rendered by the head (a summary escaped and cut at 280 characters). */
   rendered_lead?: string;
+  /** RFC 0.7 §4.1: the producer's categories, in its order; shown on the card and filtered by. */
+  labels?: string[];
+  /** RFC 0.7 §4.1: the local day the card concerns. */
+  about?: string;
+  /** §8 the card's day, from the head: `about`, else the day it was received in the head's timezone. */
+  day?: string;
+  /** On a `head:daily` card: its paragraph in parts, for the label filter. */
+  paragraph?: ParagraphParts;
 }
 
 // --- offline ---------------------------------------------------------------------------
@@ -123,6 +132,22 @@ export function sourceLink(source: MeCard['source']): { href: string; label: str
 }
 
 /**
+ * A card's labels on its header line (RFC 0.7 §4.1: a head MUST show them on the card), in the producer's order, as
+ * plain text in the producer name's type: no colours, no grouping (§8). They truncate after the source's label and
+ * before the producer. `first`: the first only (the ledger line).
+ */
+export function CardLabels({ labels, first = false }: { labels?: string[]; first?: boolean }) {
+  const shown = first ? (labels ?? []).slice(0, 1) : (labels ?? []);
+  if (shown.length === 0) return null;
+  return (
+    <>
+      <span aria-hidden>·</span>
+      <span className="min-w-0 truncate" data-labels aria-label={`Labels: ${shown.join(', ')}`}>{shown.join(' · ')}</span>
+    </>
+  );
+}
+
+/**
  * The source on a card's header line, "label · host ↗", opening in a new tab. The label is the producer's display
  * text; the host is where the link goes, which the producer does not control (§12: a head SHOULD show the destination
  * hostname beside a link and treat source.label as untrusted). When the line is too narrow for both, the label goes
@@ -132,16 +157,30 @@ export function sourceLink(source: MeCard['source']): { href: string; label: str
  */
 export function SourceLink({ source, className }: { source: MeCard['source']; className?: string }) {
   const link = sourceLink(source);
+  // The link gives up its label before anything else gives way: its minimum width is its host's, measured once it is
+  // laid out (CSS has no "no narrower than this child"). With shrink-[1000] it gives way first on a header line, before the labels
+  // (CardLabels) and the producer.
+  const fit = useCallback((a: HTMLAnchorElement | null) => {
+    // The host's full width (scrollWidth: whole even when it is laid out truncated) and the arrow beside it.
+    const host = a?.querySelector<HTMLElement>('[data-source-host]');
+    const text = host?.firstElementChild as HTMLElement | null | undefined;
+    if (!a || !host || !text) return;
+    const arrow = host.lastElementChild!.getBoundingClientRect().width;
+    // Never more than 40% of the line, though: on a line too narrow even for producer, time and host, the host
+    // truncates last.
+    a.style.minWidth = `min(${Math.ceil(text.scrollWidth + arrow + parseFloat(getComputedStyle(host).columnGap || '0'))}px, 40%)`;
+  }, []);
   if (!link) return null;
   return (
     <a
+      ref={fit}
       href={link.href}
       target="_blank"
       rel="noopener"
       title={link.host}
       aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`}
       data-source
-      className={`flex h-[1lh] min-w-0 flex-row-reverse flex-wrap items-center justify-end overflow-hidden normal-case tracking-normal hover:text-foreground hover:underline ${className ?? ''}`}
+      className={`flex h-[1lh] min-w-0 shrink-[1000] flex-row-reverse flex-wrap items-center justify-end overflow-hidden normal-case tracking-normal hover:text-foreground hover:underline ${className ?? ''}`}
     >
       <span className="flex min-w-0 items-center gap-0.5" data-source-host>
         <span className="truncate">{link.host}</span>

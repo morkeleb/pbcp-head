@@ -27,7 +27,7 @@ export async function resetHead(owner = OWNER): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
       await testDb().execute(
-        sql`truncate decision_log, devices, identities, cards, producer_tokens, change_counter, heads, diagrams, rate_limits restart identity`,
+        sql`truncate decision_log, devices, identities, cards, label_ceilings, producer_tokens, change_counter, heads, diagrams, rate_limits restart identity`,
       );
       break;
     } catch (e) {

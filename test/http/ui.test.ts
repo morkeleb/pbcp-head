@@ -113,13 +113,16 @@ describe('web brief', () => {
 
   it('at 360 px keeps the header on one line by dropping the source’s label, never its host, and never touching the title', async () => {
     const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
-    const label = 'A very long label for the upstream issue tracker entry, longer than any phone';
-    await call('PUT', cardPath('goalpath:item:3:long'), { auth: goalpath, body: card('goalpath:item:3:long', { title: 'Ship the export?', source: { url: 'https://goalpath.example/3', label } }) });
+    const label = 'A long label for the upstream tracker entry';
+    await call('PUT', cardPath('goalpath:item:3:long'), { auth: goalpath, body: card('goalpath:item:3:long', { title: 'Ship the export?', labels: ['billing-revamp'], source: { url: 'https://gp.example/3', label } }) });
     await page.setViewport({ width: 360, height: 780 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const article = (await decisionCard('Ship the export?'))!;
     const shown = await shownSource('article[data-card="goalpath:item:3:long"]');
-    expect(shown.shown).toEqual(['goalpath.example']);
+    expect(shown.shown).toEqual(['gp.example']);
+    // The host is whole: the labels truncate before it does (RFC 0.7 §4.1 on the same line).
+    expect(await article.$eval('[data-source-host] span', (t) => t.scrollWidth <= t.clientWidth)).toBe(true);
+    expect(await article.$eval('[data-labels]', (l) => l.scrollWidth > l.clientWidth)).toBe(true);
     expect(shown.lineHeight).toBeLessThan(24); // one line
     expect(await article.$eval('[data-source]', (a) => a.getBoundingClientRect().right <= a.parentElement!.getBoundingClientRect().right + 1)).toBe(true);
     expect(await article.$eval('h3', (h) => h.textContent)).toBe('Ship the export?'); // the title whole
@@ -574,6 +577,95 @@ describe('the brief: days, week strip, layouts', () => {
     await page.keyboard.press('d');
     await page.waitForSelector('.toast');
     await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 8000);
+  });
+});
+
+describe('labels and a card’s day (RFC 0.7)', () => {
+  async function seed() {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', ceiling: 'immediate' })}`;
+    const put = (id: string, extra: Record<string, unknown>) => call('PUT', cardPath(id), { auth: hermes, body: card(id, extra) });
+    await put('hermes:x:alpha-d', { title: 'Alpha decision', summary: 'About alpha.', labels: ['alpha', 'zeta'] });
+    await put('hermes:x:beta-d', { title: 'Beta decision', summary: 'About beta.', labels: ['beta'] });
+    await put('hermes:x:alpha-u', { kind: 'artifact', title: 'Alpha update', summary: 'An alpha report.', labels: ['alpha'] });
+    await put('hermes:x:beta-s', { kind: 'signal', title: 'Beta signal', summary: 'A beta alert.', labels: ['beta'] });
+  }
+  const titles = (sel: string) => page.$$eval(sel, (as) => as.map((a) => a.querySelector('h3, h4')?.textContent?.trim() ?? ''));
+  const today = () => page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]');
+
+  it('shows labels on the card header in the producer’s order, the ledger the first only', async () => {
+    await seed();
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.textContent)).toBe('alpha · zeta');
+    expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.parentElement!.textContent)).toMatch(/^hermes·alpha · zeta/i);
+    await page.evaluate(() => localStorage.setItem('pbcp.density', 'ledger'));
+    await page.reload({ waitUntil: 'networkidle0' });
+    expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.textContent)).toBe(' · alpha');
+  });
+
+  it('filters by label: decisions, updates, signals and the daily paragraph all narrow; remembered on the device; cleared', async () => {
+    await seed();
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const section = (await today())!;
+    expect(await section.$$eval('[data-card]', (cs) => cs.length)).toBeGreaterThanOrEqual(5); // goalpath's two + the four above
+    // The filter lists the labels on the loaded days, with counts.
+    await (await page.$('[data-label-filter] button'))!.click();
+    await page.waitForSelector('[data-label="alpha"]');
+    expect(await page.$$eval('[role="menuitemcheckbox"][data-label]', (is) => is.map((i) => i.textContent))).toEqual(['alpha2', 'beta2', 'zeta1']);
+    await (await page.$('[data-label="alpha"]'))!.click();
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('article[data-card="hermes:x:beta-d"]'));
+
+    const shown = async () => ({
+      decisions: await titles('section[data-section] article[data-kind="decision"]'),
+      rows: await titles('section[data-section] article.update-row'),
+      paragraph: await page.$eval('.daily-paragraph', (p) => [...p.querySelectorAll('a')].map((a) => a.textContent)),
+      text: await page.$eval('.daily-paragraph', (p) => p.textContent),
+    });
+    let s = await shown();
+    expect(s.decisions).toEqual(['Alpha decision']);
+    expect(s.rows).toEqual(['Alpha update']);
+    expect(s.paragraph).toEqual(['Alpha decision']); // the paragraph keeps only alpha's entries
+    expect(s.text).toMatch(/^1 decision: Alpha decision — About alpha\.$/);
+    expect(await page.$eval('[data-label-chip]', (c) => c.textContent)).toBe('alpha');
+
+    // Remembered on this device.
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-label-chip]');
+    s = await shown();
+    expect(s.decisions).toEqual(['Alpha decision']);
+
+    // Two labels: either.
+    await (await page.$('[data-label-filter] button'))!.click();
+    await (await page.waitForSelector('[data-label="beta"]'))!.click();
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('article[data-card="hermes:x:beta-s"]');
+    s = await shown();
+    expect(s.decisions.sort()).toEqual(['Alpha decision', 'Beta decision']);
+    expect(s.rows.sort()).toEqual(['Alpha update', 'Beta signal']);
+    expect(await page.$eval('[data-label-chip]', (c) => c.textContent)).toBe('alpha +1');
+
+    // Cleared: everything back.
+    await (await page.$('[data-label-clear]'))!.click();
+    await page.waitForSelector('article[data-card="goalpath:item:1:ship"]');
+    expect(await page.$('[data-label-chip]')).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('pbcp.labels'))).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('puts a card about tomorrow under Tomorrow, and marks a decision about a later day under today with its day', async () => {
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
+    await call('PUT', cardPath('cal:x:agenda'), { auth: cal, body: card('cal:x:agenda', { producer: 'cal', kind: 'artifact', title: 'Tomorrow’s agenda', about: day(1) }) });
+    await call('PUT', cardPath('cal:x:table'), { auth: cal, body: card('cal:x:table', { producer: 'cal', title: 'Keep the table?', about: day(3) }) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const tomorrow = (await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]'))!;
+    expect(await titles('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]//article')).toEqual(['Tomorrow’s agenda']);
+    expect(tomorrow).not.toBeNull();
+    const today = await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]//article[@data-card="cal:x:table"]');
+    const label = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${day(3)}T00:00:00Z`));
+    const p = (t: string) => label.find((x) => x.type === t)!.value;
+    expect(await today!.$eval('[data-for-day]', (f) => f.textContent)).toBe(`· for ${p('weekday')} ${p('day')} ${p('month')}`);
+    expect(await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]//article[@data-card="cal:x:agenda"]')).toBeNull();
   });
 });
 

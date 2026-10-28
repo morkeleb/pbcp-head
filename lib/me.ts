@@ -10,8 +10,9 @@ import { iso, now } from './clock';
 import { HttpError } from './http';
 import { expireDueOrders } from './orders';
 import { currentFold } from './brief/fold-version';
+import { composeParagraph, type ParagraphParts } from './brief/paragraph';
 import { dailyParagraphNow } from './brief/nightly';
-import { renderBody, renderCard, renderSource, type RenderMeta } from './render';
+import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
@@ -30,6 +31,10 @@ export type MeCard = Card & {
   order_outcome?: 'applied' | 'stale';
   rendered_actions?: Record<string, string>;
   first_visual?: Visual;
+  /** §8 the card's day: its `about`, else the day of received_at in the head's timezone (YYYY-MM-DD). */
+  day: string;
+  /** On a `head:daily` card: its paragraph in parts, each entry with its card's labels, for filtering (lib/brief/paragraph.ts). */
+  paragraph?: ParagraphParts;
 };
 
 /** A card for the owner: renders it first if its stored render is missing or stale (§3.1, render on receipt). */
@@ -53,6 +58,8 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       ...(actions && Object.keys(actions).length > 0 ? { rendered_actions: actions } : {}),
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
+      day: row.day,
+      ...(row.renderedParagraph ? { paragraph: row.renderedParagraph as ParagraphParts } : {}),
     });
   }
   return out;
@@ -135,7 +142,6 @@ export async function brief(db: Db, headId: string) {
   await expireDueOrders(db, headId); // A.2: lapsed leases are visible as lapsed before the brief reads them
   const at = new Date(now());
   const today = localDate(at, head.timezone);
-  const [start] = dayRange(today, head.timezone);
   const seq = await counter(db, headId);
 
   const [daily] = await db
@@ -162,7 +168,7 @@ export async function brief(db: Db, headId: string) {
         sql`${cards.producerDoc}->>'kind' in ('artifact', 'signal')`,
         inArray(cards.delivery, ['brief', 'immediate']),
         ne(cards.producer, 'head'),
-        gte(cards.receivedAt, start),
+        eq(cards.day, today), // §8: today's cards are those whose day is today, `about` or received
         notSnoozed(at),
       ),
     )
@@ -218,7 +224,7 @@ export async function brief(db: Db, headId: string) {
     .orderBy(desc(cards.changeSeq))
     .limit(50);
 
-  // Tomorrow: cards snoozed until then, and cards about that day (`thread: day-<date>`, the calendar's agenda).
+  // Tomorrow: cards snoozed until then, and cards whose day is tomorrow (§8: their `about`, the calendar's agenda).
   const tomorrow = addDays(today, 1);
   const [tStart, tEnd] = dayRange(tomorrow, head.timezone);
   const ahead = await db
@@ -228,25 +234,27 @@ export async function brief(db: Db, headId: string) {
       and(
         eq(cards.headId, headId),
         eq(cards.state, 'open'),
-        or(and(gte(cards.snoozedUntil, tStart), lt(cards.snoozedUntil, tEnd)), sql`${cards.producerDoc}->>'thread' = ${`day-${tomorrow}`}`),
+        or(and(gte(cards.snoozedUntil, tStart), lt(cards.snoozedUntil, tEnd)), eq(cards.day, tomorrow)),
       ),
     )
     .orderBy(asc(cards.receivedAt))
     .limit(100);
 
   // The day opens with its paragraph (lib/brief/fold.ts): the nightly card's lead once it exists, else the same
-  // fold now, "so far today". None on a day with nothing open and nothing new.
+  // fold now, "so far today". None on a day with nothing open and nothing new. Either way with its parts, each entry
+  // with its card's labels (lib/brief/paragraph.ts), for the label filter.
   const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
-  let paragraph: { html: string; so_far: boolean } | null = null;
-  if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily)) {
-    if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false };
+  let paragraph: { html: string; so_far: boolean; parts: ParagraphParts } | null = null;
+  if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily) && presentedDaily.paragraph) {
+    if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false, parts: presentedDaily.paragraph };
   } else {
-    // No card for today yet, or one folded by an older fold (its lead is not the paragraph): fold now.
-    const md = await dailyParagraphNow(db, headId, head.timezone, today);
-    if (md) paragraph = { html: (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1'), so_far: true };
+    // No card for today yet, or one folded by an older fold or minted before paragraphs had parts: fold now.
+    const parts = await dailyParagraphNow(db, headId, head.timezone, today);
+    const html = composeParagraph(parts);
+    if (html) paragraph = { html, so_far: true, parts };
   }
 
-  const [oldest] = await db.select({ at: cards.receivedAt }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.receivedAt)).limit(1);
+  const [oldest] = await db.select({ day: cards.day }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.day)).limit(1);
 
   const shown = [...decisions, ...attention, ...late, ...(daily ? [daily] : [])];
   return {
@@ -254,7 +262,7 @@ export async function brief(db: Db, headId: string) {
     timezone: head.timezone,
     seq,
     last_visit: { seq: head.lastVisitSeq, at: head.lastVisitAt ? iso(head.lastVisitAt) : null },
-    first_day: oldest ? localDate(oldest.at, head.timezone) : null,
+    first_day: oldest?.day ?? null,
     daily: presentedDaily,
     daily_paragraph: paragraph,
     tomorrow: { date: tomorrow, cards: await presentCards(db, ahead) },
@@ -281,32 +289,31 @@ export interface CardQuery {
 }
 
 /**
- * GET /api/me/cards: cards received in a window — a local day (`date`), local days `from`–`to` inclusive (the
- * timeline, a week at a time), or `since`/`until` instants — optionally of one `state`, in change_seq order, paginated
- * by change_seq (`after`, `next`). With `from`, `before` is the latest earlier local day that has a card (null when
- * there is none), so the timeline skips empty weeks and knows where the head's cards begin.
+ * GET /api/me/cards: cards by their day (§8: `about`, else received_at's day in the head's timezone) — one day
+ * (`date`) or days `from`–`to` inclusive (the timeline, a week at a time) — or received between `since`/`until`
+ * instants, optionally of one `state`, in change_seq order, paginated by change_seq (`after`, `next`). With `from`,
+ * `before` is the latest earlier day that has a card (null when there is none), so the timeline skips empty weeks and
+ * knows where the head's cards begin.
  */
 export async function listCards(db: Db, headId: string, q: CardQuery) {
   const head = await headSettings(db, headId);
   const where: SQL[] = [eq(cards.headId, headId)];
   if (q.date) {
     if (!isDate(q.date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
-    const [start, end] = dayRange(q.date, head.timezone);
-    where.push(gte(cards.receivedAt, start), lt(cards.receivedAt, end));
+    where.push(eq(cards.day, q.date)); // §8: a card's day, `about` or received
   }
   let before: string | null | undefined;
   if (q.from || q.to) {
     if (q.date) throw new HttpError(400, 'invalid_request', 'date cannot be combined with from/to');
     if (!q.from || !q.to || !isDate(q.from) || !isDate(q.to) || q.from > q.to) throw new HttpError(400, 'invalid_request', 'from and to must be YYYY-MM-DD, from on or before to');
-    const start = dayRange(q.from, head.timezone)[0];
-    where.push(gte(cards.receivedAt, start), lt(cards.receivedAt, dayRange(q.to, head.timezone)[1]));
+    where.push(gte(cards.day, q.from), lte(cards.day, q.to));
     const [prev] = await db
-      .select({ at: cards.receivedAt })
+      .select({ day: cards.day })
       .from(cards)
-      .where(and(eq(cards.headId, headId), lt(cards.receivedAt, start)))
-      .orderBy(desc(cards.receivedAt))
+      .where(and(eq(cards.headId, headId), lt(cards.day, q.from)))
+      .orderBy(desc(cards.day))
       .limit(1);
-    before = prev ? localDate(prev.at, head.timezone) : null;
+    before = prev?.day ?? null;
   }
   for (const [key, op] of [['since', gte], ['until', lt]] as const) {
     const v = q[key];

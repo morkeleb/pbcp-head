@@ -3,7 +3,7 @@
 // DecisionCard: one open (or just decided) decision card, as the reference UI presents it (RFC 0.6 §4.5). The iOS app
 // mirrors this component; it is self-contained: a card in, changes out.
 //
-//   producer · time · source ↗   (an accent dot while unseen)               ⋮ snooze or unsnooze, open card, delegate
+//   producer · label · time · source ↗   (an accent dot while unseen)               ⋮ snooze or unsnooze, open card, delegate
 //   Title, in the serif
 //   lead (rendered_lead: the summary as text, else the first paragraph)
 //   ┌ Proposal (the first heading beginning "Proposal"/"Proposed", any level) ┐
@@ -25,7 +25,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
+  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
   type MeCard,
 } from '../components';
 
@@ -52,6 +52,8 @@ export interface DecisionCardProps {
   showTime?: boolean;
   /** The card page: the whole body open (lead, proposal and the rest), decided or not; no "More". */
   expanded?: boolean;
+  /** A decision whose day (§8) is later than the day it is shown under: "for Fri 31 Oct" in the header. */
+  forDay?: string;
   handle?: Ref<DecisionCardHandle>;
 }
 
@@ -64,7 +66,7 @@ const SNOOZES = [
 /** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
 export const clock = (iso: string, timeZone?: string) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
 
-export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true, expanded = false }: DecisionCardProps) {
+export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true, expanded = false, forDay }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);
   const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
@@ -124,8 +126,11 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
 
   const meta = (
     <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
-      {/* One line: the producer and time keep their room, the source's label truncates first (§4.1 `source`). */}
+      {/* One line: producer · labels · time · source. The source's label goes first, then the labels truncate; the
+          producer and time keep their room (§4.1 `labels`, `source`). */}
       <span className="max-w-[45%] flex-none truncate">{card.producer}</span>
+      <CardLabels labels={card.labels} />
+      {forDay && <span className="flex-none normal-case tracking-normal" data-for-day>· for {forDay}</span>}
       {showTime && <span aria-hidden>·</span>}
       {!card.seen_at && !decided && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
       {showTime && <time className="flex-none" dateTime={card.received_at}>{clock(card.received_at, timezone)}</time>}
@@ -273,7 +278,10 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
         // "Choose…" in front of them. Tapping the title opens the card.
         <div className="ledger-line flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <button className="ledger-title min-w-0 basis-full text-left min-[900px]:flex-1 min-[900px]:basis-0" onClick={() => setOpen(true)} aria-expanded={false}>
-            <span className="mr-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">{card.producer}</span>
+            <span className="mr-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
+              {card.producer}
+              {card.labels?.[0] && <span data-labels> · {card.labels[0]}</span>}
+            </span>
             <span className="font-serif text-body font-semibold break-words">{card.title}</span>
             {card.rendered_lead && (
               <span className="hidden text-lead text-muted-foreground min-[900px]:inline">

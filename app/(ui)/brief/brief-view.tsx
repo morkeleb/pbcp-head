@@ -15,7 +15,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MastheadRow, useChrome, useChromeCards } from '../chrome';
 import type { MeCard } from '../components';
+import { composeParagraph, matchesLabels } from '../../../lib/brief/paragraph';
 import { DailyBrief } from './DailyBrief';
+import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { clock, DecisionCard, type DecisionCardHandle, type Density } from './DecisionCard';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
 import { addDays, useBrief, type Day } from './use-brief';
@@ -193,21 +195,37 @@ export function BriefView() {
 
   const allCards: MeCard[] = days.flatMap((d) => [...d.decisions, ...d.updates.map((t) => t.latest), ...d.signals.map((t) => t.latest)]);
   useChromeCards(allCards, { at: cachedAt, timezone: brief?.timezone });
+  const [chosen, setChosen] = useLabelFilter();
 
   if (error) return <main className="mx-auto max-w-xl p-4 text-destructive">{error}</main>;
   if (!brief || wide === null) return <main className="mx-auto max-w-xl p-4 text-muted-foreground">Loading…</main>;
 
   const tz = brief.timezone;
   const shownDay = selected ?? today;
-  const openOn = new Set(brief.decisions.map((c) => c.received_at.slice(0, 10)));
+  const openOn = new Set(brief.decisions.map((c) => c.day ?? c.received_at.slice(0, 10))); // §8: a card's day
   const firstDay = brief.first_day && brief.first_day < today ? brief.first_day : today;
   const lastDay = addDays(today, 1);
   const week: WeekDay[] = weekOf(shownDay).map((date) => ({ date, open: openOn.has(date), reachable: date >= firstDay && date <= lastDay }));
-  const strip = <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />;
+  // The labels on the loaded days, each with how many cards on screen carry it (a card once, wherever it shows).
+  const counts = new Map<string, number>();
+  for (const c of new Map(allCards.map((c) => [c.id, c])).values()) for (const l of c.labels ?? []) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const strip = (
+    <div className="relative">
+      <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />
+      <div className="absolute right-0 top-0">
+        <LabelFilter counts={counts} chosen={chosen} onChange={setChosen} />
+      </div>
+    </div>
+  );
+  const shownDays = chosen.length ? days.map((d) => filtered(d, chosen)) : days;
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
 
-  const decision = (c: MeCard) => (
-    <DecisionCard key={c.id} card={c} timezone={tz} density={density} onChange={change} focused={focus === c.id} handle={register(c.id)} showTime={wide} />
+  // §8: a decision whose day is later than the day it is listed under (an open one, under today) says which day it is for.
+  const decision = (c: MeCard, under: string) => (
+    <DecisionCard
+      key={c.id} card={c} timezone={tz} density={density} onChange={change} focused={focus === c.id} handle={register(c.id)} showTime={wide}
+      {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})}
+    />
   );
   const update = (t: UpdateThread) => (
     <UpdateRow key={t.latest.id} thread={t} timezone={tz} density={density} focused={focus === t.latest.id} handle={register(t.latest.id)} />
@@ -218,7 +236,7 @@ export function BriefView() {
       <MastheadRow>{strip}</MastheadRow>
       <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
         <div ref={top} aria-hidden className="h-px" />
-        {days
+        {shownDays
           // An earlier day with nothing on it is not shown (no header for an empty day), unless the person went to it.
           .filter((d) => d.kind !== 'past' || d.nothing || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
           .map((d) => (
@@ -245,16 +263,42 @@ export function BriefView() {
   );
 }
 
+/** "Fri 31 Oct". */
+const shortDay = (date: string) => {
+  const parts = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${date}T00:00:00Z`));
+  const part = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${part('weekday')} ${part('day')} ${part('month')}`;
+};
+
+/**
+ * A day with the label filter applied: only cards carrying one of `chosen`, in decisions, updates and signals (a thread
+ * by its newest card); the paragraph keeps only their entries. A paragraph the head did not keep in parts cannot follow
+ * the filter, so it is not shown while one is on.
+ */
+function filtered(day: Day, chosen: string[]): Day {
+  const keep = (c: MeCard) => matchesLabels(c.labels ?? [], chosen);
+  const parts = day.paragraph?.parts;
+  const html = parts ? composeParagraph(parts, chosen) : '';
+  return {
+    ...day,
+    decisions: day.decisions.filter(keep),
+    updates: day.updates.filter((t) => keep(t.latest)),
+    signals: day.signals.filter((t) => keep(t.latest)),
+    paragraph: day.paragraph && html ? { ...day.paragraph, html } : null,
+  };
+}
+
 function DaySection({ day, name, wide, density, tz, decision, update }: {
   day: Day; name: string; wide: boolean; density: Density; tz: string;
-  decision: (c: MeCard) => ReactNode; update: (t: UpdateThread) => ReactNode;
+  decision: (c: MeCard, under: string) => ReactNode; update: (t: UpdateThread) => ReactNode;
 }) {
-  const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'The brief' : '';
+  // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
+  const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'Morning brief' : '';
   const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0;
   const brief = heading && <DailyBrief heading={heading} html={day.paragraph?.html ?? null} soFar={day.paragraph?.soFar} compact={density === 'ledger'} />;
   const decisions = day.decisions.length > 0 && (
     <Group title="Decisions" count={day.decisions.length}>
-      <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c) }))} gap={density === 'ledger' ? 'gap-2' : 'gap-3'} />
+      <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap={density === 'ledger' ? 'gap-2' : 'gap-3'} />
     </Group>
   );
   const updates = day.updates.length > 0 && <Updates title="Updates" threads={day.updates} wide={wide} update={update} />;

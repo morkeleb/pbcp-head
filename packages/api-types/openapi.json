@@ -1087,6 +1087,121 @@
         }
       }
     },
+    "/api/me/labels": {
+      "get": {
+        "operationId": "listLabels",
+        "summary": "The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/labels/{label}": {
+      "patch": {
+        "operationId": "updateLabel",
+        "summary": "Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "required": true,
+            "description": "A label (§4.1): lowercase letters, digits and -",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Label"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/devices": {
       "get": {
         "operationId": "listDevices",
@@ -1378,6 +1493,16 @@
             "type": "string",
             "minLength": 1
           },
+          "labels": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "about": {
+            "type": "string"
+          },
           "references": {
             "type": "array",
             "items": {
@@ -1564,6 +1689,87 @@
         ],
         "additionalProperties": false
       },
+      "ParagraphParts": {
+        "type": "object",
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Open decisions that are not snoozed"
+          },
+          "snoozed": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "The labels of each snoozed decision: counted, never listed (§8)"
+          },
+          "yesterday": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The previous day’s threads, by their newest unsnoozed card"
+          }
+        },
+        "required": [
+          "decisions",
+          "snoozed",
+          "yesterday"
+        ],
+        "additionalProperties": false
+      },
       "MeCard": {
         "type": "object",
         "properties": {
@@ -1614,6 +1820,16 @@
           "thread": {
             "type": "string",
             "minLength": 1
+          },
+          "labels": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "about": {
+            "type": "string"
           },
           "references": {
             "type": "array",
@@ -1800,6 +2016,14 @@
               "applied",
               "stale"
             ]
+          },
+          "day": {
+            "type": "string",
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+          },
+          "paragraph": {
+            "description": "On a `head:daily` card: its paragraph in parts",
+            "$ref": "#/components/schemas/ParagraphParts"
           }
         },
         "required": [
@@ -1818,7 +2042,8 @@
           "rendered_html",
           "lead",
           "lead_source",
-          "rendered_lead"
+          "rendered_lead",
+          "day"
         ],
         "additionalProperties": {}
       },
@@ -2166,11 +2391,15 @@
                   "so_far": {
                     "type": "boolean",
                     "description": "True until today’s `head:daily` card exists: the same fold, made now"
+                  },
+                  "parts": {
+                    "$ref": "#/components/schemas/ParagraphParts"
                   }
                 },
                 "required": [
                   "html",
-                  "so_far"
+                  "so_far",
+                  "parts"
                 ],
                 "additionalProperties": false
               },
@@ -2310,6 +2539,16 @@
           "thread": {
             "type": "string",
             "minLength": 1
+          },
+          "labels": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "about": {
+            "type": "string"
           },
           "references": {
             "type": "array",
@@ -2497,6 +2736,14 @@
               "stale"
             ]
           },
+          "day": {
+            "type": "string",
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+          },
+          "paragraph": {
+            "description": "On a `head:daily` card: its paragraph in parts",
+            "$ref": "#/components/schemas/ParagraphParts"
+          },
           "progress": {
             "type": "object",
             "properties": {
@@ -2539,6 +2786,7 @@
           "lead",
           "lead_source",
           "rendered_lead",
+          "day",
           "progress"
         ],
         "additionalProperties": {}
@@ -2768,6 +3016,56 @@
         },
         "required": [
           "producers"
+        ],
+        "additionalProperties": false
+      },
+      "Label": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "cards": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many of the head’s cards carry it"
+          },
+          "ceiling": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "brief",
+                  "log"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner’s ceiling on it (§9), or null"
+          }
+        },
+        "required": [
+          "label",
+          "cards",
+          "ceiling"
+        ],
+        "additionalProperties": false
+      },
+      "LabelList": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Label"
+            }
+          }
+        },
+        "required": [
+          "labels"
         ],
         "additionalProperties": false
       },
@@ -3052,6 +3350,30 @@
             "const": true
           }
         }
+      },
+      "LabelPatch": {
+        "type": "object",
+        "properties": {
+          "ceiling": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "brief",
+                  "log"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)"
+          }
+        },
+        "required": [
+          "ceiling"
+        ]
       }
     }
   }

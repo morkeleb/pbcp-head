@@ -65,7 +65,7 @@ function normaliseOrderIds(calls: Call[]): Call[] {
  * `order` goes through /api/me/orders, which answers with the human API's card: the protocol card plus these
  * presentation members. The differential compares protocol representations, so exactly these are dropped.
  */
-const PRESENTATION = ['rendered_html', 'rendered_actions', 'first_visual', 'order_outcome', 'lead', 'lead_source', 'rendered_lead'];
+const PRESENTATION = ['rendered_html', 'rendered_actions', 'first_visual', 'order_outcome', 'lead', 'lead_source', 'rendered_lead', 'day', 'paragraph'];
 function withoutPresentation(calls: Call[]): Call[] {
   return calls.map((c) =>
     c.op === 'order' && c.body && typeof c.body === 'object'

@@ -79,8 +79,9 @@ async function seed() {
 
   try {
     // --- caldav: the morning agenda (a table and a gantt), and an event that moved -------------------------
+    // `about` (§4.1) places each on its day (§8), whenever it is sent; `calendar` labels them for the filter.
     await put('cal', `cal:demo:${today}`, {
-      kind: 'artifact', urgency: 'brief', thread: `day-${today}`,
+      kind: 'artifact', urgency: 'brief', thread: `day-${today}`, about: today, labels: ['calendar'],
       title: `${day(today)}: 4 events, first at 09:15`,
       body: [
         '| Time | Event | Where |', '| --- | --- | --- |',
@@ -95,20 +96,37 @@ async function seed() {
       ].join('\n'),
     });
     await put('cal', `cal:demo:3f9a0c1d2e4b5a69-${today.replace(/-/g, '')}T1600Z:moved`, {
-      kind: 'signal', urgency: 'immediate', thread: `day-${today}`,
+      kind: 'signal', urgency: 'immediate', thread: `day-${today}`, about: today, labels: ['calendar'],
       title: 'Moved: Call with Anna now at 16:00',
       body: `**Call with Anna** now starts at 16:00–16:30 (was 16:30).\n\nWhere: Video`,
+    });
+    // Tomorrow's agenda, sent today: its day is tomorrow (§8), so it is in Tomorrow, not today.
+    const tomorrow = addDays(today, 1);
+    await put('cal', `cal:demo:${tomorrow}`, {
+      kind: 'artifact', urgency: 'brief', thread: `day-${tomorrow}`, about: tomorrow, labels: ['calendar'],
+      title: `${day(tomorrow)}: 2 events, first at 10:00`,
+      summary: 'Design review at 10:00 and the offsite planning call at 14:00.',
+      body: '| Time | Event |\n| --- | --- |\n| 10:00 | Design review |\n| 14:00 | Offsite planning |',
+    });
+    // A decision about a later day: shown under today, marked for its day (§8 MAY).
+    const friday = addDays(today, 3);
+    await put('cal', `cal:demo:table-${friday}`, {
+      kind: 'decision', urgency: 'brief', about: friday, labels: ['calendar'],
+      title: `Keep the table for four on ${day(friday)} at 19:00?`,
+      summary: 'The restaurant holds the table until tomorrow noon; keeping it confirms the booking.',
+      body: 'The restaurant holds a table for four until tomorrow noon.\n\n## Proposal\n\nKeep the table.',
+      actions: [{ id: 'keep', label: 'Keep it', default: true }, { id: 'release', label: 'Release it' }],
     });
 
     // --- goalpath: a milestone that slipped (superseding its on-track card), an approval, a red build, the digest
     const milestone = '7a1e0c2e-4d4b-4c51-9b1a-000000000004';
     await put('goalpath', `goalpath:demo:${milestone}.20261112:on-track`, {
-      kind: 'signal', urgency: 'brief', thread: milestone, source: { url: 'https://goalpath.example/m/4', label: 'GoalPath milestone' },
+      kind: 'signal', urgency: 'brief', thread: milestone, labels: ['billing-revamp'], source: { url: 'https://goalpath.example/m/4', label: 'GoalPath milestone' },
       title: 'Billing revamp: on track, forecast 12 Nov (deadline 13 Nov)',
       body: `The forecast is 2026-11-12, on or before the deadline 2026-11-13.`,
     });
     await put('goalpath', `goalpath:demo:${milestone}.20261124:risk`, {
-      kind: 'signal', urgency: 'brief', thread: milestone, supersedes: `goalpath:demo:${milestone}.20261112:on-track`,
+      kind: 'signal', urgency: 'brief', thread: milestone, labels: ['billing-revamp'], supersedes: `goalpath:demo:${milestone}.20261112:on-track`,
       source: { url: 'https://goalpath.example/m/4', label: 'GoalPath milestone' },
       title: 'Billing revamp: forecast 24 Nov, 11 days past 13 Nov',
       body: [
@@ -123,19 +141,19 @@ async function seed() {
       ].join('\n'),
     });
     await put('goalpath', 'goalpath:demo:approval-3c9b7f10', {
-      kind: 'decision', urgency: 'brief', thread: milestone, source: { url: 'https://goalpath.example/i/12', label: 'GoalPath item' },
+      kind: 'decision', urgency: 'brief', thread: milestone, labels: ['billing-revamp'], source: { url: 'https://goalpath.example/i/12', label: 'GoalPath item' },
       title: 'Accept GP-12 Export invoices as CSV?',
       summary: 'GP-12 is finished and waiting for you; accepting or rejecting sets it in GoalPath.',
       body: '**GP-12 Export invoices as CSV** is Finished and waiting for your acceptance.\n\n- Milestone: Billing revamp\n\n## Proposal\n\nAccept GP-12. Accepting or rejecting here sets its status in GoalPath.',
       actions: [{ id: 'accept', label: 'Accept', body: 'Sets GP-12 to Accepted.' }, { id: 'reject', label: 'Reject', body: 'Sets GP-12 to Rejected.' }],
     });
     await put('goalpath', 'goalpath:demo:build-gh-run-118842', {
-      kind: 'signal', urgency: 'immediate', thread: milestone, source: { url: 'https://git.example/acme/billing/actions/runs/118842', label: 'Build run' },
+      kind: 'signal', urgency: 'immediate', thread: milestone, labels: ['billing-revamp', 'ci'], source: { url: 'https://git.example/acme/billing/actions/runs/118842', label: 'Build run' },
       title: 'Build failed: ci / test on #91 (GP-14)',
       body: '**ci / test** ended `failure` on [#91](https://git.example/acme/billing/pull/91) Retry declined cards twice, linked to **GP-14 Retry failed card payments** in Billing revamp.',
     });
     await put('goalpath', `goalpath:demo:digest-${yesterday}`, {
-      kind: 'artifact', urgency: 'brief', thread: 'p-demo',
+      kind: 'artifact', urgency: 'brief', thread: 'p-demo', labels: ['billing-revamp', 'mobile-beta', 'rollout'],
       title: `GoalPath ${day(yesterday)}: 1 done, 1 blocked, 2 milestones late`,
       body: [
         '```mermaid', 'gantt', '  title Milestone forecasts', '  dateFormat YYYY-MM-DD', '  axisFormat %d %b',
@@ -223,7 +241,7 @@ async function seed() {
     });
     await exec('hermes', flowers, ['Shortlisted three florists that deliver on Saturday']); // still in progress: claimed, no outcome yet
 
-    console.log(`seeded ${head} at ${base}: 16 cards from cal, goalpath, hermes, mail, n8n, obsidian, todoist; 3 orders (2 done, 1 in progress)`);
+    console.log(`seeded ${head} at ${base}: 18 cards from cal, goalpath, hermes, mail, n8n, obsidian, todoist; 3 orders (2 done, 1 in progress)`);
     console.log('remove with: pnpm demo', head, '--remove');
   } finally {
     // No credentials outlive the script.

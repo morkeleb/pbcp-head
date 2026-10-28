@@ -3,7 +3,7 @@
 // UpdateRow: an artifact or signal, or a thread of them (cards sharing producer and thread, newest last, §8), as a
 // row of the reference UI. The iOS app mirrors this component; it is self-contained: a thread in, acknowledgement out.
 //
-//   ▢ PRODUCER · 09:14 · source ↗                                   Acknowledge
+//   ▢ PRODUCER · LABEL · 09:14 · source ↗                                   Acknowledge
 //   Title
 //   lead (rendered_lead)
 //   [first diagram or image, fitted to the row, captioned; opens full-screen at native size or larger]
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
+import { announce, CardLabels, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
 import { clock, type Density } from './DecisionCard';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
@@ -100,9 +100,11 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
-            {/* One line: the producer and time keep their room, the source's label truncates first (§4.1 `source`). */}
+            {/* One line: producer · labels · time · source. The source's label goes first, then the labels truncate; the
+                producer and time keep their room (§4.1 `labels`, `source`). */}
             <Icon className="size-3.5 flex-none" aria-label={c.kind} />
             <span className="max-w-[45%] flex-none truncate">{c.producer}</span>
+            <CardLabels labels={ledger ? c.labels?.slice(0, 1) : c.labels} />
             <span aria-hidden>·</span>
             <time className="flex-none" dateTime={c.received_at}>{clock(c.received_at, timezone)}</time>
             {sourceLink(c.source) && (
