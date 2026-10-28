@@ -793,6 +793,44 @@ describe('settings: the daily brief notification', () => {
   });
 });
 
+describe('settings: renaming a producer', () => {
+  it('edits the name in place: Enter saves and it survives a reload, Escape puts it back, blur saves; a nameless one shows its root', async () => {
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    const name = '[data-token="goalpath"] [data-producer-name]';
+    await page.waitForSelector(name);
+    expect(await page.$eval(name, (b) => b.textContent)).toBe('goalpath'); // minted without a name
+    await page.click(name);
+    const input = '[data-token="goalpath"] [data-producer-name-input]';
+    await page.waitForSelector(input);
+    await page.$eval(input, (i) => (i as HTMLInputElement).select());
+    await page.type(input, 'Milestones');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction((sel) => document.querySelector(sel)?.textContent === 'Milestones', {}, name);
+    expect(await page.$eval('[data-token="goalpath"] [data-root]', (p) => p.textContent)).toBe('Milestones · goalpath');
+
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector(name);
+    expect(await page.$eval(name, (b) => b.textContent)).toBe('Milestones');
+
+    await page.click(name);
+    await page.waitForSelector(input);
+    await page.type(input, ' and more');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector(name);
+    expect(await page.$eval(name, (b) => b.textContent)).toBe('Milestones');
+
+    await page.click(name);
+    await page.waitForSelector(input);
+    await page.$eval(input, (i) => (i as HTMLInputElement).select());
+    await page.type(input, 'GoalPath');
+    await page.click('[data-section-settings="producers"] h3'); // leaving the field saves
+    await page.waitForFunction((sel) => document.querySelector(sel)?.textContent === 'GoalPath', {}, name);
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector(name);
+    expect(await page.$eval(name, (b) => b.textContent)).toBe('GoalPath');
+  });
+});
+
 describe('settings at phone widths', () => {
   it('keeps every section on the screen, with nothing scrolling sideways, and a paired producer’s root on one line', async () => {
     const auth = `Session ${session.access_token}`;

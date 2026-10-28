@@ -71,7 +71,8 @@ export async function mintProducerToken(db: Db, opts: MintOptions): Promise<stri
     instance: opts.instance ?? null,
     executor: opts.executor ?? false,
     urgencyCeiling: opts.ceiling ?? 'brief',
-    ...(opts.paired ? { pairedName: opts.paired.name, pairedAddress: opts.paired.address, pairedAt: opts.paired.at } : {}),
+    // A paired producer's display name starts as the name it gave (lib/settings/producers.ts PRODUCER_NAME_MAX).
+    ...(opts.paired ? { pairedName: opts.paired.name, pairedAddress: opts.paired.address, pairedAt: opts.paired.at, name: opts.paired.name?.slice(0, 60) ?? null } : {}),
   });
   return token;
 }

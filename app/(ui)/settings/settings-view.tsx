@@ -11,6 +11,7 @@ import { PAIRING_CODE_SHAPE } from '../../../lib/pairing-code';
 import type { Density } from '../brief/DecisionCard';
 import { Copyable } from '../copy';
 import { DailyNotification, type DailyNotificationState } from './daily-notification';
+import { ProducerName } from './producer-name';
 import { PageRow, setTheme, useChrome, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, OfflineError, saveTokens, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred } from '../components';
@@ -20,7 +21,7 @@ const URGENCIES: Urgency[] = ['log', 'brief', 'immediate'];
 
 interface HeadFacts { owner: string; url: string; protocol: string; extensions: string[]; render: { mermaid: string[] } }
 interface Token {
-  id: string; root: string; instance: string | null; executor: boolean; ceiling: Urgency; created_at: string; last_used_at: string | null;
+  id: string; root: string; name: string | null; instance: string | null; executor: boolean; ceiling: Urgency; created_at: string; last_used_at: string | null;
   paired: { name: string | null; address: string | null; at: string } | null;
 }
 interface OpenCode { id: string; created_at: string; expires_at: string }
@@ -148,11 +149,13 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
             <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-token={t.root}>
               <div className="min-w-0 flex-1 basis-56">
                 <p className="font-medium" data-root>
-                  {t.root}{t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}
+                  <ProducerName name={t.name} root={t.root} disabled={!online} onSave={(name) => call(`/api/me/settings/producers/${t.id}`, 'PATCH', { name }).then(load)} />
+                  {t.name !== null && t.name !== t.root && <span className="font-normal text-muted-foreground"> · {t.root}</span>}
+                  {t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}
                 </p>
                 {t.paired && (
                   <p className="text-lead text-muted-foreground" data-paired>
-                    paired{t.paired.name ? ` · ${t.paired.name}` : ''} · {when(t.paired.at)}{t.paired.address ? ` · ${t.paired.address}` : ''}
+                    paired{t.paired.name && t.paired.name !== t.name ? ` as ${t.paired.name}` : ''} · {when(t.paired.at)}{t.paired.address ? ` · ${t.paired.address}` : ''}
                   </p>
                 )}
                 <p className="text-lead text-muted-foreground">

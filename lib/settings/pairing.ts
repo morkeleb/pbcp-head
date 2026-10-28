@@ -121,7 +121,8 @@ export async function pair(db: Db, body: PairRequest, address: string, api: stri
     to_person: held.headId,
     producer: 'head',
     urgency: 'log',
-    title: `${name ?? root} paired as \`${root}\``,
+    // The producer's display name as stored on its token (renamed later in Settings; this card keeps these words).
+    title: `${name?.slice(0, 60) ?? root} paired as \`${root}\``,
     body: `Paired at ${iso(at)} from ${address}${name ? `, calling itself ${name}` : ''}. Its token is bound to the root \`${root}\`; revoke it in Settings → Producers.`,
     emitted_at: iso(at),
   };

@@ -292,6 +292,7 @@ export const HeadFacts = z.object({
 export const ProducerToken = z.object({
   id: z.string().describe('The token’s id here: a prefix of its stored hash, never the token'),
   root: z.string(),
+  name: z.string().nullable().describe('The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root'),
   instance: z.string().nullable(),
   executor: z.boolean(),
   ceiling: z.enum(URGENCIES),
@@ -318,8 +319,9 @@ export const MintedToken = z.object({
 }).register(responses, { id: 'MintedToken' });
 
 export const TokenPatch = z.object({
-  ceiling: z.enum(URGENCIES).describe('The producer’s ceiling (§9): every live token of its root; cards stored from now on'),
-}).register(requests, { id: 'TokenPatch' });
+  ceiling: z.enum(URGENCIES).optional().describe('The producer’s ceiling (§9): every live token of its root; cards stored from now on'),
+  name: z.string().optional().describe('The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes'),
+}).refine((p) => p.ceiling !== undefined || p.name !== undefined, 'give ceiling, name, or both').register(requests, { id: 'TokenPatch' });
 
 export const PairingCode = z.object({
   id: z.string().describe('Names the code to cancel it; not the code'),

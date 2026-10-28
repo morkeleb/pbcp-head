@@ -1104,6 +1104,8 @@ export interface components {
             /** @description The token’s id here: a prefix of its stored hash, never the token */
             id: string;
             root: string;
+            /** @description The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root */
+            name: string | null;
             instance: string | null;
             executor: boolean;
             /** @enum {string} */
@@ -1290,7 +1292,9 @@ export interface components {
              * @description The producer’s ceiling (§9): every live token of its root; cards stored from now on
              * @enum {string}
              */
-            ceiling: "immediate" | "brief" | "log";
+            ceiling?: "immediate" | "brief" | "log";
+            /** @description The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes */
+            name?: string;
         };
         PairRequest: {
             /** @description The code the owner gave you: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. Case does not matter */

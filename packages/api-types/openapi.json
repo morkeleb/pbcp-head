@@ -4148,6 +4148,13 @@
           "root": {
             "type": "string"
           },
+          "name": {
+            "description": "The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "instance": {
             "type": [
               "string",
@@ -4220,6 +4227,7 @@
         "required": [
           "id",
           "root",
+          "name",
           "instance",
           "executor",
           "ceiling",
@@ -4766,18 +4774,19 @@
         "type": "object",
         "properties": {
           "ceiling": {
+            "description": "The producer’s ceiling (§9): every live token of its root; cards stored from now on",
             "type": "string",
             "enum": [
               "immediate",
               "brief",
               "log"
-            ],
-            "description": "The producer’s ceiling (§9): every live token of its root; cards stored from now on"
+            ]
+          },
+          "name": {
+            "description": "The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes",
+            "type": "string"
           }
-        },
-        "required": [
-          "ceiling"
-        ]
+        }
       },
       "PairRequest": {
         "type": "object",

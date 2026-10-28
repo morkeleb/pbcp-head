@@ -39,6 +39,9 @@ export const producerTokens = pgTable('producer_tokens', {
   pairedName: text('paired_name'),
   pairedAddress: text('paired_address'),
   pairedAt: tstz('paired_at'),
+  // The name the owner sees in Settings (1–60 characters), renamed there; a pairing starts it as the name the producer
+  // gave. Null: shown as the root. Display only: the root, which the protocol uses, never changes.
+  name: text('name'),
 });
 
 // OAuth for assistants (lib/oauth): clients registered dynamically (RFC 7591; public clients, no secrets), and

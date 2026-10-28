@@ -59,6 +59,7 @@ describe('POST /api/pair', () => {
     expect((await submit(r.body.token, 'agent-7')).status).toBe(201);
     const row = (await me('GET', '/api/me/settings/producers')).body.producers.find((p: { root: string }) => p.root === 'agent-7');
     expect(row.paired).toEqual({ name: 'Night agent', address, at: '2026-10-07T09:00:00Z' });
+    expect(row.name).toBe('Night agent'); // its display name starts as the name it gave
     expect(await openCodes()).toEqual([]);
     const again = await pair({ code: c.code, root: 'agent-8' });
     expect([again.status, again.body.error]).toEqual([400, 'invalid_code']);
@@ -71,6 +72,11 @@ describe('POST /api/pair', () => {
     expect(row!.producerDoc).toMatchObject({ kind: 'signal', urgency: 'log', producer: 'head', title: 'Night agent paired as `agent-7`' });
     expect((row!.producerDoc as { body: string }).body).toContain(`Paired at 2026-10-07T09:00:00Z from ${address}`);
     expect(row!.delivery).toBe('log');
+    // Renamed later in Settings: the stored card keeps the words it was written with.
+    const id = (await me('GET', '/api/me/settings/producers')).body.producers.find((p: { root: string }) => p.root === 'agent-7').id;
+    expect((await me('PATCH', `/api/me/settings/producers/${id}`, { name: 'Overnight agent' })).body.name).toBe('Overnight agent');
+    const [after] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
+    expect((after!.producerDoc as { title: string }).title).toBe('Night agent paired as `agent-7`');
     // Without a name, the root names it.
     const d = await newCode();
     await pair({ code: d.code, root: 'agent-9' });
