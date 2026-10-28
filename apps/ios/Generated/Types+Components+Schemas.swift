@@ -5232,7 +5232,7 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/NewPairingCode/expires_at`.
             public var expiresAt: Swift.String
-            /// 6 characters as two groups, e.g. K7Q-4MX. In this answer only
+            /// The code: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering, e.g. K7Q-4MX. In this answer only
             ///
             /// - Remark: Generated from `#/components/schemas/NewPairingCode/code`.
             public var code: Swift.String
@@ -5250,7 +5250,7 @@ extension Components {
             ///   - id: Names the code to cancel it; not the code
             ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
             ///   - expiresAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
-            ///   - code: 6 characters as two groups, e.g. K7Q-4MX. In this answer only
+            ///   - code: The code: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering, e.g. K7Q-4MX. In this answer only
             ///   - api: Where the agent pairs: POST {api}/pair
             ///   - say: The sentence to give the agent: "Pair with <api>, code <code>."
             public init(
@@ -6147,7 +6147,7 @@ extension Components {
         }
         /// - Remark: Generated from `#/components/schemas/PairRequest`.
         public struct PairRequest: Codable, Hashable, Sendable {
-            /// The code the owner gave you; case and separators do not matter
+            /// The code the owner gave you: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. Case does not matter
             ///
             /// - Remark: Generated from `#/components/schemas/PairRequest/code`.
             public var code: Swift.String
@@ -6162,7 +6162,7 @@ extension Components {
             /// Creates a new `PairRequest`.
             ///
             /// - Parameters:
-            ///   - code: The code the owner gave you; case and separators do not matter
+            ///   - code: The code the owner gave you: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. Case does not matter
             ///   - root: The root you choose (RFC §5): letters, digits and -; every card id you send starts with it
             ///   - name: What you are, for the owner’s record
             public init(

@@ -40,6 +40,17 @@ describe('POST /api/pair', () => {
     expect(JSON.stringify(await openCodes())).not.toContain(c.code.replace('-', ''));
   });
 
+  it('takes the code as shown, XXX-XXX, and with the dash left out', async () => {
+    const shown = await newCode();
+    expect(shown.code).toMatch(/^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$/);
+    let r = await pair({ code: shown.code, root: 'with-dash' });
+    expect(r.status).toBe(201);
+    const typed = await newCode();
+    r = await pair({ code: typed.code.replace('-', ''), root: 'without-dash' });
+    expect(r.status).toBe(201);
+    expect((await submit(r.body.token, 'without-dash')).status).toBe(201);
+  });
+
   it('pairs once: the token submits a card, the row says paired, a second use fails', async () => {
     const c = await newCode();
     const r = await pair({ code: c.code.toLowerCase().replace('-', ' '), root: 'agent-7', name: 'Night agent' });
@@ -137,6 +148,7 @@ describe('the flow, described', () => {
     const api = `${headUrl()}/api`;
     expect(text).toContain('## Pairing: getting a token with a code');
     expect(text).toContain('1. Ask the owner for a pairing code.');
+    expect(text).toContain('it is six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. It is valid 10 minutes and works once.');
     expect(text).toContain(`to ${api}/pair: {"code": "<code>", "root": "<root>", "name": "<what you are>"}`);
     expect(text).toContain('Keep the token in the answer: it is shown this once.');
     expect(text).toContain('Use `api`, `owner` and the token as the three values');
@@ -144,5 +156,8 @@ describe('the flow, described', () => {
     const html = (await call('GET', '/connect')).body as string;
     expect(html).toContain('data-pairing-steps');
     expect(html).toContain('Ask the owner for a pairing code.');
+    expect(html).toContain('six characters shown as two groups of three (XXX-XXX); the dash is optional when entering');
+    const doc = (await call('GET', '/api/openapi.json')).body;
+    expect(doc.paths['/api/pair'].post.description).toContain('six characters shown as two groups of three (XXX-XXX); the dash is optional when entering');
   });
 });

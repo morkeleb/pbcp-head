@@ -5,6 +5,7 @@
 
 import { DecisionSchema, HeadDescriptionSchema, HeadFieldsSchema, KINDS, ProducerCardSchema, STATES, URGENCIES } from '@pbcp/core';
 import { z } from 'zod';
+import { PAIRING_CODE_SHAPE } from '../pairing-code';
 import { HttpError } from '../http';
 
 /** Responses: emitted with `additionalProperties: false`, so a field the document does not name is a test failure. */
@@ -309,13 +310,13 @@ export const PairingCode = z.object({
 export const PairingCodeList = z.object({ codes: z.array(PairingCode).describe('Codes not yet used, cancelled or expired') }).register(responses, { id: 'PairingCodeList' });
 
 export const NewPairingCode = PairingCode.extend({
-  code: z.string().describe('6 characters as two groups, e.g. K7Q-4MX. In this answer only'),
+  code: z.string().describe(`The code: ${PAIRING_CODE_SHAPE}, e.g. K7Q-4MX. In this answer only`),
   api: z.string().describe('Where the agent pairs: POST {api}/pair'),
   say: z.string().describe('The sentence to give the agent: "Pair with <api>, code <code>."'),
 }).register(responses, { id: 'NewPairingCode' });
 
 export const PairRequest = z.object({
-  code: z.string().describe('The code the owner gave you; case and separators do not matter'),
+  code: z.string().describe(`The code the owner gave you: ${PAIRING_CODE_SHAPE}. Case does not matter`),
   root: z.string().describe('The root you choose (RFC §5): letters, digits and -; every card id you send starts with it'),
   name: z.string().optional().describe('What you are, for the owner’s record'),
 }).register(requests, { id: 'PairRequest' });

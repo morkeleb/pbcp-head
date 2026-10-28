@@ -3118,7 +3118,7 @@ public struct Client: APIProtocol {
             }
         )
     }
-    /// Make a pairing code to give an agent: 6 characters, 10 minutes, once
+    /// Make a pairing code to give an agent: XXX-XXX, 10 minutes, once
     ///
     /// - Remark: HTTP `POST /api/me/settings/pairing`.
     /// - Remark: Generated from `#/paths//api/me/settings/pairing/post(createPairingCode)`.
@@ -3342,7 +3342,7 @@ public struct Client: APIProtocol {
     }
     /// Trade a pairing code from the owner for your own producer token (public; no credential)
     ///
-    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+    /// The code (six characters shown as two groups of three (XXX-XXX); the dash is optional when entering) is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
     ///
     /// - Remark: HTTP `POST /api/pair`.
     /// - Remark: Generated from `#/paths//api/pair/post(pair)`.

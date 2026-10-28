@@ -702,6 +702,74 @@ describe('no horizontal overflow', () => {
   });
 });
 
+describe('theme', () => {
+  const scheme = (value: 'light' | 'dark') => page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value }]);
+  /** Whether the page is dark, by its class and by what is painted. */
+  const looks = () =>
+    page.evaluate(() => ({ dark: document.documentElement.classList.contains('dark'), ground: getComputedStyle(document.body).backgroundColor }));
+  const choose = async (choice: 'system' | 'light' | 'dark') => {
+    await (await page.waitForSelector('[data-theme-menu]'))!.click();
+    await (await page.waitForSelector(`[data-theme-choice="${choice}"]`))!.click();
+  };
+
+  it('follows a dark scheme before first paint when nothing is saved, and offers System, Light and Dark with System chosen', async () => {
+    await scheme('light');
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const light = await looks();
+    await scheme('dark');
+    // The first frame's class, from the inline script, before the app has run.
+    await page.evaluateOnNewDocument(() => {
+      document.addEventListener('DOMContentLoaded', () => ((window as unknown as { firstDark: boolean }).firstDark = document.documentElement.classList.contains('dark')), { once: true });
+    });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    expect(await page.evaluate(() => (window as unknown as { firstDark: boolean }).firstDark)).toBe(true);
+    const dark = await looks();
+    expect(dark.dark).toBe(true);
+    expect(dark.ground).not.toBe(light.ground);
+    expect(await page.$eval('[data-theme-menu]', (b) => b.getAttribute('aria-label'))).toBe('Theme: System');
+    await (await page.$('[data-theme-menu]'))!.click();
+    expect(await page.$$eval('[data-theme-choice]', (items) => items.map((i) => [i.textContent, i.getAttribute('aria-checked')]))).toEqual([['System', 'true'], ['Light', 'false'], ['Dark', 'false']]);
+  });
+
+  it('keeps a saved Light under a dark scheme, from the first paint and through a scheme change', async () => {
+    await page.evaluate(() => localStorage.setItem('pbcp.theme', 'light'));
+    await scheme('dark');
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    expect((await looks()).dark).toBe(false);
+    await scheme('light');
+    await scheme('dark');
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await looks()).dark).toBe(false);
+    expect(await page.$eval('[data-theme-menu]', (b) => b.getAttribute('aria-label'))).toBe('Theme: Light');
+  });
+
+  it('under System, follows the scheme as it changes without a reload; a pick stops that, System starts it again, and Settings agrees', async () => {
+    await scheme('light');
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    expect((await looks()).dark).toBe(false);
+    await scheme('dark');
+    await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+    await scheme('light');
+    await page.waitForFunction(() => !document.documentElement.classList.contains('dark'));
+
+    await choose('dark');
+    await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+    expect(await page.evaluate(() => localStorage.getItem('pbcp.theme'))).toBe('dark');
+    expect(await page.$eval('select[aria-label="Theme"]', (s) => (s as HTMLSelectElement).value)).toBe('dark');
+    await scheme('dark');
+    await scheme('light');
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await looks()).dark).toBe(true);
+
+    await page.select('select[aria-label="Theme"]', 'system');
+    await page.waitForFunction(() => !document.documentElement.classList.contains('dark'));
+    expect(await page.evaluate(() => localStorage.getItem('pbcp.theme'))).toBeNull();
+    expect(await page.$eval('[data-theme-menu]', (b) => b.getAttribute('aria-label'))).toBe('Theme: System');
+    await scheme('dark');
+    await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+  });
+});
+
 describe('settings at phone widths', () => {
   it('keeps every section on the screen, with nothing scrolling sideways, and a paired producer’s root on one line', async () => {
     const auth = `Session ${session.access_token}`;
@@ -813,6 +881,7 @@ describe('settings', () => {
     await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
     expect(await page.$$eval('[data-section-settings]', (ss) => ss.map((s) => s.getAttribute('data-section-settings')))).toEqual(['this-head', 'producers', 'connect', 'devices', 'preferences']);
     expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
+    expect(await page.$eval('[data-pairing]', (p) => p.textContent)).toContain('six characters shown as two groups of three (XXX-XXX); the dash is optional when entering');
     expect(await page.$eval('[data-value="owner id"]', (v) => v.textContent)).toBe(OWNER);
     expect(await page.$eval('[data-value="head URL"]', (v) => v.textContent)).toBe(`${headUrl()}/api`);
     expect(await page.$eval('[data-this-device]', (d) => d.closest('[data-device]')!.textContent)).toContain('browser');

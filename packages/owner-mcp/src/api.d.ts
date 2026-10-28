@@ -333,7 +333,7 @@ export interface paths {
         /** The open pairing codes (never the codes themselves) */
         get: operations["listPairingCodes"];
         put?: never;
-        /** Make a pairing code to give an agent: 6 characters, 10 minutes, once */
+        /** Make a pairing code to give an agent: XXX-XXX, 10 minutes, once */
         post: operations["createPairingCode"];
         delete?: never;
         options?: never;
@@ -369,7 +369,7 @@ export interface paths {
         put?: never;
         /**
          * Trade a pairing code from the owner for your own producer token (public; no credential)
-         * @description The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+         * @description The code (six characters shown as two groups of three (XXX-XXX); the dash is optional when entering) is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`; no other code is touched. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
          */
         post: operations["pair"];
         delete?: never;
@@ -1096,7 +1096,7 @@ export interface components {
             created_at: string;
             /** @description RFC 3339, UTC (`2026-10-07T09:00:00Z`) */
             expires_at: string;
-            /** @description 6 characters as two groups, e.g. K7Q-4MX. In this answer only */
+            /** @description The code: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering, e.g. K7Q-4MX. In this answer only */
             code: string;
             /** @description Where the agent pairs: POST {api}/pair */
             api: string;
@@ -1226,7 +1226,7 @@ export interface components {
             ceiling: "immediate" | "brief" | "log";
         };
         PairRequest: {
-            /** @description The code the owner gave you; case and separators do not matter */
+            /** @description The code the owner gave you: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. Case does not matter */
             code: string;
             /** @description The root you choose (RFC §5): letters, digits and -; every card id you send starts with it */
             root: string;
