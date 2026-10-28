@@ -108,16 +108,61 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `PATCH /api/me/producers/{root}`.
     /// - Remark: Generated from `#/paths//api/me/producers/{root}/patch(updateProducer)`.
     func updateProducer(_ input: Operations.UpdateProducer.Input) async throws -> Operations.UpdateProducer.Output
+    /// This head as a producer sees it: owner id, URL, protocol (§7.5)
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/head`.
+    /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)`.
+    func getHeadFacts(_ input: Operations.GetHeadFacts.Input) async throws -> Operations.GetHeadFacts.Output
+    /// The live producer tokens: root, created, last used, ceiling
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)`.
+    func listProducerTokens(_ input: Operations.ListProducerTokens.Input) async throws -> Operations.ListProducerTokens.Output
+    /// Mint a producer token for a root (§12); the token is in this response only
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)`.
+    func mintProducerToken(_ input: Operations.MintProducerToken.Input) async throws -> Operations.MintProducerToken.Output
+    /// Set the ceiling of that token’s producer (§9)
+    ///
+    /// - Remark: HTTP `PATCH /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)`.
+    func setProducerCeiling(_ input: Operations.SetProducerCeiling.Input) async throws -> Operations.SetProducerCeiling.Output
+    /// Revoke a producer token (§12)
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)`.
+    func revokeProducerToken(_ input: Operations.RevokeProducerToken.Input) async throws -> Operations.RevokeProducerToken.Output
     /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
     ///
-    /// - Remark: HTTP `GET /api/me/labels`.
-    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
+    /// - Remark: HTTP `GET /api/me/settings/labels`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)`.
     func listLabels(_ input: Operations.ListLabels.Input) async throws -> Operations.ListLabels.Output
     /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
     ///
-    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
-    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    /// - Remark: HTTP `PATCH /api/me/settings/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)`.
     func updateLabel(_ input: Operations.UpdateLabel.Input) async throws -> Operations.UpdateLabel.Output
+    /// The signed-in devices; `current` marks the caller
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/devices`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)`.
+    func listSettingsDevices(_ input: Operations.ListSettingsDevices.Input) async throws -> Operations.ListSettingsDevices.Output
+    /// Sign a device out
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/devices/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)`.
+    func signOutDevice(_ input: Operations.SignOutDevice.Input) async throws -> Operations.SignOutDevice.Output
+    /// A one-hour link that registers a passkey for another device
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/enrolment`.
+    /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)`.
+    func enrolDevice(_ input: Operations.EnrolDevice.Input) async throws -> Operations.EnrolDevice.Output
+    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/snippets`.
+    /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
+    func connectSnippets(_ input: Operations.ConnectSnippets.Input) async throws -> Operations.ConnectSnippets.Output
     /// The signed-in devices
     ///
     /// - Remark: HTTP `GET /api/me/devices`.
@@ -343,17 +388,72 @@ extension APIProtocol {
             body: body
         ))
     }
+    /// This head as a producer sees it: owner id, URL, protocol (§7.5)
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/head`.
+    /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)`.
+    public func getHeadFacts(headers: Operations.GetHeadFacts.Input.Headers = .init()) async throws -> Operations.GetHeadFacts.Output {
+        try await getHeadFacts(Operations.GetHeadFacts.Input(headers: headers))
+    }
+    /// The live producer tokens: root, created, last used, ceiling
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)`.
+    public func listProducerTokens(headers: Operations.ListProducerTokens.Input.Headers = .init()) async throws -> Operations.ListProducerTokens.Output {
+        try await listProducerTokens(Operations.ListProducerTokens.Input(headers: headers))
+    }
+    /// Mint a producer token for a root (§12); the token is in this response only
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)`.
+    public func mintProducerToken(
+        headers: Operations.MintProducerToken.Input.Headers = .init(),
+        body: Operations.MintProducerToken.Input.Body
+    ) async throws -> Operations.MintProducerToken.Output {
+        try await mintProducerToken(Operations.MintProducerToken.Input(
+            headers: headers,
+            body: body
+        ))
+    }
+    /// Set the ceiling of that token’s producer (§9)
+    ///
+    /// - Remark: HTTP `PATCH /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)`.
+    public func setProducerCeiling(
+        path: Operations.SetProducerCeiling.Input.Path,
+        headers: Operations.SetProducerCeiling.Input.Headers = .init(),
+        body: Operations.SetProducerCeiling.Input.Body
+    ) async throws -> Operations.SetProducerCeiling.Output {
+        try await setProducerCeiling(Operations.SetProducerCeiling.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
+    }
+    /// Revoke a producer token (§12)
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)`.
+    public func revokeProducerToken(
+        path: Operations.RevokeProducerToken.Input.Path,
+        headers: Operations.RevokeProducerToken.Input.Headers = .init()
+    ) async throws -> Operations.RevokeProducerToken.Output {
+        try await revokeProducerToken(Operations.RevokeProducerToken.Input(
+            path: path,
+            headers: headers
+        ))
+    }
     /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
     ///
-    /// - Remark: HTTP `GET /api/me/labels`.
-    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
+    /// - Remark: HTTP `GET /api/me/settings/labels`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)`.
     public func listLabels(headers: Operations.ListLabels.Input.Headers = .init()) async throws -> Operations.ListLabels.Output {
         try await listLabels(Operations.ListLabels.Input(headers: headers))
     }
     /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
     ///
-    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
-    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    /// - Remark: HTTP `PATCH /api/me/settings/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)`.
     public func updateLabel(
         path: Operations.UpdateLabel.Input.Path,
         headers: Operations.UpdateLabel.Input.Headers = .init(),
@@ -363,6 +463,46 @@ extension APIProtocol {
             path: path,
             headers: headers,
             body: body
+        ))
+    }
+    /// The signed-in devices; `current` marks the caller
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/devices`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)`.
+    public func listSettingsDevices(headers: Operations.ListSettingsDevices.Input.Headers = .init()) async throws -> Operations.ListSettingsDevices.Output {
+        try await listSettingsDevices(Operations.ListSettingsDevices.Input(headers: headers))
+    }
+    /// Sign a device out
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/devices/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)`.
+    public func signOutDevice(
+        path: Operations.SignOutDevice.Input.Path,
+        headers: Operations.SignOutDevice.Input.Headers = .init()
+    ) async throws -> Operations.SignOutDevice.Output {
+        try await signOutDevice(Operations.SignOutDevice.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// A one-hour link that registers a passkey for another device
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/enrolment`.
+    /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)`.
+    public func enrolDevice(headers: Operations.EnrolDevice.Input.Headers = .init()) async throws -> Operations.EnrolDevice.Output {
+        try await enrolDevice(Operations.EnrolDevice.Input(headers: headers))
+    }
+    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/snippets`.
+    /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
+    public func connectSnippets(
+        query: Operations.ConnectSnippets.Input.Query = .init(),
+        headers: Operations.ConnectSnippets.Input.Headers = .init()
+    ) async throws -> Operations.ConnectSnippets.Output {
+        try await connectSnippets(Operations.ConnectSnippets.Input(
+            query: query,
+            headers: headers
         ))
     }
     /// The signed-in devices

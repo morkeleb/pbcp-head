@@ -1087,7 +1087,299 @@
         }
       }
     },
-    "/api/me/labels": {
+    "/api/me/settings/head": {
+      "get": {
+        "operationId": "getHeadFacts",
+        "summary": "This head as a producer sees it: owner id, URL, protocol (§7.5)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadFacts"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/producers": {
+      "get": {
+        "operationId": "listProducerTokens",
+        "summary": "The live producer tokens: root, created, last used, ceiling",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerTokenList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "mintProducerToken",
+        "summary": "Mint a producer token for a root (§12); the token is in this response only",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Minted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MintedToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`root_in_use`: the root already has a live token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/producers/{id}": {
+      "patch": {
+        "operationId": "setProducerCeiling",
+        "summary": "Set the ceiling of that token’s producer (§9)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A token id from the list",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeProducerToken",
+        "summary": "Revoke a producer token (§12)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A token id from the list",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/labels": {
       "get": {
         "operationId": "listLabels",
         "summary": "The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)",
@@ -1130,7 +1422,7 @@
         }
       }
     },
-    "/api/me/labels/{label}": {
+    "/api/me/settings/labels/{label}": {
       "patch": {
         "operationId": "updateLabel",
         "summary": "Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s",
@@ -1191,6 +1483,198 @@
           },
           "413": {
             "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/devices": {
+      "get": {
+        "operationId": "listSettingsDevices",
+        "summary": "The signed-in devices; `current` marks the caller",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/devices/{id}": {
+      "delete": {
+        "operationId": "signOutDevice",
+        "summary": "Sign a device out",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A device id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/enrolment": {
+      "post": {
+        "operationId": "enrolDevice",
+        "summary": "A one-hour link that registers a passkey for another device",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrolment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/snippets": {
+      "get": {
+        "operationId": "connectSnippets",
+        "summary": "Ready-to-paste ways to connect a producer: curl, n8n, Hermes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "root",
+            "in": "query",
+            "description": "The producer root to fill in (default my-producer)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectSnippets"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
             "content": {
               "application/json": {
                 "schema": {
@@ -3159,6 +3643,187 @@
         ],
         "additionalProperties": false
       },
+      "HeadFacts": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "The owner’s person id: every card’s `to_person` (§10)"
+          },
+          "url": {
+            "type": "string",
+            "description": "The head URL a producer is given: the origin plus /api"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "render": {
+            "type": "object",
+            "properties": {
+              "mermaid": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "mermaid"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "owner",
+          "url",
+          "protocol",
+          "extensions",
+          "render"
+        ],
+        "additionalProperties": false
+      },
+      "ProducerToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The token’s id here: a prefix of its stored hash, never the token"
+          },
+          "root": {
+            "type": "string"
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "executor": {
+            "type": "boolean"
+          },
+          "ceiling": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last request it authenticated, to the minute"
+          }
+        },
+        "required": [
+          "id",
+          "root",
+          "instance",
+          "executor",
+          "ceiling",
+          "created_at",
+          "last_used_at"
+        ],
+        "additionalProperties": false
+      },
+      "ProducerTokenList": {
+        "type": "object",
+        "properties": {
+          "producers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProducerToken"
+            }
+          }
+        },
+        "required": [
+          "producers"
+        ],
+        "additionalProperties": false
+      },
+      "MintedToken": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The producer token. Shown once: the head keeps only its hash"
+          },
+          "producer": {
+            "$ref": "#/components/schemas/ProducerToken"
+          }
+        },
+        "required": [
+          "token",
+          "producer"
+        ],
+        "additionalProperties": false
+      },
+      "Enrolment": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Opens the sign-in page ready to register a passkey on this head"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectSnippets": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "The placeholder in the snippets: replace it with a token just minted"
+          },
+          "curl": {
+            "type": "string"
+          },
+          "n8n": {
+            "type": "string",
+            "description": "An HTTP Request node, as n8n pastes it"
+          },
+          "hermes": {
+            "type": "string",
+            "description": "The MCP server command, its two variables, and connectors/hermes’s mcp.json"
+          }
+        },
+        "required": [
+          "root",
+          "token",
+          "curl",
+          "n8n",
+          "hermes"
+        ],
+        "additionalProperties": false
+      },
       "HeadDescription": {
         "type": "object",
         "properties": {
@@ -3369,6 +4034,52 @@
               }
             ],
             "description": "Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)"
+          }
+        },
+        "required": [
+          "ceiling"
+        ]
+      },
+      "MintTokenRequest": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "description": "The producer root (§5): letters, digits and -; not `head`; not already held by a live token"
+          },
+          "ceiling": {
+            "description": "Default `brief` (§9)",
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ]
+          },
+          "executor": {
+            "description": "May claim orders to `*` (A.1)",
+            "type": "boolean"
+          },
+          "instance": {
+            "description": "A second installation of the same connector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root"
+        ]
+      },
+      "TokenPatch": {
+        "type": "object",
+        "properties": {
+          "ceiling": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "brief",
+              "log"
+            ],
+            "description": "The producer’s ceiling (§9): every live token of its root; cards stored from now on"
           }
         },
         "required": [

@@ -4811,18 +4811,1422 @@ public enum Operations {
             }
         }
     }
-    /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
+    /// This head as a producer sees it: owner id, URL, protocol (§7.5)
     ///
-    /// - Remark: HTTP `GET /api/me/labels`.
-    /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)`.
-    public enum ListLabels {
-        public static let id: Swift.String = "listLabels"
+    /// - Remark: HTTP `GET /api/me/settings/head`.
+    /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)`.
+    public enum GetHeadFacts {
+        public static let id: Swift.String = "getHeadFacts"
         public struct Input: Sendable, Hashable {
-            /// - Remark: Generated from `#/paths/api/me/labels/GET/header`.
+            /// - Remark: Generated from `#/paths/api/me/settings/head/GET/header`.
             public struct Headers: Sendable, Hashable {
                 /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
                 ///
-                /// - Remark: Generated from `#/paths/api/me/labels/GET/header/X-Timezone`.
+                /// - Remark: Generated from `#/paths/api/me/settings/head/GET/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetHeadFacts.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetHeadFacts.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetHeadFacts.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.GetHeadFacts.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.HeadFacts)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HeadFacts {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetHeadFacts.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetHeadFacts.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetHeadFacts.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetHeadFacts.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetHeadFacts.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetHeadFacts.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.GetHeadFacts.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.GetHeadFacts.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/head/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetHeadFacts.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetHeadFacts.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/head/get(getHeadFacts)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.GetHeadFacts.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.GetHeadFacts.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// The live producer tokens: root, created, last used, ceiling
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)`.
+    public enum ListProducerTokens {
+        public static let id: Swift.String = "listProducerTokens"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListProducerTokens.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListProducerTokens.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ListProducerTokens.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.ListProducerTokens.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ProducerTokenList)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ProducerTokenList {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListProducerTokens.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListProducerTokens.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ListProducerTokens.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ListProducerTokens.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListProducerTokens.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListProducerTokens.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.ListProducerTokens.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.ListProducerTokens.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListProducerTokens.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListProducerTokens.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/get(listProducerTokens)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ListProducerTokens.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.ListProducerTokens.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Mint a producer token for a root (§12); the token is in this response only
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/producers`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)`.
+    public enum MintProducerToken {
+        public static let id: Swift.String = "mintProducerToken"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.MintProducerToken.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.MintProducerToken.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.MintProducerToken.Input.Headers
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/requestBody`.
+            @frozen public enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.MintTokenRequest)
+            }
+            public var body: Operations.MintProducerToken.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            public init(
+                headers: Operations.MintProducerToken.Input.Headers = .init(),
+                body: Operations.MintProducerToken.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/201/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.MintedToken)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.MintedToken {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.MintProducerToken.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.MintProducerToken.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// Minted
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.MintProducerToken.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            public var created: Operations.MintProducerToken.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.MintProducerToken.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.MintProducerToken.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.MintProducerToken.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.MintProducerToken.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.MintProducerToken.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.MintProducerToken.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.MintProducerToken.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.MintProducerToken.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/409/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/409/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.MintProducerToken.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.MintProducerToken.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// `root_in_use`: the root already has a live token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.MintProducerToken.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            public var conflict: Operations.MintProducerToken.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct ContentTooLarge: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/413/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/POST/responses/413/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.MintProducerToken.Output.ContentTooLarge.Body
+                /// Creates a new `ContentTooLarge`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.MintProducerToken.Output.ContentTooLarge.Body) {
+                    self.body = body
+                }
+            }
+            /// `too_large`: the body is over 1 MiB
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/post(mintProducerToken)/responses/413`.
+            ///
+            /// HTTP response code: `413 contentTooLarge`.
+            case contentTooLarge(Operations.MintProducerToken.Output.ContentTooLarge)
+            /// The associated value of the enum case if `self` is `.contentTooLarge`.
+            ///
+            /// - Throws: An error if `self` is not `.contentTooLarge`.
+            /// - SeeAlso: `.contentTooLarge`.
+            public var contentTooLarge: Operations.MintProducerToken.Output.ContentTooLarge {
+                get throws {
+                    switch self {
+                    case let .contentTooLarge(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "contentTooLarge",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Set the ceiling of that token’s producer (§9)
+    ///
+    /// - Remark: HTTP `PATCH /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)`.
+    public enum SetProducerCeiling {
+        public static let id: Swift.String = "setProducerCeiling"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/path`.
+            public struct Path: Sendable, Hashable {
+                /// A token id from the list
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/path/id`.
+                public var id: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - id: A token id from the list
+                public init(id: Swift.String) {
+                    self.id = id
+                }
+            }
+            public var path: Operations.SetProducerCeiling.Input.Path
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.SetProducerCeiling.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.SetProducerCeiling.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.SetProducerCeiling.Input.Headers
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/requestBody`.
+            @frozen public enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/requestBody/content/application\/json`.
+                case json(Components.Schemas.TokenPatch)
+            }
+            public var body: Operations.SetProducerCeiling.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            ///   - body:
+            public init(
+                path: Operations.SetProducerCeiling.Input.Path,
+                headers: Operations.SetProducerCeiling.Input.Headers = .init(),
+                body: Operations.SetProducerCeiling.Input.Body
+            ) {
+                self.path = path
+                self.headers = headers
+                self.body = body
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ProducerToken)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ProducerToken {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SetProducerCeiling.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SetProducerCeiling.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.SetProducerCeiling.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.SetProducerCeiling.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SetProducerCeiling.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SetProducerCeiling.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.SetProducerCeiling.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.SetProducerCeiling.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SetProducerCeiling.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SetProducerCeiling.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.SetProducerCeiling.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.SetProducerCeiling.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/404/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/404/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SetProducerCeiling.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SetProducerCeiling.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// `not_found`
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.SetProducerCeiling.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            public var notFound: Operations.SetProducerCeiling.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct ContentTooLarge: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/413/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/PATCH/responses/413/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SetProducerCeiling.Output.ContentTooLarge.Body
+                /// Creates a new `ContentTooLarge`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SetProducerCeiling.Output.ContentTooLarge.Body) {
+                    self.body = body
+                }
+            }
+            /// `too_large`: the body is over 1 MiB
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/patch(setProducerCeiling)/responses/413`.
+            ///
+            /// HTTP response code: `413 contentTooLarge`.
+            case contentTooLarge(Operations.SetProducerCeiling.Output.ContentTooLarge)
+            /// The associated value of the enum case if `self` is `.contentTooLarge`.
+            ///
+            /// - Throws: An error if `self` is not `.contentTooLarge`.
+            /// - SeeAlso: `.contentTooLarge`.
+            public var contentTooLarge: Operations.SetProducerCeiling.Output.ContentTooLarge {
+                get throws {
+                    switch self {
+                    case let .contentTooLarge(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "contentTooLarge",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Revoke a producer token (§12)
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/producers/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)`.
+    public enum RevokeProducerToken {
+        public static let id: Swift.String = "revokeProducerToken"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/path`.
+            public struct Path: Sendable, Hashable {
+                /// A token id from the list
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/path/id`.
+                public var id: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - id: A token id from the list
+                public init(id: Swift.String) {
+                    self.id = id
+                }
+            }
+            public var path: Operations.RevokeProducerToken.Input.Path
+            /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.RevokeProducerToken.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.RevokeProducerToken.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.RevokeProducerToken.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.RevokeProducerToken.Input.Path,
+                headers: Operations.RevokeProducerToken.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct NoContent: Sendable, Hashable {
+                /// Creates a new `NoContent`.
+                public init() {}
+            }
+            /// Revoked
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            case noContent(Operations.RevokeProducerToken.Output.NoContent)
+            /// Revoked
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            public static var noContent: Self {
+                .noContent(.init())
+            }
+            /// The associated value of the enum case if `self` is `.noContent`.
+            ///
+            /// - Throws: An error if `self` is not `.noContent`.
+            /// - SeeAlso: `.noContent`.
+            public var noContent: Operations.RevokeProducerToken.Output.NoContent {
+                get throws {
+                    switch self {
+                    case let .noContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "noContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.RevokeProducerToken.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.RevokeProducerToken.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.RevokeProducerToken.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.RevokeProducerToken.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.RevokeProducerToken.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.RevokeProducerToken.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.RevokeProducerToken.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.RevokeProducerToken.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/404/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/producers/{id}/DELETE/responses/404/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.RevokeProducerToken.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.RevokeProducerToken.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// `not_found`
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.RevokeProducerToken.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            public var notFound: Operations.RevokeProducerToken.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/labels`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)`.
+    public enum ListLabels {
+        public static let id: Swift.String = "listLabels"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/header/X-Timezone`.
                 public var xTimezone: Components.Parameters.XTimezone?
                 public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListLabels.AcceptableContentType>]
                 /// Creates a new `Headers`.
@@ -4849,9 +6253,9 @@ public enum Operations {
         }
         @frozen public enum Output: Sendable, Hashable {
             public struct Ok: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/200/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/200/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/200/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/200/content/application\/json`.
                     case json(Components.Schemas.LabelList)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4878,7 +6282,7 @@ public enum Operations {
             }
             /// OK
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/200`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)/responses/200`.
             ///
             /// HTTP response code: `200 ok`.
             case ok(Operations.ListLabels.Output.Ok)
@@ -4900,9 +6304,9 @@ public enum Operations {
                 }
             }
             public struct BadRequest: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/400/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/400/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/400/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/400/content/application\/json`.
                     case json(Components.Schemas._Error)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4929,7 +6333,7 @@ public enum Operations {
             }
             /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/400`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)/responses/400`.
             ///
             /// HTTP response code: `400 badRequest`.
             case badRequest(Operations.ListLabels.Output.BadRequest)
@@ -4951,9 +6355,9 @@ public enum Operations {
                 }
             }
             public struct Unauthorized: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/401/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/401/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/GET/responses/401/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/GET/responses/401/content/application\/json`.
                     case json(Components.Schemas._Error)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -4980,7 +6384,7 @@ public enum Operations {
             }
             /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/get(listLabels)/responses/401`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/get(listLabels)/responses/401`.
             ///
             /// HTTP response code: `401 unauthorized`.
             case unauthorized(Operations.ListLabels.Output.Unauthorized)
@@ -5034,16 +6438,16 @@ public enum Operations {
     }
     /// Set or clear the ceiling on a label (§9): a card under both takes the lower of it and its producer’s
     ///
-    /// - Remark: HTTP `PATCH /api/me/labels/{label}`.
-    /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)`.
+    /// - Remark: HTTP `PATCH /api/me/settings/labels/{label}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)`.
     public enum UpdateLabel {
         public static let id: Swift.String = "updateLabel"
         public struct Input: Sendable, Hashable {
-            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/path`.
+            /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/path`.
             public struct Path: Sendable, Hashable {
                 /// A label (§4.1): lowercase letters, digits and -
                 ///
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/path/label`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/path/label`.
                 public var label: Swift.String
                 /// Creates a new `Path`.
                 ///
@@ -5054,11 +6458,11 @@ public enum Operations {
                 }
             }
             public var path: Operations.UpdateLabel.Input.Path
-            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/header`.
+            /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/header`.
             public struct Headers: Sendable, Hashable {
                 /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
                 ///
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/header/X-Timezone`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/header/X-Timezone`.
                 public var xTimezone: Components.Parameters.XTimezone?
                 public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.UpdateLabel.AcceptableContentType>]
                 /// Creates a new `Headers`.
@@ -5075,9 +6479,9 @@ public enum Operations {
                 }
             }
             public var headers: Operations.UpdateLabel.Input.Headers
-            /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/requestBody`.
+            /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/requestBody`.
             @frozen public enum Body: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/requestBody/content/application\/json`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/requestBody/content/application\/json`.
                 case json(Components.Schemas.LabelPatch)
             }
             public var body: Operations.UpdateLabel.Input.Body
@@ -5099,9 +6503,9 @@ public enum Operations {
         }
         @frozen public enum Output: Sendable, Hashable {
             public struct Ok: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/200/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/200/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/200/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/200/content/application\/json`.
                     case json(Components.Schemas.Label)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -5128,7 +6532,7 @@ public enum Operations {
             }
             /// OK
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/200`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)/responses/200`.
             ///
             /// HTTP response code: `200 ok`.
             case ok(Operations.UpdateLabel.Output.Ok)
@@ -5150,9 +6554,9 @@ public enum Operations {
                 }
             }
             public struct BadRequest: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/400/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/400/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/400/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/400/content/application\/json`.
                     case json(Components.Schemas._Error)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -5179,7 +6583,7 @@ public enum Operations {
             }
             /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/400`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)/responses/400`.
             ///
             /// HTTP response code: `400 badRequest`.
             case badRequest(Operations.UpdateLabel.Output.BadRequest)
@@ -5201,9 +6605,9 @@ public enum Operations {
                 }
             }
             public struct Unauthorized: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/401/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/401/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/401/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/401/content/application\/json`.
                     case json(Components.Schemas._Error)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -5230,7 +6634,7 @@ public enum Operations {
             }
             /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/401`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)/responses/401`.
             ///
             /// HTTP response code: `401 unauthorized`.
             case unauthorized(Operations.UpdateLabel.Output.Unauthorized)
@@ -5252,9 +6656,9 @@ public enum Operations {
                 }
             }
             public struct ContentTooLarge: Sendable, Hashable {
-                /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/413/content`.
+                /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/413/content`.
                 @frozen public enum Body: Sendable, Hashable {
-                    /// - Remark: Generated from `#/paths/api/me/labels/{label}/PATCH/responses/413/content/application\/json`.
+                    /// - Remark: Generated from `#/paths/api/me/settings/labels/{label}/PATCH/responses/413/content/application\/json`.
                     case json(Components.Schemas._Error)
                     /// The associated value of the enum case if `self` is `.json`.
                     ///
@@ -5281,7 +6685,7 @@ public enum Operations {
             }
             /// `too_large`: the body is over 1 MiB
             ///
-            /// - Remark: Generated from `#/paths//api/me/labels/{label}/patch(updateLabel)/responses/413`.
+            /// - Remark: Generated from `#/paths//api/me/settings/labels/{label}/patch(updateLabel)/responses/413`.
             ///
             /// HTTP response code: `413 contentTooLarge`.
             case contentTooLarge(Operations.UpdateLabel.Output.ContentTooLarge)
@@ -5297,6 +6701,965 @@ public enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "contentTooLarge",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// The signed-in devices; `current` marks the caller
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/devices`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)`.
+    public enum ListSettingsDevices {
+        public static let id: Swift.String = "listSettingsDevices"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListSettingsDevices.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ListSettingsDevices.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ListSettingsDevices.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.ListSettingsDevices.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.DeviceList)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.DeviceList {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListSettingsDevices.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListSettingsDevices.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ListSettingsDevices.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ListSettingsDevices.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListSettingsDevices.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListSettingsDevices.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.ListSettingsDevices.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.ListSettingsDevices.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ListSettingsDevices.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ListSettingsDevices.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ListSettingsDevices.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.ListSettingsDevices.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Sign a device out
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/devices/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)`.
+    public enum SignOutDevice {
+        public static let id: Swift.String = "signOutDevice"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/path`.
+            public struct Path: Sendable, Hashable {
+                /// A device id
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/path/id`.
+                public var id: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - id: A device id
+                public init(id: Swift.String) {
+                    self.id = id
+                }
+            }
+            public var path: Operations.SignOutDevice.Input.Path
+            /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.SignOutDevice.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.SignOutDevice.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.SignOutDevice.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.SignOutDevice.Input.Path,
+                headers: Operations.SignOutDevice.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct NoContent: Sendable, Hashable {
+                /// Creates a new `NoContent`.
+                public init() {}
+            }
+            /// Signed out
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            case noContent(Operations.SignOutDevice.Output.NoContent)
+            /// Signed out
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            public static var noContent: Self {
+                .noContent(.init())
+            }
+            /// The associated value of the enum case if `self` is `.noContent`.
+            ///
+            /// - Throws: An error if `self` is not `.noContent`.
+            /// - SeeAlso: `.noContent`.
+            public var noContent: Operations.SignOutDevice.Output.NoContent {
+                get throws {
+                    switch self {
+                    case let .noContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "noContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SignOutDevice.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SignOutDevice.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.SignOutDevice.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.SignOutDevice.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SignOutDevice.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SignOutDevice.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.SignOutDevice.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.SignOutDevice.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/404/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/devices/{id}/DELETE/responses/404/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.SignOutDevice.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.SignOutDevice.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// `not_found`
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.SignOutDevice.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            public var notFound: Operations.SignOutDevice.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// A one-hour link that registers a passkey for another device
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/enrolment`.
+    /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)`.
+    public enum EnrolDevice {
+        public static let id: Swift.String = "enrolDevice"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.EnrolDevice.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.EnrolDevice.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.EnrolDevice.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.EnrolDevice.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/201/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.Enrolment)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.Enrolment {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.EnrolDevice.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.EnrolDevice.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// The link
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.EnrolDevice.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            public var created: Operations.EnrolDevice.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.EnrolDevice.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.EnrolDevice.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.EnrolDevice.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.EnrolDevice.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/enrolment/POST/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.EnrolDevice.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.EnrolDevice.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/enrolment/post(enrolDevice)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.EnrolDevice.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.EnrolDevice.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Ready-to-paste ways to connect a producer: curl, n8n, Hermes
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/snippets`.
+    /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)`.
+    public enum ConnectSnippets {
+        public static let id: Swift.String = "connectSnippets"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/query`.
+            public struct Query: Sendable, Hashable {
+                /// The producer root to fill in (default my-producer)
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/query/root`.
+                public var root: Swift.String?
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - root: The producer root to fill in (default my-producer)
+                public init(root: Swift.String? = nil) {
+                    self.root = root
+                }
+            }
+            public var query: Operations.ConnectSnippets.Input.Query
+            /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///
+                /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/header/X-Timezone`.
+                public var xTimezone: Components.Parameters.XTimezone?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ConnectSnippets.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - xTimezone: The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential.
+                ///   - accept:
+                public init(
+                    xTimezone: Components.Parameters.XTimezone? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ConnectSnippets.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.xTimezone = xTimezone
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ConnectSnippets.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - query:
+            ///   - headers:
+            public init(
+                query: Operations.ConnectSnippets.Input.Query = .init(),
+                headers: Operations.ConnectSnippets.Input.Headers = .init()
+            ) {
+                self.query = query
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ConnectSnippets)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ConnectSnippets {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ConnectSnippets.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ConnectSnippets.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// OK
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ConnectSnippets.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ConnectSnippets.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/400/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ConnectSnippets.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ConnectSnippets.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.ConnectSnippets.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            public var badRequest: Operations.ConnectSnippets.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct Unauthorized: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/401/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/me/settings/snippets/GET/responses/401/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ConnectSnippets.Output.Unauthorized.Body
+                /// Creates a new `Unauthorized`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ConnectSnippets.Output.Unauthorized.Body) {
+                    self.body = body
+                }
+            }
+            /// `unauthorized`: no session, an expired one, a signed-out device, or a producer token
+            ///
+            /// - Remark: Generated from `#/paths//api/me/settings/snippets/get(connectSnippets)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Operations.ConnectSnippets.Output.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            public var unauthorized: Operations.ConnectSnippets.Output.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
                             response: self
                         )
                     }

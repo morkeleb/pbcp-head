@@ -37,6 +37,9 @@ beforeEach(async () => {
   // A fresh browser profile per test: no worker or cache left from the one before.
   const context = await browser.createBrowserContext();
   page = await context.newPage();
+  // The device's zone is the head's (X-Timezone); the fixtures date cards in UTC, so the browser lives in UTC too, or the
+  // two disagree on what today is for the hours around midnight.
+  await page.emulateTimezone('UTC');
   page.once('close', () => void context.close().catch(() => undefined));
   await page.setViewport({ width: 390, height: 844 });
   errors = [];

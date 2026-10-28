@@ -4795,6 +4795,395 @@ extension Components {
                 ])
             }
         }
+        /// - Remark: Generated from `#/components/schemas/HeadFacts`.
+        public struct HeadFacts: Codable, Hashable, Sendable {
+            /// The owner’s person id: every card’s `to_person` (§10)
+            ///
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/owner`.
+            public var owner: Swift.String
+            /// The head URL a producer is given: the origin plus /api
+            ///
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/url`.
+            public var url: Swift.String
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/protocol`.
+            public var _protocol: Swift.String
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/extensions`.
+            public var extensions: [Swift.String]
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/render`.
+            public struct RenderPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/HeadFacts/render/mermaid`.
+                public var mermaid: [Swift.String]
+                /// Creates a new `RenderPayload`.
+                ///
+                /// - Parameters:
+                ///   - mermaid:
+                public init(mermaid: [Swift.String]) {
+                    self.mermaid = mermaid
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case mermaid
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.mermaid = try container.decode(
+                        [Swift.String].self,
+                        forKey: .mermaid
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "mermaid"
+                    ])
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/HeadFacts/render`.
+            public var render: Components.Schemas.HeadFacts.RenderPayload
+            /// Creates a new `HeadFacts`.
+            ///
+            /// - Parameters:
+            ///   - owner: The owner’s person id: every card’s `to_person` (§10)
+            ///   - url: The head URL a producer is given: the origin plus /api
+            ///   - _protocol:
+            ///   - extensions:
+            ///   - render:
+            public init(
+                owner: Swift.String,
+                url: Swift.String,
+                _protocol: Swift.String,
+                extensions: [Swift.String],
+                render: Components.Schemas.HeadFacts.RenderPayload
+            ) {
+                self.owner = owner
+                self.url = url
+                self._protocol = _protocol
+                self.extensions = extensions
+                self.render = render
+            }
+            public enum CodingKeys: String, CodingKey {
+                case owner
+                case url
+                case _protocol = "protocol"
+                case extensions
+                case render
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.owner = try container.decode(
+                    Swift.String.self,
+                    forKey: .owner
+                )
+                self.url = try container.decode(
+                    Swift.String.self,
+                    forKey: .url
+                )
+                self._protocol = try container.decode(
+                    Swift.String.self,
+                    forKey: ._protocol
+                )
+                self.extensions = try container.decode(
+                    [Swift.String].self,
+                    forKey: .extensions
+                )
+                self.render = try container.decode(
+                    Components.Schemas.HeadFacts.RenderPayload.self,
+                    forKey: .render
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "owner",
+                    "url",
+                    "protocol",
+                    "extensions",
+                    "render"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ProducerToken`.
+        public struct ProducerToken: Codable, Hashable, Sendable {
+            /// The token’s id here: a prefix of its stored hash, never the token
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/id`.
+            public var id: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/root`.
+            public var root: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/instance`.
+            public var instance: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/executor`.
+            public var executor: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/ceiling`.
+            @frozen public enum CeilingPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case immediate = "immediate"
+                case brief = "brief"
+                case log = "log"
+            }
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/ceiling`.
+            public var ceiling: Components.Schemas.ProducerToken.CeilingPayload
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/created_at`.
+            public var createdAt: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/last_used_at`.
+            public var lastUsedAt: Swift.String?
+            /// Creates a new `ProducerToken`.
+            ///
+            /// - Parameters:
+            ///   - id: The token’s id here: a prefix of its stored hash, never the token
+            ///   - root:
+            ///   - instance:
+            ///   - executor:
+            ///   - ceiling:
+            ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///   - lastUsedAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            public init(
+                id: Swift.String,
+                root: Swift.String,
+                instance: Swift.String? = nil,
+                executor: Swift.Bool,
+                ceiling: Components.Schemas.ProducerToken.CeilingPayload,
+                createdAt: Swift.String,
+                lastUsedAt: Swift.String? = nil
+            ) {
+                self.id = id
+                self.root = root
+                self.instance = instance
+                self.executor = executor
+                self.ceiling = ceiling
+                self.createdAt = createdAt
+                self.lastUsedAt = lastUsedAt
+            }
+            public enum CodingKeys: String, CodingKey {
+                case id
+                case root
+                case instance
+                case executor
+                case ceiling
+                case createdAt = "created_at"
+                case lastUsedAt = "last_used_at"
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.id = try container.decode(
+                    Swift.String.self,
+                    forKey: .id
+                )
+                self.root = try container.decode(
+                    Swift.String.self,
+                    forKey: .root
+                )
+                self.instance = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .instance
+                )
+                self.executor = try container.decode(
+                    Swift.Bool.self,
+                    forKey: .executor
+                )
+                self.ceiling = try container.decode(
+                    Components.Schemas.ProducerToken.CeilingPayload.self,
+                    forKey: .ceiling
+                )
+                self.createdAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .createdAt
+                )
+                self.lastUsedAt = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .lastUsedAt
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "id",
+                    "root",
+                    "instance",
+                    "executor",
+                    "ceiling",
+                    "created_at",
+                    "last_used_at"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ProducerTokenList`.
+        public struct ProducerTokenList: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ProducerTokenList/producers`.
+            public var producers: [Components.Schemas.ProducerToken]
+            /// Creates a new `ProducerTokenList`.
+            ///
+            /// - Parameters:
+            ///   - producers:
+            public init(producers: [Components.Schemas.ProducerToken]) {
+                self.producers = producers
+            }
+            public enum CodingKeys: String, CodingKey {
+                case producers
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.producers = try container.decode(
+                    [Components.Schemas.ProducerToken].self,
+                    forKey: .producers
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "producers"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/MintedToken`.
+        public struct MintedToken: Codable, Hashable, Sendable {
+            /// The producer token. Shown once: the head keeps only its hash
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintedToken/token`.
+            public var token: Swift.String
+            /// - Remark: Generated from `#/components/schemas/MintedToken/producer`.
+            public var producer: Components.Schemas.ProducerToken
+            /// Creates a new `MintedToken`.
+            ///
+            /// - Parameters:
+            ///   - token: The producer token. Shown once: the head keeps only its hash
+            ///   - producer:
+            public init(
+                token: Swift.String,
+                producer: Components.Schemas.ProducerToken
+            ) {
+                self.token = token
+                self.producer = producer
+            }
+            public enum CodingKeys: String, CodingKey {
+                case token
+                case producer
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.token = try container.decode(
+                    Swift.String.self,
+                    forKey: .token
+                )
+                self.producer = try container.decode(
+                    Components.Schemas.ProducerToken.self,
+                    forKey: .producer
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "token",
+                    "producer"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/Enrolment`.
+        public struct Enrolment: Codable, Hashable, Sendable {
+            /// Opens the sign-in page ready to register a passkey on this head
+            ///
+            /// - Remark: Generated from `#/components/schemas/Enrolment/url`.
+            public var url: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/Enrolment/expires_at`.
+            public var expiresAt: Swift.String
+            /// Creates a new `Enrolment`.
+            ///
+            /// - Parameters:
+            ///   - url: Opens the sign-in page ready to register a passkey on this head
+            ///   - expiresAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            public init(
+                url: Swift.String,
+                expiresAt: Swift.String
+            ) {
+                self.url = url
+                self.expiresAt = expiresAt
+            }
+            public enum CodingKeys: String, CodingKey {
+                case url
+                case expiresAt = "expires_at"
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.url = try container.decode(
+                    Swift.String.self,
+                    forKey: .url
+                )
+                self.expiresAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .expiresAt
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "url",
+                    "expires_at"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ConnectSnippets`.
+        public struct ConnectSnippets: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/root`.
+            public var root: Swift.String
+            /// The placeholder in the snippets: replace it with a token just minted
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/token`.
+            public var token: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/curl`.
+            public var curl: Swift.String
+            /// An HTTP Request node, as n8n pastes it
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/n8n`.
+            public var n8n: Swift.String
+            /// The MCP server command, its two variables, and connectors/hermes’s mcp.json
+            ///
+            /// - Remark: Generated from `#/components/schemas/ConnectSnippets/hermes`.
+            public var hermes: Swift.String
+            /// Creates a new `ConnectSnippets`.
+            ///
+            /// - Parameters:
+            ///   - root:
+            ///   - token: The placeholder in the snippets: replace it with a token just minted
+            ///   - curl:
+            ///   - n8n: An HTTP Request node, as n8n pastes it
+            ///   - hermes: The MCP server command, its two variables, and connectors/hermes’s mcp.json
+            public init(
+                root: Swift.String,
+                token: Swift.String,
+                curl: Swift.String,
+                n8n: Swift.String,
+                hermes: Swift.String
+            ) {
+                self.root = root
+                self.token = token
+                self.curl = curl
+                self.n8n = n8n
+                self.hermes = hermes
+            }
+            public enum CodingKeys: String, CodingKey {
+                case root
+                case token
+                case curl
+                case n8n
+                case hermes
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.root = try container.decode(
+                    Swift.String.self,
+                    forKey: .root
+                )
+                self.token = try container.decode(
+                    Swift.String.self,
+                    forKey: .token
+                )
+                self.curl = try container.decode(
+                    Swift.String.self,
+                    forKey: .curl
+                )
+                self.n8n = try container.decode(
+                    Swift.String.self,
+                    forKey: .n8n
+                )
+                self.hermes = try container.decode(
+                    Swift.String.self,
+                    forKey: .hermes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "root",
+                    "token",
+                    "curl",
+                    "n8n",
+                    "hermes"
+                ])
+            }
+        }
         /// - Remark: Generated from `#/components/schemas/HeadDescription`.
         public struct HeadDescription: Codable, Hashable, Sendable {
             /// - Remark: Generated from `#/components/schemas/HeadDescription/protocol`.
@@ -5227,6 +5616,82 @@ extension Components {
             /// - Parameters:
             ///   - ceiling: Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)
             public init(ceiling: Components.Schemas.LabelPatch.CeilingPayload? = nil) {
+                self.ceiling = ceiling
+            }
+            public enum CodingKeys: String, CodingKey {
+                case ceiling
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/MintTokenRequest`.
+        public struct MintTokenRequest: Codable, Hashable, Sendable {
+            /// The producer root (§5): letters, digits and -; not `head`; not already held by a live token
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintTokenRequest/root`.
+            public var root: Swift.String
+            /// Default `brief` (§9)
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintTokenRequest/ceiling`.
+            @frozen public enum CeilingPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case immediate = "immediate"
+                case brief = "brief"
+                case log = "log"
+            }
+            /// Default `brief` (§9)
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintTokenRequest/ceiling`.
+            public var ceiling: Components.Schemas.MintTokenRequest.CeilingPayload?
+            /// May claim orders to `*` (A.1)
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintTokenRequest/executor`.
+            public var executor: Swift.Bool?
+            /// A second installation of the same connector
+            ///
+            /// - Remark: Generated from `#/components/schemas/MintTokenRequest/instance`.
+            public var instance: Swift.String?
+            /// Creates a new `MintTokenRequest`.
+            ///
+            /// - Parameters:
+            ///   - root: The producer root (§5): letters, digits and -; not `head`; not already held by a live token
+            ///   - ceiling: Default `brief` (§9)
+            ///   - executor: May claim orders to `*` (A.1)
+            ///   - instance: A second installation of the same connector
+            public init(
+                root: Swift.String,
+                ceiling: Components.Schemas.MintTokenRequest.CeilingPayload? = nil,
+                executor: Swift.Bool? = nil,
+                instance: Swift.String? = nil
+            ) {
+                self.root = root
+                self.ceiling = ceiling
+                self.executor = executor
+                self.instance = instance
+            }
+            public enum CodingKeys: String, CodingKey {
+                case root
+                case ceiling
+                case executor
+                case instance
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/TokenPatch`.
+        public struct TokenPatch: Codable, Hashable, Sendable {
+            /// The producer’s ceiling (§9): every live token of its root; cards stored from now on
+            ///
+            /// - Remark: Generated from `#/components/schemas/TokenPatch/ceiling`.
+            @frozen public enum CeilingPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case immediate = "immediate"
+                case brief = "brief"
+                case log = "log"
+            }
+            /// The producer’s ceiling (§9): every live token of its root; cards stored from now on
+            ///
+            /// - Remark: Generated from `#/components/schemas/TokenPatch/ceiling`.
+            public var ceiling: Components.Schemas.TokenPatch.CeilingPayload
+            /// Creates a new `TokenPatch`.
+            ///
+            /// - Parameters:
+            ///   - ceiling: The producer’s ceiling (§9): every live token of its root; cards stored from now on
+            public init(ceiling: Components.Schemas.TokenPatch.CeilingPayload) {
                 self.ceiling = ceiling
             }
             public enum CodingKeys: String, CodingKey {

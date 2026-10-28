@@ -81,10 +81,20 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('GET', `/api/me/cards/${enc('hermes:gmail:2')}`);
     await api('GET', '/api/me/producers');
     await api('PATCH', '/api/me/producers/hermes', { ceiling: 'brief' });
-    await api('PATCH', '/api/me/labels/billing-revamp', { ceiling: 'log' });
-    await api('GET', '/api/me/labels');
-    await api('PATCH', '/api/me/labels/Not_A_Label', { ceiling: 'log' }); // 400
+    await api('PATCH', '/api/me/settings/labels/billing-revamp', { ceiling: 'log' });
+    await api('GET', '/api/me/settings/labels');
+    await api('PATCH', '/api/me/settings/labels/Not_A_Label', { ceiling: 'log' }); // 400
     await api('GET', '/api/me/devices');
+    await api('GET', '/api/me/settings/head');
+    const minted = await api('POST', '/api/me/settings/producers', { root: 'n8n' });
+    await api('POST', '/api/me/settings/producers', { root: 'n8n' }); // 409
+    await api('GET', '/api/me/settings/producers');
+    await api('PATCH', `/api/me/settings/producers/${minted.body.producer.id}`, { ceiling: 'log' });
+    await api('DELETE', `/api/me/settings/producers/${minted.body.producer.id}`);
+    await api('GET', '/api/me/settings/snippets?root=n8n');
+    await api('GET', '/api/me/settings/devices');
+    await api('POST', '/api/me/settings/enrolment');
+    await api('DELETE', '/api/me/settings/devices/nope'); // 404
     await api('POST', '/api/me/visit', {});
     await api('POST', '/api/me/visit', { seq: 1 });
   });

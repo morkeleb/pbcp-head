@@ -258,6 +258,57 @@ export const Device = z.object({
 
 export const DeviceList = z.object({ devices: z.array(Device) }).register(responses, { id: 'DeviceList' });
 
+// --- settings (/api/me/settings/*) -------------------------------------------------------------------------
+
+export const HeadFacts = z.object({
+  owner: z.string().describe('The owner’s person id: every card’s `to_person` (§10)'),
+  url: z.string().describe('The head URL a producer is given: the origin plus /api'),
+  protocol: z.string(),
+  extensions: z.array(z.string()),
+  render: z.object({ mermaid: z.array(z.string()) }),
+}).register(responses, { id: 'HeadFacts', description: 'The describe document’s facts (§7.5) and where producers submit' });
+
+export const ProducerToken = z.object({
+  id: z.string().describe('The token’s id here: a prefix of its stored hash, never the token'),
+  root: z.string(),
+  instance: z.string().nullable(),
+  executor: z.boolean(),
+  ceiling: z.enum(URGENCIES),
+  created_at: Timestamp,
+  last_used_at: Timestamp.nullable().describe('The last request it authenticated, to the minute'),
+}).register(responses, { id: 'ProducerToken' });
+
+export const ProducerTokenList = z.object({ producers: z.array(ProducerToken) }).register(responses, { id: 'ProducerTokenList' });
+
+export const MintTokenRequest = z.object({
+  root: z.string().describe('The producer root (§5): letters, digits and -; not `head`; not already held by a live token'),
+  ceiling: z.enum(URGENCIES).optional().describe('Default `brief` (§9)'),
+  executor: z.boolean().optional().describe('May claim orders to `*` (A.1)'),
+  instance: z.string().optional().describe('A second installation of the same connector'),
+}).register(requests, { id: 'MintTokenRequest' });
+
+export const MintedToken = z.object({
+  token: z.string().describe('The producer token. Shown once: the head keeps only its hash'),
+  producer: ProducerToken,
+}).register(responses, { id: 'MintedToken' });
+
+export const TokenPatch = z.object({
+  ceiling: z.enum(URGENCIES).describe('The producer’s ceiling (§9): every live token of its root; cards stored from now on'),
+}).register(requests, { id: 'TokenPatch' });
+
+export const Enrolment = z.object({
+  url: z.string().describe('Opens the sign-in page ready to register a passkey on this head'),
+  expires_at: Timestamp,
+}).register(responses, { id: 'Enrolment' });
+
+export const ConnectSnippets = z.object({
+  root: z.string(),
+  token: z.string().describe('The placeholder in the snippets: replace it with a token just minted'),
+  curl: z.string(),
+  n8n: z.string().describe('An HTTP Request node, as n8n pastes it'),
+  hermes: z.string().describe('The MCP server command, its two variables, and connectors/hermes’s mcp.json'),
+}).register(responses, { id: 'ConnectSnippets' });
+
 // --- GET / ----------------------------------------------------------------------------------------------
 
 export const HeadDescription = HeadDescriptionSchema.register(responses, { id: 'HeadDescription', description: 'RFC §7.5' });

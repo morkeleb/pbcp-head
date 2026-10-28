@@ -13,6 +13,7 @@ docker compose up -d --wait postgres   # Postgres on localhost:5433
 cp .env.example .env
 pnpm db:migrate
 pnpm mint-token morten hermes    # creates head `morten`, prints a producer token for root `hermes`
+# afterwards, signed in: /settings mints and revokes tokens, enrols devices, and shows how to connect a producer
 pnpm enroll morten               # prints a /signin link to register the owner's first passkey
 pnpm dev                         # then open /signin from the enroll link, and /brief
 ```

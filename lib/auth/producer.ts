@@ -34,6 +34,10 @@ export async function authenticateProducer(db: Db, req: Request): Promise<Produc
     .from(producerTokens)
     .where(and(eq(producerTokens.tokenHash, hashToken(token)), isNull(producerTokens.revokedAt)));
   if (!row) throw new PbcpError('unauthorized', 'the producer token is not valid');
+  // "Last used" for the owner's settings, to the minute: one write a minute per token, not one per request.
+  if (row.lastUsedAt === null || Date.now() - row.lastUsedAt.getTime() > 60_000) {
+    await db.update(producerTokens).set({ lastUsedAt: new Date() }).where(eq(producerTokens.tokenHash, row.tokenHash));
+  }
   return {
     headId: row.headId,
     root: row.root,

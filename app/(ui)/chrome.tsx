@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import type { Density } from './brief/DecisionCard';
 import { dateline, NAME } from '../../lib/masthead';
 import { api, cardHref, loadTokens, saveTokens } from './client';
-import { AsOf, type MeCard } from './components';
+import { AsOf, useDark, type MeCard } from './components';
 
 const DENSITY_KEY = 'pbcp.density';
 const THEME_KEY = 'pbcp.theme';
@@ -141,21 +141,34 @@ export function ChromeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export type ThemeChoice = 'system' | 'light' | 'dark';
+
+/** The theme saved on this device: `light` or `dark`, or the system's when none is (the root layout reads it before paint). */
+export function savedTheme(): ThemeChoice {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    return t === 'light' || t === 'dark' ? t : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+/** Saves the theme on this device and applies it now. */
+export function setTheme(choice: ThemeChoice) {
+  const dark = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  try {
+    if (choice === 'system') localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, choice);
+  } catch {
+    // the choice lasts as long as the page
+  }
+}
+
 function ThemeToggle() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => setDark(document.documentElement.classList.contains('dark')), []);
-  const toggle = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    try {
-      localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
-    } catch {
-      // the choice lasts as long as the page
-    }
-  };
+  const dark = useDark(); // follows the page, so a change from Settings shows here too
   return (
-    <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? 'Light theme' : 'Dark theme'} aria-pressed={dark}>
+    <Button variant="ghost" size="icon-sm" onClick={() => setTheme(dark ? 'light' : 'dark')} aria-label={dark ? 'Light theme' : 'Dark theme'} aria-pressed={dark}>
       {dark ? <Sun /> : <Moon />}
     </Button>
   );
@@ -218,7 +231,7 @@ function PagesMenu() {
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild><Link href="/brief">Brief</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/orders">Orders</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/settings/ceilings">Ceilings</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/settings">Settings</Link></DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

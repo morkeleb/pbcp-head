@@ -124,8 +124,8 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
 
   it('stores a card under a producer ceiling and label ceilings with the lowest of them', async () => {
     // hermes's ceiling is immediate.
-    expect((await me('PATCH', '/api/me/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log' });
-    await me('PATCH', '/api/me/labels/billing-revamp', { ceiling: 'brief' });
+    expect((await me('PATCH', '/api/me/settings/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log' });
+    await me('PATCH', '/api/me/settings/labels/billing-revamp', { ceiling: 'brief' });
     await put('hermes:gmail:n1', { kind: 'signal', urgency: 'immediate', labels: ['newsletters'] });
     await put('hermes:gmail:n2', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp', 'newsletters'] }); // both: the lowest
     await put('hermes:gmail:n3', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp'] });
@@ -133,7 +133,7 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
     expect([await delivered('hermes:gmail:n1'), await delivered('hermes:gmail:n2'), await delivered('hermes:gmail:n3'), await delivered('hermes:gmail:n4')]).toEqual(['log', 'log', 'brief', 'immediate']);
     // A producer ceiling below a label's still wins: the lower of the two.
     await me('PATCH', '/api/me/producers/hermes', { ceiling: 'log' });
-    await me('PATCH', '/api/me/labels/other', { ceiling: 'immediate' });
+    await me('PATCH', '/api/me/settings/labels/other', { ceiling: 'immediate' });
     await put('hermes:gmail:n5', { kind: 'signal', urgency: 'immediate', labels: ['other'] });
     expect(await delivered('hermes:gmail:n5')).toBe('log');
     expect((await me('GET', `/api/me/cards/${encodeURIComponent('hermes:gmail:n1')}`)).body.card.urgency).toBe('immediate'); // urgency as sent
@@ -142,14 +142,14 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
   it('lists labels with their counts and ceilings, clears a ceiling with null, and refuses a malformed label', async () => {
     await put('hermes:gmail:l1', { kind: 'artifact', labels: ['b-label', 'a-label'] });
     await put('hermes:gmail:l2', { kind: 'artifact', labels: ['a-label'] });
-    await me('PATCH', '/api/me/labels/a-label', { ceiling: 'brief' });
-    expect((await me('GET', '/api/me/labels')).body.labels).toEqual([
+    await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: 'brief' });
+    expect((await me('GET', '/api/me/settings/labels')).body.labels).toEqual([
       { label: 'a-label', cards: 2, ceiling: 'brief' },
       { label: 'b-label', cards: 1, ceiling: null },
     ]);
-    expect((await me('PATCH', '/api/me/labels/a-label', { ceiling: null })).body.ceiling).toBeNull();
-    expect((await me('PATCH', '/api/me/labels/Not_A_Label', { ceiling: 'log' })).status).toBe(400);
-    expect((await me('PATCH', '/api/me/labels/a-label', { ceiling: 'loud' })).status).toBe(400);
+    expect((await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: null })).body.ceiling).toBeNull();
+    expect((await me('PATCH', '/api/me/settings/labels/Not_A_Label', { ceiling: 'log' })).status).toBe(400);
+    expect((await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: 'loud' })).status).toBe(400);
   });
 });
 
