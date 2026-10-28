@@ -32,6 +32,8 @@ export const tokenId = (hash: Buffer) => hash.toString('hex').slice(0, 16);
 export interface TokenRow {
   id: string;
   root: string;
+  /** The display name: renamed in Settings, or the name a paired producer gave; null when it has none (shown as the root). */
+  name: string | null;
   instance: string | null;
   executor: boolean;
   ceiling: Urgency;
@@ -51,6 +53,7 @@ export async function listTokens(db: Db, headId: string): Promise<TokenRow[]> {
   return rows.map((r) => ({
     id: tokenId(r.tokenHash),
     root: r.root,
+    name: r.name,
     instance: r.instance,
     executor: r.executor,
     ceiling: (URGENCIES as readonly string[]).includes(r.urgencyCeiling) ? (r.urgencyCeiling as Urgency) : 'brief',
@@ -58,6 +61,24 @@ export async function listTokens(db: Db, headId: string): Promise<TokenRow[]> {
     last_used_at: r.lastUsedAt ? iso(r.lastUsedAt) : null,
     paired: r.pairedAt ? { name: r.pairedName, address: r.pairedAddress, at: iso(r.pairedAt) } : null,
   }));
+}
+
+export const PRODUCER_NAME_MAX = 60;
+
+/**
+ * Renames a live token's producer for the owner: 1–60 characters once trimmed. Display only: the root is the producer's
+ * identity in the protocol and never changes; cards already stored keep the words they were written with.
+ */
+export async function renameToken(db: Db, headId: string, id: string, name: unknown): Promise<void> {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (trimmed.length < 1 || [...trimmed].length > PRODUCER_NAME_MAX) {
+    throw new HttpError(400, 'invalid_name', `a producer's name is 1 to ${PRODUCER_NAME_MAX} characters, not only spaces`);
+  }
+  const token = (await listTokens(db, headId)).find((t) => t.id === id);
+  if (!token) throw new HttpError(404, 'not_found', `no live producer token ${id}`);
+  const live = await db.select({ hash: producerTokens.tokenHash }).from(producerTokens).where(and(eq(producerTokens.headId, headId), isNull(producerTokens.revokedAt)));
+  const hash = live.find((r) => tokenId(r.hash) === id)!.hash;
+  await db.update(producerTokens).set({ name: trimmed }).where(eq(producerTokens.tokenHash, hash));
 }
 
 export interface MintRequest {

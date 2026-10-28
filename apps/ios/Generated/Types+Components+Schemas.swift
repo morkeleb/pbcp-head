@@ -5003,6 +5003,10 @@ extension Components {
             public var id: Swift.String
             /// - Remark: Generated from `#/components/schemas/ProducerToken/root`.
             public var root: Swift.String
+            /// The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/name`.
+            public var name: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ProducerToken/instance`.
             public var instance: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ProducerToken/executor`.
@@ -5085,6 +5089,7 @@ extension Components {
             /// - Parameters:
             ///   - id: The token’s id here: a prefix of its stored hash, never the token
             ///   - root:
+            ///   - name: The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root
             ///   - instance:
             ///   - executor:
             ///   - ceiling:
@@ -5094,6 +5099,7 @@ extension Components {
             public init(
                 id: Swift.String,
                 root: Swift.String,
+                name: Swift.String? = nil,
                 instance: Swift.String? = nil,
                 executor: Swift.Bool,
                 ceiling: Components.Schemas.ProducerToken.CeilingPayload,
@@ -5103,6 +5109,7 @@ extension Components {
             ) {
                 self.id = id
                 self.root = root
+                self.name = name
                 self.instance = instance
                 self.executor = executor
                 self.ceiling = ceiling
@@ -5113,6 +5120,7 @@ extension Components {
             public enum CodingKeys: String, CodingKey {
                 case id
                 case root
+                case name
                 case instance
                 case executor
                 case ceiling
@@ -5129,6 +5137,10 @@ extension Components {
                 self.root = try container.decode(
                     Swift.String.self,
                     forKey: .root
+                )
+                self.name = try container.decodeIfPresent(
+                    Swift.String.self,
+                    forKey: .name
                 )
                 self.instance = try container.decodeIfPresent(
                     Swift.String.self,
@@ -5157,6 +5169,7 @@ extension Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "id",
                     "root",
+                    "name",
                     "instance",
                     "executor",
                     "ceiling",
@@ -6322,16 +6335,26 @@ extension Components {
             /// The producer’s ceiling (§9): every live token of its root; cards stored from now on
             ///
             /// - Remark: Generated from `#/components/schemas/TokenPatch/ceiling`.
-            public var ceiling: Components.Schemas.TokenPatch.CeilingPayload
+            public var ceiling: Components.Schemas.TokenPatch.CeilingPayload?
+            /// The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes
+            ///
+            /// - Remark: Generated from `#/components/schemas/TokenPatch/name`.
+            public var name: Swift.String?
             /// Creates a new `TokenPatch`.
             ///
             /// - Parameters:
             ///   - ceiling: The producer’s ceiling (§9): every live token of its root; cards stored from now on
-            public init(ceiling: Components.Schemas.TokenPatch.CeilingPayload) {
+            ///   - name: The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes
+            public init(
+                ceiling: Components.Schemas.TokenPatch.CeilingPayload? = nil,
+                name: Swift.String? = nil
+            ) {
                 self.ceiling = ceiling
+                self.name = name
             }
             public enum CodingKeys: String, CodingKey {
                 case ceiling
+                case name
             }
         }
         /// - Remark: Generated from `#/components/schemas/PairRequest`.

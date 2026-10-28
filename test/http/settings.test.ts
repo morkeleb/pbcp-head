@@ -4,6 +4,7 @@
 import { curlSnippet, HeadClient, producerConfig } from '@pbcp/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mintProducerToken } from '../../lib/auth/producer';
+import { sign } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
 import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
@@ -68,6 +69,42 @@ describe('producer tokens', () => {
     const r = await me('PATCH', `/api/me/settings/producers/${body.producer.id}`, { ceiling: 'immediate' });
     expect(r.body).toMatchObject({ root: 'cal', ceiling: 'immediate' });
     expect((await me('PATCH', `/api/me/settings/producers/${body.producer.id}`, { ceiling: 'loud' })).status).toBe(400);
+  });
+
+  it('renames a producer for display, trimmed, 1 to 60 characters; the root never changes', async () => {
+    const { body } = await me('POST', '/api/me/settings/producers', { root: 'n8n', instance: 'kitchen' });
+    expect(body.producer.name).toBeNull(); // minted without a name: Settings shows the root
+    const path = `/api/me/settings/producers/${body.producer.id}`;
+    let r = await me('PATCH', path, { name: '  Kitchen automations  ' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ id: body.producer.id, root: 'n8n', instance: 'kitchen', name: 'Kitchen automations' });
+    expect((await me('GET', '/api/me/settings/producers')).body.producers[0].name).toBe('Kitchen automations');
+    r = await me('PATCH', path, { name: 'é'.repeat(60), ceiling: 'immediate' });
+    expect(r.body).toMatchObject({ name: 'é'.repeat(60), ceiling: 'immediate', root: 'n8n' });
+    for (const name of ['', '   ', 'x'.repeat(61), 42]) {
+      r = await me('PATCH', path, { name, ceiling: 'log' });
+      expect([r.status, r.body.error], JSON.stringify(name)).toEqual(typeof name === 'string' ? [400, 'invalid_name'] : [400, 'invalid_request']);
+    }
+    expect((await me('GET', '/api/me/settings/producers')).body.producers[0]).toMatchObject({ name: 'é'.repeat(60), ceiling: 'immediate' }); // a refusal changes nothing
+    r = await me('PATCH', path, { root: 'other' });
+    expect([r.status, r.body.error]).toEqual([400, 'invalid_request']);
+    r = await me('PATCH', '/api/me/settings/producers/0000000000000000', { name: 'x' });
+    expect([r.status, r.body.error]).toEqual([404, 'not_found']);
+    // Its token still writes under the same root.
+    const token = (await me('POST', '/api/me/settings/producers', { root: 'cal' })).body.token;
+    await me('PATCH', `/api/me/settings/producers/${(await me('GET', '/api/me/settings/producers')).body.producers.find((p: { root: string }) => p.root === 'cal').id}`, { name: 'Calendar' });
+    expect((await call('PUT', cardPath('cal:x:1'), { auth: `Bearer ${token}`, body: card('cal:x:1', { kind: 'artifact' }) })).status).toBe(201);
+  });
+
+  it('refuses a rename with an assistant’s scoped token, and with a producer token', async () => {
+    const { body } = await me('POST', '/api/me/settings/producers', { root: 'n8n' });
+    const path = `/api/me/settings/producers/${body.producer.id}`;
+    const scoped = await sign('session', { sub: OWNER, did: owner.deviceId, scope: 'owner', resource: `${headUrl()}/api/mcp` }, 600);
+    let r = await call('PATCH', path, { auth: `Session ${scoped}`, body: { name: 'Hijacked' } });
+    expect([r.status, r.body.error]).toEqual([403, 'insufficient_scope']);
+    r = await call('PATCH', path, { auth: `Bearer ${body.token}`, body: { name: 'Hijacked' } });
+    expect(r.status).toBe(401);
+    expect((await me('GET', '/api/me/settings/producers')).body.producers[0].name).toBeNull();
   });
 });
 
