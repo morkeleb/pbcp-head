@@ -36,5 +36,5 @@ export async function headFacts(db: Db, headId: string, url: string) {
 export async function connectFacts(db: Db, origin: string): Promise<ConnectFacts> {
   const owner = await defaultHead(db);
   const d = describeHead(owner ?? '', 0, producerUrl(origin));
-  return { api: d.api!, owner, protocol: d.protocol, extensions: d.extensions };
+  return { url: origin, api: d.api!, owner, protocol: d.protocol, extensions: d.extensions, mermaid: d.render.mermaid };
 }

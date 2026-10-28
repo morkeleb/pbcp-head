@@ -772,7 +772,7 @@ describe('theme', () => {
 
   it('under System, follows the scheme as it changes without a reload; a pick stops that, System starts it again, and Settings agrees', async () => {
     await scheme('light');
-    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    await page.goto(`${headUrl()}/settings/preferences`, { waitUntil: 'networkidle0' });
     expect((await looks()).dark).toBe(false);
     await scheme('dark');
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
@@ -801,7 +801,7 @@ describe('settings: notifications', () => {
   it('shows "Daily brief at <time>" and "Urgent cards" side by side, editable on this device only; on an iPhone in Safari, says to install first', async () => {
     const other = await ownerSession(OWNER, 'phone');
     await call('PATCH', `/api/me/settings/devices/${other.deviceId}`, { auth: other.auth, body: { daily_notification: { enabled: true, time: '06:45' }, urgent_notification: { enabled: true } } });
-    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    await page.goto(`${headUrl()}/settings/devices`, { waitUntil: 'networkidle0' });
     const mine = `[data-notifications="${session.device_id}"]`;
     await page.waitForFunction((sel) => document.querySelector(`${sel} [data-notify-note]`)?.textContent?.includes('this device’s timezone'), {}, mine);
     const switches = (sel: string) => page.$$eval(`${sel} [data-notify-switch]`, (bs) => bs.map((b) => [b.getAttribute('data-notify-switch'), b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled]));
@@ -834,7 +834,7 @@ describe('settings: notifications', () => {
 
 describe('settings: renaming a producer', () => {
   it('edits the name in place: Enter saves and it survives a reload, Escape puts it back, blur saves; a nameless one shows its root', async () => {
-    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    await page.goto(`${headUrl()}/settings/producers`, { waitUntil: 'networkidle0' });
     const name = '[data-token="goalpath"] [data-producer-name]';
     await page.waitForSelector(name);
     expect(await page.$eval(name, (b) => b.textContent)).toBe('goalpath'); // minted without a name
@@ -871,28 +871,31 @@ describe('settings: renaming a producer', () => {
 });
 
 describe('settings at phone widths', () => {
-  it('keeps every section on the screen, with nothing scrolling sideways, and a paired producer’s root on one line', async () => {
+  it('keeps every settings page on the screen, with nothing scrolling sideways, and a paired producer’s root on one line', async () => {
     const auth = `Session ${session.access_token}`;
     await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', instance: 'mac-mini-in-the-office', executor: true });
     const c = (await call('POST', '/api/me/settings/pairing', { auth })).body;
     await call('POST', '/api/pair', { body: { code: c.code, root: 'n8n', name: 'n8n on MacBook Pro of the kitchen table' }, headers: { 'x-real-ip': '203.0.113.77' } });
     for (const width of [360, 390]) {
       await page.setViewport({ width, height: 844, isMobile: true, hasTouch: true });
-      await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
-      await page.waitForSelector('[data-token="n8n"] [data-paired]');
-      const r = await page.evaluate(() => {
-        const W = document.documentElement.clientWidth;
-        // No exemption for boxes that scroll, except a code snippet: a settings row that needs sideways scrolling is the bug.
-        const wide = [...document.querySelectorAll('main *')].filter((e) => e.getBoundingClientRect().right > W + 1).map((e) => `${e.tagName}.${String(e.className).slice(0, 40)}`);
-        const scrollers = [...document.querySelectorAll('main *')].filter((e) => e.tagName !== 'PRE' && e.scrollWidth > e.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(e).overflowX)).map((e) => e.tagName);
-        const root = document.querySelector('[data-token="n8n"] [data-root]')!;
-        const line = parseFloat(getComputedStyle(root).lineHeight);
-        return { W, scrollW: document.documentElement.scrollWidth, wide: wide.slice(0, 5), scrollers, rootLines: Math.round(root.getBoundingClientRect().height / line) };
-      });
-      expect(r.wide, String(width)).toEqual([]);
-      expect(r.scrollers, String(width)).toEqual([]);
-      expect(r.scrollW, String(width)).toBe(r.W);
-      expect(r.rootLines, String(width)).toBe(1);
+      for (const path of ['/settings', '/settings/producers', '/settings/devices', '/settings/preferences', '/settings/invites']) {
+        await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
+        if (path === '/settings/producers') await page.waitForSelector('[data-token="n8n"] [data-paired]');
+        const r = await page.evaluate(() => {
+          const W = document.documentElement.clientWidth;
+          // No exemption for boxes that scroll, except a code snippet: a settings row that needs sideways scrolling is the bug.
+          const wide = [...document.querySelectorAll('main *')].filter((e) => e.getBoundingClientRect().right > W + 1).map((e) => `${e.tagName}.${String(e.className).slice(0, 40)}`);
+          const scrollers = [...document.querySelectorAll('main *')].filter((e) => e.tagName !== 'PRE' && e.scrollWidth > e.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(e).overflowX)).map((e) => e.tagName);
+          const root = document.querySelector('[data-token="n8n"] [data-root]');
+          const rootLines = root ? Math.round(root.getBoundingClientRect().height / parseFloat(getComputedStyle(root).lineHeight)) : null;
+          return { W, scrollW: document.documentElement.scrollWidth, wide: wide.slice(0, 5), scrollers, rootLines };
+        });
+        const at = `${path} at ${width}`;
+        expect(r.wide, at).toEqual([]);
+        expect(r.scrollers, at).toEqual([]);
+        expect(r.scrollW, at).toBe(r.W);
+        if (path === '/settings/producers') expect(r.rootLines, at).toBe(1);
+      }
     }
     await page.setViewport({ width: 1280, height: 844 });
   });
@@ -904,7 +907,7 @@ describe('iPhone Safari', () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-day]');
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
-    for (const path of ['/orders', '/settings']) {
+    for (const path of ['/orders', '/settings/producers', '/settings/preferences']) {
       await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
       await page.waitForSelector('textarea, input');
       const sizes = await page.$$eval('input, textarea, select', (fs) => fs.map((f) => parseFloat(getComputedStyle(f).fontSize)));
@@ -1090,42 +1093,73 @@ describe('the card page', () => {
 });
 
 describe('settings', () => {
-  it('shows the sections in order, mints a token shown once and filled into the snippets, and is under the shared masthead', async () => {
-    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
-    expect(await page.$$eval('[data-section-settings]', (ss) => ss.map((s) => s.getAttribute('data-section-settings')))).toEqual(['this-head', 'producers', 'connect', 'devices', 'preferences', 'invites']);
-    expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
-    expect(await page.$eval('[data-pairing]', (p) => p.textContent)).toContain('six characters shown as two groups of three (XXX-XXX); the dash is optional when entering');
-    expect(await page.$eval('[data-value="owner id"]', (v) => v.textContent)).toBe(OWNER);
-    expect(await page.$eval('[data-value="head URL"]', (v) => v.textContent)).toBe(`${headUrl()}/api`);
-    expect(await page.$eval('[data-this-device]', (d) => d.closest('[data-device]')!.textContent)).toContain('browser');
+  /** Nothing of /connect's reference on a settings page: no facts table, no curl, no pairing steps, no assistant steps. */
+  const noReference = async (path: string) => {
+    for (const sel of ['[data-connect-facts]', '[data-snippet="curl"]', '[data-pairing-steps]', '[data-steps]', '[data-section-settings="this-head"]', '[data-section-settings="connect"]']) {
+      expect(await page.$(sel), `${path} ${sel}`).toBeNull();
+    }
+  };
 
-    await page.type('input[aria-label="New producer’s root"]', 'n8n');
+  it('is an index of four pages, each a link with one line, under the shared masthead, with a line to /connect', async () => {
+    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+    expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
+    const links = await page.$$eval('[data-settings-link]', (as) => as.map((a) => [a.getAttribute('href'), (a as HTMLElement).innerText.split('\n').filter((l) => l !== '→')]));
+    expect(links).toEqual([
+      ['/settings/producers', ['Producers', 'Tokens, pairing codes and ceilings.']],
+      ['/settings/devices', ['Devices', 'Where you’re signed in, notifications, and assistants.']],
+      ['/settings/preferences', ['Preferences', 'Density, theme and timezone.']],
+      ['/settings/invites', ['Invite requests', 'Who asked for an invite at the front door.']],
+    ]);
+    expect(await page.$eval('[data-connect-link] a', (a) => a.getAttribute('href'))).toBe('/connect#head');
+    await noReference('/settings');
+    // The masthead menu's Settings opens the index.
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await (await page.$('[data-masthead] button[aria-label="Pages"]'))!.click();
+    await (await page.waitForSelector('xpath/.//a[@href="/settings" and normalize-space(.)="Settings"]'))!.click();
+    await page.waitForFunction(() => location.pathname === '/settings');
+  });
+
+  it('gives each page its own controls under "← Settings", and nothing from /connect', async () => {
+    const pages: Array<[string, string, string[]]> = [
+      ['/settings/producers', 'Producers', ['[data-producer-tokens], [data-new-producer]', '[data-new-producer] input', '[data-pairing] button', '[data-label-ceilings-title]']],
+      ['/settings/devices', 'Devices', ['[data-devices]', '[data-this-device]', '[data-notifications]', 'xpath/.//button[.="Enrol another device"]', '[data-connect-assistant] [data-value="mcp"]']],
+      ['/settings/preferences', 'Preferences', ['select[aria-label="Density"]', 'select[aria-label="Theme"]', 'input[aria-label="Timezone override"]']],
+      ['/settings/invites', 'Invite requests', ['[data-section-settings="invites"]']],
+    ];
+    for (const [path, title, controls] of pages) {
+      await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
+      expect(await page.$eval('[data-masthead-row]', (r) => r.textContent), path).toBe(`← Settings${title}`);
+      expect(await page.$eval('[data-masthead-row] a', (a) => a.getAttribute('href'))).toBe('/settings');
+      for (const c of controls) expect(await page.waitForSelector(c, { timeout: 5000 }).catch(() => null), `${path} ${c}`).not.toBeNull();
+      await noReference(path);
+    }
+    await page.goto(`${headUrl()}/settings/devices`, { waitUntil: 'networkidle0' });
+    expect(await page.$eval('[data-connect-assistant] [data-value="mcp"]', (c) => c.textContent)).toBe(`${headUrl()}/api/mcp`);
+    expect(await page.$eval('[data-connect-assistant] [data-connect-link] a', (a) => a.getAttribute('href'))).toBe('/connect#assistant');
+    expect(await page.$eval('[data-this-device]', (d) => d.closest('[data-device]')!.textContent)).toContain('browser');
+    expect(errors).toEqual([]);
+  });
+
+  it('mints a token shown once, with the three values filled as /connect gives them, and a line to /connect for the rest', async () => {
+    await page.goto(`${headUrl()}/connect`, { waitUntil: 'networkidle0' });
+    const pub = await page.$$eval('[data-producer-config] [data-value]', (cs) => Object.fromEntries(cs.map((c) => [c.getAttribute('data-value'), c.textContent])));
+    expect(pub.PBCP_TOKEN).toBe('<token>');
+    await page.goto(`${headUrl()}/settings/producers`, { waitUntil: 'networkidle0' });
+    await page.type('input[aria-label="New producer’s root"]', 'hermes');
     await (await page.$('xpath/.//button[.="New producer"]'))!.click();
-    await page.waitForSelector('[data-minted]');
+    await page.waitForSelector('[data-minted] [data-producer-config]');
     const token = (await page.$eval('[data-minted] [data-snippet="token"]', (t) => t.textContent))!;
     expect(token).toMatch(/^pbcp_/);
     expect(await page.$eval('[data-minted]', (m) => m.textContent)).toContain('This is the only time it is shown');
-    await page.waitForFunction((t) => document.querySelector('[data-snippet="curl"]')?.textContent?.includes(t), {}, token);
-    await page.waitForFunction(() => document.querySelector('[data-producer-tokens]')?.textContent?.includes('n8n'));
+    const filled = await page.$$eval('[data-minted] [data-producer-config] [data-value]', (cs) => Object.fromEntries(cs.map((c) => [c.getAttribute('data-value'), c.textContent])));
+    expect(filled).toEqual({ ...pub, PBCP_TOKEN: token });
+    expect(await page.$eval('[data-minted] [data-connect-link] a', (a) => a.getAttribute('href'))).toBe('/connect#producer');
+    await page.waitForFunction(() => document.querySelector('[data-producer-tokens]')?.textContent?.includes('hermes'));
 
     await page.reload({ waitUntil: 'networkidle0' });
     expect(await page.$('[data-minted]')).toBeNull();
     expect(await page.content()).not.toContain(token); // never shown again
-    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toContain('<token>');
     expect(errors).toEqual([]);
-  });
-
-  it('shows the same curl as /connect, with the token just minted in place of <token>', async () => {
-    await page.goto(`${headUrl()}/connect`, { waitUntil: 'networkidle0' });
-    const pub = (await page.$eval('[data-snippet="curl"]', (c) => c.textContent))!;
-    expect(pub).toContain('Bearer <token>');
-    await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
-    await page.type('input[aria-label="New producer’s root"]', 'hermes'); // the §3 example's root: the same card
-    await (await page.$('xpath/.//button[.="New producer"]'))!.click();
-    const token = (await (await page.waitForSelector('[data-minted] [data-snippet="token"]'))!.evaluate((t) => t.textContent))!;
-    await page.waitForFunction((t) => document.querySelector('[data-snippet="curl"]')?.textContent?.includes(t), {}, token);
-    expect(await page.$eval('[data-snippet="curl"]', (c) => c.textContent)).toBe(pub.split('<token>').join(token));
-    expect(await page.$eval('[data-value="PBCP_TOKEN"]', (c) => c.textContent)).toBe(token);
   });
 });
 

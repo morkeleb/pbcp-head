@@ -19,21 +19,36 @@ function noToken(text: string) {
 }
 
 describe('GET /connect', () => {
-  it('is public HTML with the api base, owner id, protocol and extensions, the curl with <token>, and the links', async () => {
+  it('is public HTML, the head’s reference: a table of contents and the four sections in order, with the facts, the curl with <token>, the assistant and the links', async () => {
     await ownerSession(); // a signed-in owner exists; the page does not need one
     const r = await call('GET', '/connect', { headers: { accept: BROWSER } });
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toMatch(/^text\/html/);
     const html = r.body as string;
-    expect(html).toContain(`${headUrl()}/api`);
-    expect(html).toContain(`data-value="owner">${OWNER}<`);
+    const sections = [...html.matchAll(/data-connect-section="([a-z]+)"/g)].map((m) => m[1]);
+    expect(sections).toEqual(['head', 'producer', 'assistant', 'links']);
+    for (const id of sections) expect(html).toContain(`href="#${id}"`);
+    // This head: what GET / describes.
+    expect(html).toContain(`data-value="url">${headUrl()}<`);
+    expect(html).toContain(`data-value="api base">${headUrl()}/api<`);
+    expect(html).toContain(`data-value="owner id">${OWNER}<`);
     expect(html).toContain('pbcp/1');
     expect(html).toMatch(/<code[^>]*>orders<\/code>/);
-    expect(html).toContain('Tokens are minted by this head’s owner on the');
-    expect(html).toContain('or gives you a pairing code and you mint your own');
-    expect(html).toContain('href="/settings"');
-    for (const href of [`${headUrl()}/api/openapi.json`, '/rfc.md', 'connectors/hermes/README.md#setup', 'connectors/goalpath/README.md#setup']) expect(html).toContain(href);
+    expect(html).toMatch(/<code[^>]*>core, extended<\/code>/);
+    // Connect a producer: the three values, a first card, pairing, each connector.
     expect(html).toContain('PBCP_TOKEN');
+    expect(html).toContain('data-pairing-steps');
+    expect(html).toContain('href="/settings/producers"');
+    for (const name of ['hermes', 'goalpath']) expect(html).toContain(`connectors/${name}/README.md#setup`);
+    // Use from an assistant: the MCP URL, Claude, ChatGPT, and signing it out.
+    expect(html).toContain(`data-value="mcp">${headUrl()}/api/mcp<`);
+    expect(html).toContain('data-steps="claude"');
+    expect(html).toContain('Add custom connector');
+    expect(html).toContain('data-steps="chatgpt"');
+    expect(html).toContain('Developer mode');
+    expect(html).toContain('href="/settings/devices"');
+    // Links.
+    for (const href of [`${headUrl()}/api/openapi.json`, 'https://morkeleb.github.io/pbcp"', 'https://morkeleb.github.io/pbcp/rfc/']) expect(html).toContain(href);
     noToken(html);
   });
 
@@ -41,36 +56,43 @@ describe('GET /connect', () => {
     await ensureHead(testDb(), 'anna');
     const html = (await call('GET', '/connect')).body as string;
     expect(html).toContain('data-multi-head');
-    expect(html).toContain('which the owner gives you from their settings page');
+    expect(html).toContain('which the owner gives you');
     expect(html).toContain('&lt;owner&gt;');
-    expect(html).not.toContain(`data-value="owner">${OWNER}<`);
+    expect(html).not.toContain(`data-value="owner id">${OWNER}<`);
   });
 });
 
 describe('GET /llms.txt', () => {
-  it('is public plain text: what the head is, the facts, the three values, the curl with <token>, the links', async () => {
+  it('is public plain text with the same sections as /connect: the facts, the three values, the curl with <token>, the assistant, the links', async () => {
     const r = await call('GET', '/llms.txt');
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toBe('text/plain; charset=utf-8');
     const text = r.body as string;
     const api = `${headUrl()}/api`;
     expect(text).toMatch(/^# This head\n\nThis is a head for the Personal Brief Card Protocol/);
+    expect(text).toContain('Sections: This head · Connect a producer · Use from an assistant · Links');
+    expect([...text.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(['This head', 'Connect a producer', 'Use from an assistant', 'Links']);
+    expect(text).toContain(`- URL: ${headUrl()}`);
     expect(text).toContain(`- API base: ${api}`);
-    expect(text).toContain(`- Owner id (to_person): ${OWNER}`);
+    expect(text).toContain(`- Owner id: ${OWNER}`);
+    expect(text).toContain('- Mermaid tiers: core, extended');
     expect(text).toContain(`- PBCP_HEAD_URL=${api}`);
     expect(text).toContain('- PBCP_TOKEN=<token>');
     expect(text).toContain(curlSnippet({ api, owner: OWNER, token: '<token>' }));
-    expect(text).toContain("Tokens come from this head's owner: either they mint one on the settings page and give it to you, or they give you a pairing code and you mint your own.");
+    expect(text).toContain(`MCP server (streamable HTTP): ${api}/mcp`);
+    expect(text).toContain('### Claude');
+    expect(text).toContain('### ChatGPT');
     expect(text).toContain(`(${headUrl()}/api/openapi.json)`);
-    expect(text).toContain('/rfc.md)');
+    expect(text).toContain('/rfc/)');
     expect(text).toContain('connectors/todoist/README.md#setup');
     noToken(text);
   });
 
-  it('says <owner> comes from the settings page on a deployment with several heads', async () => {
+  it('says <owner> is the owner’s to give on a deployment with several heads', async () => {
     await ensureHead(testDb(), 'anna');
     const text = (await call('GET', '/llms.txt')).body as string;
-    expect(text).toContain("- Owner id (to_person): <owner> (this deployment serves several heads; the owner id comes from the owner's settings page)");
+    expect(text).toContain('- Owner id: <owner>');
+    expect(text).toContain('<owner> stands for the owner id, which the owner gives you');
     expect(text).toContain('PBCP_TO_PERSON=<owner>');
   });
 });
