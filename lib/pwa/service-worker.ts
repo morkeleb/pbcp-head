@@ -10,7 +10,8 @@
 //                 a page never opened on this device answers an offline notice
 //   media         /api/me/svg/{hash}, /api/me/img?u=&s=: cache-first by URL (content-addressed or signed)
 //   push          a Web Push from the head (lib/push/send.ts: { title, body, data: { url }, tag }) is shown as a
-//                 notification; a tap opens data.url, focusing a window of the app that is already open
+//                 notification, and each open window is told (`pbcp-push`) so it can look for the change; a tap
+//                 opens data.url, focusing a window of the app that is already open
 //   everything else, and every request that is not a GET, goes to the network untouched. Nothing is queued:
 //   a decision, acknowledgement, snooze or order made offline is refused by the page, never sent later.
 
@@ -72,13 +73,17 @@ self.addEventListener('push', (event) => {
     n = { body: event.data ? event.data.text() : '' };
   }
   const url = n.data && typeof n.data.url === 'string' && n.data.url.startsWith('/') ? n.data.url : '/brief';
-  event.waitUntil(self.registration.showNotification(n.title || 'Brief', {
-    body: n.body || '',
-    tag: n.tag || undefined,
-    data: { url },
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-  }));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(n.title || 'Brief', {
+      body: n.body || '',
+      tag: n.tag || undefined,
+      data: { url },
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+    }),
+    // Something changed on the head: an open brief looks now rather than at its next check.
+    self.clients.matchAll({ type: 'window' }).then((cs) => cs.forEach((c) => c.postMessage({ type: 'pbcp-push', url }))),
+  ]));
 });
 
 self.addEventListener('notificationclick', (event) => {

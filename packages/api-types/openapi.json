@@ -236,6 +236,50 @@
         }
       }
     },
+    "/api/me/seq": {
+      "get": {
+        "operationId": "getBriefStamp",
+        "summary": "Whether the brief has changed: the change counter and the head’s local date",
+        "description": "Cheap enough to ask often: a client that shows the brief compares both with the brief it has, and loads the brief again only when one has moved.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefStamp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/visit": {
       "post": {
         "operationId": "postVisit",
@@ -3463,6 +3507,25 @@
           "late_outcomes",
           "lapsed_orders",
           "new"
+        ],
+        "additionalProperties": false
+      },
+      "BriefStamp": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The highest change_seq the head has assigned: it moves with every card stored and every decision"
+          },
+          "date": {
+            "type": "string",
+            "description": "The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight"
+          }
+        },
+        "required": [
+          "seq",
+          "date"
         ],
         "additionalProperties": false
       },
