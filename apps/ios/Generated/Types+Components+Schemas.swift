@@ -4689,6 +4689,65 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/Device/current`.
             public var current: Swift.Bool
+            /// The daily “brief is ready” notification (Settings → Devices)
+            ///
+            /// - Remark: Generated from `#/components/schemas/Device/daily_notification`.
+            public struct DailyNotificationPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/Device/daily_notification/enabled`.
+                public var enabled: Swift.Bool
+                /// HH:MM, a quarter hour, in the device’s timezone (default 07:00)
+                ///
+                /// - Remark: Generated from `#/components/schemas/Device/daily_notification/time`.
+                public var time: Swift.String
+                /// The device has a Web Push subscription the head can send to
+                ///
+                /// - Remark: Generated from `#/components/schemas/Device/daily_notification/subscribed`.
+                public var subscribed: Swift.Bool
+                /// Creates a new `DailyNotificationPayload`.
+                ///
+                /// - Parameters:
+                ///   - enabled:
+                ///   - time: HH:MM, a quarter hour, in the device’s timezone (default 07:00)
+                ///   - subscribed: The device has a Web Push subscription the head can send to
+                public init(
+                    enabled: Swift.Bool,
+                    time: Swift.String,
+                    subscribed: Swift.Bool
+                ) {
+                    self.enabled = enabled
+                    self.time = time
+                    self.subscribed = subscribed
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case enabled
+                    case time
+                    case subscribed
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.enabled = try container.decode(
+                        Swift.Bool.self,
+                        forKey: .enabled
+                    )
+                    self.time = try container.decode(
+                        Swift.String.self,
+                        forKey: .time
+                    )
+                    self.subscribed = try container.decode(
+                        Swift.Bool.self,
+                        forKey: .subscribed
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "enabled",
+                        "time",
+                        "subscribed"
+                    ])
+                }
+            }
+            /// The daily “brief is ready” notification (Settings → Devices)
+            ///
+            /// - Remark: Generated from `#/components/schemas/Device/daily_notification`.
+            public var dailyNotification: Components.Schemas.Device.DailyNotificationPayload
             /// Creates a new `Device`.
             ///
             /// - Parameters:
@@ -4700,6 +4759,7 @@ extension Components {
             ///   - timezone: An IANA timezone, e.g. `Europe/Copenhagen`
             ///   - timezoneSeenAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
             ///   - current: The device making this request
+            ///   - dailyNotification: The daily “brief is ready” notification (Settings → Devices)
             public init(
                 id: Swift.String,
                 name: Swift.String? = nil,
@@ -4708,7 +4768,8 @@ extension Components {
                 lastSeenAt: Swift.String? = nil,
                 timezone: Swift.String? = nil,
                 timezoneSeenAt: Swift.String? = nil,
-                current: Swift.Bool
+                current: Swift.Bool,
+                dailyNotification: Components.Schemas.Device.DailyNotificationPayload
             ) {
                 self.id = id
                 self.name = name
@@ -4718,6 +4779,7 @@ extension Components {
                 self.timezone = timezone
                 self.timezoneSeenAt = timezoneSeenAt
                 self.current = current
+                self.dailyNotification = dailyNotification
             }
             public enum CodingKeys: String, CodingKey {
                 case id
@@ -4728,6 +4790,7 @@ extension Components {
                 case timezone
                 case timezoneSeenAt = "timezone_seen_at"
                 case current
+                case dailyNotification = "daily_notification"
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -4763,6 +4826,10 @@ extension Components {
                     Swift.Bool.self,
                     forKey: .current
                 )
+                self.dailyNotification = try container.decode(
+                    Components.Schemas.Device.DailyNotificationPayload.self,
+                    forKey: .dailyNotification
+                )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "id",
                     "name",
@@ -4771,7 +4838,35 @@ extension Components {
                     "last_seen_at",
                     "timezone",
                     "timezone_seen_at",
-                    "current"
+                    "current",
+                    "daily_notification"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/PushKey`.
+        public struct PushKey: Codable, Hashable, Sendable {
+            /// The VAPID public key, base64url: the applicationServerKey
+            ///
+            /// - Remark: Generated from `#/components/schemas/PushKey/public_key`.
+            public var publicKey: Swift.String
+            /// Creates a new `PushKey`.
+            ///
+            /// - Parameters:
+            ///   - publicKey: The VAPID public key, base64url: the applicationServerKey
+            public init(publicKey: Swift.String) {
+                self.publicKey = publicKey
+            }
+            public enum CodingKeys: String, CodingKey {
+                case publicKey = "public_key"
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.publicKey = try container.decode(
+                    Swift.String.self,
+                    forKey: .publicKey
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "public_key"
                 ])
             }
         }
@@ -6067,6 +6162,100 @@ extension Components {
             }
             public enum CodingKeys: String, CodingKey {
                 case ceiling
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/DevicePatch`.
+        public struct DevicePatch: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/DevicePatch/daily_notification`.
+            public struct DailyNotificationPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/DevicePatch/daily_notification/enabled`.
+                public var enabled: Swift.Bool?
+                /// HH:MM on a quarter hour
+                ///
+                /// - Remark: Generated from `#/components/schemas/DevicePatch/daily_notification/time`.
+                public var time: Swift.String?
+                /// Creates a new `DailyNotificationPayload`.
+                ///
+                /// - Parameters:
+                ///   - enabled:
+                ///   - time: HH:MM on a quarter hour
+                public init(
+                    enabled: Swift.Bool? = nil,
+                    time: Swift.String? = nil
+                ) {
+                    self.enabled = enabled
+                    self.time = time
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case enabled
+                    case time
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/DevicePatch/daily_notification`.
+            public var dailyNotification: Components.Schemas.DevicePatch.DailyNotificationPayload
+            /// Creates a new `DevicePatch`.
+            ///
+            /// - Parameters:
+            ///   - dailyNotification:
+            public init(dailyNotification: Components.Schemas.DevicePatch.DailyNotificationPayload) {
+                self.dailyNotification = dailyNotification
+            }
+            public enum CodingKeys: String, CodingKey {
+                case dailyNotification = "daily_notification"
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/PushSubscription`.
+        public struct PushSubscription: Codable, Hashable, Sendable {
+            /// The push service URL (https)
+            ///
+            /// - Remark: Generated from `#/components/schemas/PushSubscription/endpoint`.
+            public var endpoint: Swift.String
+            /// - Remark: Generated from `#/components/schemas/PushSubscription/expirationTime`.
+            public var expirationTime: Swift.Double?
+            /// - Remark: Generated from `#/components/schemas/PushSubscription/keys`.
+            public struct KeysPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/PushSubscription/keys/p256dh`.
+                public var p256dh: Swift.String
+                /// - Remark: Generated from `#/components/schemas/PushSubscription/keys/auth`.
+                public var auth: Swift.String
+                /// Creates a new `KeysPayload`.
+                ///
+                /// - Parameters:
+                ///   - p256dh:
+                ///   - auth:
+                public init(
+                    p256dh: Swift.String,
+                    auth: Swift.String
+                ) {
+                    self.p256dh = p256dh
+                    self.auth = auth
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case p256dh
+                    case auth
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/PushSubscription/keys`.
+            public var keys: Components.Schemas.PushSubscription.KeysPayload
+            /// Creates a new `PushSubscription`.
+            ///
+            /// - Parameters:
+            ///   - endpoint: The push service URL (https)
+            ///   - expirationTime:
+            ///   - keys:
+            public init(
+                endpoint: Swift.String,
+                expirationTime: Swift.Double? = nil,
+                keys: Components.Schemas.PushSubscription.KeysPayload
+            ) {
+                self.endpoint = endpoint
+                self.expirationTime = expirationTime
+                self.keys = keys
+            }
+            public enum CodingKeys: String, CodingKey {
+                case endpoint
+                case expirationTime
+                case keys
             }
         }
         /// - Remark: Generated from `#/components/schemas/MintTokenRequest`.

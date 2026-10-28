@@ -443,6 +443,45 @@ export interface paths {
         delete: operations["signOutDevice"];
         options?: never;
         head?: never;
+        /**
+         * This device’s daily brief notification: on or off, at a quarter hour in its timezone
+         * @description Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.
+         */
+        patch: operations["setDailyNotification"];
+        trace?: never;
+    };
+    "/api/me/settings/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Store this device’s Web Push subscription (PushSubscription.toJSON()), replacing any it had */
+        post: operations["subscribePush"];
+        /** Remove this device’s Web Push subscription */
+        delete: operations["unsubscribePush"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The head’s VAPID public key, to subscribe with (public) */
+        get: operations["pushKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1034,6 +1073,18 @@ export interface components {
             timezone_seen_at: string | null;
             /** @description The device making this request */
             current: boolean;
+            /** @description The daily “brief is ready” notification (Settings → Devices) */
+            daily_notification: {
+                enabled: boolean;
+                /** @description HH:MM, a quarter hour, in the device’s timezone (default 07:00) */
+                time: string;
+                /** @description The device has a Web Push subscription the head can send to */
+                subscribed: boolean;
+            };
+        };
+        PushKey: {
+            /** @description The VAPID public key, base64url: the applicationServerKey */
+            public_key: string;
         };
         DeviceList: {
             devices: components["schemas"]["Device"][];
@@ -1204,6 +1255,22 @@ export interface components {
         LabelPatch: {
             /** @description Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9) */
             ceiling: ("immediate" | "brief" | "log") | null;
+        };
+        DevicePatch: {
+            daily_notification: {
+                enabled?: boolean;
+                /** @description HH:MM on a quarter hour */
+                time?: string;
+            };
+        };
+        PushSubscription: {
+            /** @description The push service URL (https) */
+            endpoint: string;
+            expirationTime?: number | null;
+            keys: {
+                p256dh: string;
+                auth: string;
+            };
         };
         MintTokenRequest: {
             /** @description The producer root (§5): letters, digits and -; not `head`; not already held by a live token */
@@ -2771,6 +2838,201 @@ export interface operations {
             };
         };
     };
+    setDailyNotification: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path: {
+                /** @description A device id: the caller’s own */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `too_large`: the body is over 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    subscribePush: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscription"];
+            };
+        };
+        responses: {
+            /** @description Stored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `too_large`: the body is over 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    unsubscribePush: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    pushKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushKey"];
+                };
+            };
+            /** @description `push_unavailable`: the head has no VAPID keys, so it sends no notifications */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     enrolDevice: {
         parameters: {
             query?: never;
@@ -3003,7 +3265,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description `forbidden` */
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
             403: {
                 headers: {
                     [name: string]: unknown;

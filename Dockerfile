@@ -26,6 +26,8 @@ USER node
 # Dependencies first, for the layer cache. `prepare` builds the vendored @pbcp packages from their source.
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .puppeteerrc.cjs ./
 COPY --chown=node:node vendor ./vendor
+# Every workspace package's manifest (pnpm-workspace.yaml), or its own dependencies are not installed.
+COPY --chown=node:node packages/owner-mcp/package.json ./packages/owner-mcp/
 RUN pnpm install --frozen-lockfile
 
 COPY --chown=node:node . .

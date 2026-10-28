@@ -99,6 +99,13 @@
       "when": 1793154486426,
       "tag": "0013_drop_old_refresh",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793184953168,
+      "tag": "0014_daily_notification",
+      "breakpoints": true
     }
   ]
 }

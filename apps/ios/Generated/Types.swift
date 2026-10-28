@@ -170,11 +170,33 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/me/settings/devices`.
     /// - Remark: Generated from `#/paths//api/me/settings/devices/get(listSettingsDevices)`.
     func listSettingsDevices(_ input: Operations.ListSettingsDevices.Input) async throws -> Operations.ListSettingsDevices.Output
+    /// This device’s daily brief notification: on or off, at a quarter hour in its timezone
+    ///
+    /// Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.
+    ///
+    /// - Remark: HTTP `PATCH /api/me/settings/devices/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/patch(setDailyNotification)`.
+    func setDailyNotification(_ input: Operations.SetDailyNotification.Input) async throws -> Operations.SetDailyNotification.Output
     /// Sign a device out
     ///
     /// - Remark: HTTP `DELETE /api/me/settings/devices/{id}`.
     /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/delete(signOutDevice)`.
     func signOutDevice(_ input: Operations.SignOutDevice.Input) async throws -> Operations.SignOutDevice.Output
+    /// Store this device’s Web Push subscription (PushSubscription.toJSON()), replacing any it had
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/push`.
+    /// - Remark: Generated from `#/paths//api/me/settings/push/post(subscribePush)`.
+    func subscribePush(_ input: Operations.SubscribePush.Input) async throws -> Operations.SubscribePush.Output
+    /// Remove this device’s Web Push subscription
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/push`.
+    /// - Remark: Generated from `#/paths//api/me/settings/push/delete(unsubscribePush)`.
+    func unsubscribePush(_ input: Operations.UnsubscribePush.Input) async throws -> Operations.UnsubscribePush.Output
+    /// The head’s VAPID public key, to subscribe with (public)
+    ///
+    /// - Remark: HTTP `GET /api/push/key`.
+    /// - Remark: Generated from `#/paths//api/push/key/get(pushKey)`.
+    func pushKey(_ input: Operations.PushKey.Input) async throws -> Operations.PushKey.Output
     /// A one-hour link that registers a passkey for another device
     ///
     /// - Remark: HTTP `POST /api/me/settings/enrolment`.
@@ -536,6 +558,23 @@ extension APIProtocol {
     public func listSettingsDevices(headers: Operations.ListSettingsDevices.Input.Headers = .init()) async throws -> Operations.ListSettingsDevices.Output {
         try await listSettingsDevices(Operations.ListSettingsDevices.Input(headers: headers))
     }
+    /// This device’s daily brief notification: on or off, at a quarter hour in its timezone
+    ///
+    /// Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.
+    ///
+    /// - Remark: HTTP `PATCH /api/me/settings/devices/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/devices/{id}/patch(setDailyNotification)`.
+    public func setDailyNotification(
+        path: Operations.SetDailyNotification.Input.Path,
+        headers: Operations.SetDailyNotification.Input.Headers = .init(),
+        body: Operations.SetDailyNotification.Input.Body
+    ) async throws -> Operations.SetDailyNotification.Output {
+        try await setDailyNotification(Operations.SetDailyNotification.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
+    }
     /// Sign a device out
     ///
     /// - Remark: HTTP `DELETE /api/me/settings/devices/{id}`.
@@ -548,6 +587,33 @@ extension APIProtocol {
             path: path,
             headers: headers
         ))
+    }
+    /// Store this device’s Web Push subscription (PushSubscription.toJSON()), replacing any it had
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/push`.
+    /// - Remark: Generated from `#/paths//api/me/settings/push/post(subscribePush)`.
+    public func subscribePush(
+        headers: Operations.SubscribePush.Input.Headers = .init(),
+        body: Operations.SubscribePush.Input.Body
+    ) async throws -> Operations.SubscribePush.Output {
+        try await subscribePush(Operations.SubscribePush.Input(
+            headers: headers,
+            body: body
+        ))
+    }
+    /// Remove this device’s Web Push subscription
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/push`.
+    /// - Remark: Generated from `#/paths//api/me/settings/push/delete(unsubscribePush)`.
+    public func unsubscribePush(headers: Operations.UnsubscribePush.Input.Headers = .init()) async throws -> Operations.UnsubscribePush.Output {
+        try await unsubscribePush(Operations.UnsubscribePush.Input(headers: headers))
+    }
+    /// The head’s VAPID public key, to subscribe with (public)
+    ///
+    /// - Remark: HTTP `GET /api/push/key`.
+    /// - Remark: Generated from `#/paths//api/push/key/get(pushKey)`.
+    public func pushKey(headers: Operations.PushKey.Input.Headers = .init()) async throws -> Operations.PushKey.Output {
+        try await pushKey(Operations.PushKey.Input(headers: headers))
     }
     /// A one-hour link that registers a passkey for another device
     ///

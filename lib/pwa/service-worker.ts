@@ -9,6 +9,8 @@
 //   pages         /brief, /card/{id} (documents and Next.js's RSC requests): stale-while-revalidate;
 //                 a page never opened on this device answers an offline notice
 //   media         /api/me/svg/{hash}, /api/me/img?u=&s=: cache-first by URL (content-addressed or signed)
+//   push          a Web Push from the head (lib/push/send.ts: { title, body, data: { url }, tag }) is shown as a
+//                 notification; a tap opens data.url, focusing a window of the app that is already open
 //   everything else, and every request that is not a GET, goes to the network untouched. Nothing is queued:
 //   a decision, acknowledgement, snooze or order made offline is refused by the page, never sent later.
 
@@ -60,6 +62,38 @@ self.addEventListener('fetch', (event) => {
   if (path.startsWith('/api/me/svg/') || path === '/api/me/img') return event.respondWith(cacheFirst(MEDIA, req));
   if (path === '/api/me/brief' || path === '/api/me/cards' || path.startsWith('/api/me/cards/')) return event.respondWith(swr(DATA, req, event, true));
   if (path === '/brief' || path.startsWith('/card/')) return event.respondWith(swr(PAGES, req, event, false));
+});
+
+self.addEventListener('push', (event) => {
+  let n = {};
+  try {
+    n = event.data ? event.data.json() : {};
+  } catch (e) {
+    n = { body: event.data ? event.data.text() : '' };
+  }
+  const url = n.data && typeof n.data.url === 'string' && n.data.url.startsWith('/') ? n.data.url : '/brief';
+  event.waitUntil(self.registration.showNotification(n.title || 'Brief', {
+    body: n.body || '',
+    tag: n.tag || undefined,
+    data: { url },
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/brief', self.location.origin).href;
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const same = open.find((c) => new URL(c.url).origin === self.location.origin);
+    if (same) {
+      await same.focus();
+      if (same.url !== url && 'navigate' in same) await same.navigate(url).catch(() => undefined);
+      return;
+    }
+    await self.clients.openWindow(url);
+  })());
 });
 
 /** A network response as stored: with the time it was fetched. */

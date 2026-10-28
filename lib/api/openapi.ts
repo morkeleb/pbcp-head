@@ -25,11 +25,12 @@ const errors = (statuses: number[], conflict: 'card' | 'error' = 'card') =>
         description: {
           400: 'The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)',
           401: '`unauthorized`: no session, an expired one, a signed-out device, or a producer token',
-          403: '`forbidden`',
+          403: '`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change',
           404: '`not_found`',
           409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token',
           413: '`too_large`: the body is over 1 MiB',
           502: '`image_unavailable`: the image could not be fetched, or is not an image of at most 2 MB',
+          503: '`push_unavailable`: the head has no VAPID keys, so it sends no notifications',
         }[s],
         ...(s === 409 && conflict === 'card' ? json(S.Card) : json(S.ErrorBody)),
       },
@@ -214,7 +215,27 @@ const PATHS: Record<string, Record<string, Json>> = {
     get: operation('listSettingsDevices', { summary: 'The signed-in devices; `current` marks the caller', ok: ok(S.DeviceList), errors: [400, 401] }),
   },
   '/api/me/settings/devices/{id}': {
+    patch: operation('setDailyNotification', {
+      summary: 'This device’s daily brief notification: on or off, at a quarter hour in its timezone',
+      description: 'Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.',
+      parameters: [idParam('id', 'A device id: the caller’s own')],
+      body: S.DevicePatch,
+      ok: ok(S.Device),
+      errors: [400, 401, 403, 404, 413],
+    }),
     delete: operation('signOutDevice', { summary: 'Sign a device out', parameters: [idParam('id', 'A device id')], ok: { 204: { description: 'Signed out' } }, errors: [400, 401, 404] }),
+  },
+  '/api/me/settings/push': {
+    post: operation('subscribePush', {
+      summary: 'Store this device’s Web Push subscription (PushSubscription.toJSON()), replacing any it had',
+      body: S.PushSubscription,
+      ok: { 204: { description: 'Stored' } },
+      errors: [400, 401, 413],
+    }),
+    delete: operation('unsubscribePush', { summary: 'Remove this device’s Web Push subscription', ok: { 204: { description: 'Removed' } }, errors: [400, 401] }),
+  },
+  '/api/push/key': {
+    get: operation('pushKey', { summary: 'The head’s VAPID public key, to subscribe with (public)', ok: ok(S.PushKey), errors: [503], public: true }),
   },
   '/api/me/settings/enrolment': {
     post: operation('enrolDevice', { summary: 'A one-hour link that registers a passkey for another device', ok: ok(S.Enrolment, 'The link', 201), errors: [400, 401] }),

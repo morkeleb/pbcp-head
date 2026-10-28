@@ -10,3 +10,7 @@ export const TEST_APPLE_PORT = Number(process.env.TEST_APPLE_PORT ?? 3108);
 export const TEST_APPLE_CLIENT_ID = 'test.head.client';
 
 export const TEST_CRON_SECRET = 'test-cron-secret';
+
+/** The head under test's VAPID pair (lib/push/send.ts), made for the tests with `npx web-push generate-vapid-keys`. */
+export const TEST_VAPID_PUBLIC_KEY = 'BHBeDwg4rGv_GDQREyqpFipDmeGVxOaJ0EdHSa7f6b9yR9oFNxuRCQJi-hA189Ycs8CXtKqeST5QG803b9R9ABE';
+export const TEST_VAPID_PRIVATE_KEY = 'U1OL_qEcONI7WKuY-ySoKgqWnx4vmmmF1Sg5B6cKckk';
