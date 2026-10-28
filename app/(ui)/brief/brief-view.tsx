@@ -245,12 +245,13 @@ export function BriefView() {
       </main>
       {todayOut && (
         <div className="fixed inset-x-0 z-30 flex justify-center" style={{ top: 'calc(var(--masthead-h, 120px) + 8px)' }}>
-          <Button size="sm" variant="outline" className="bg-background" onClick={() => scrollToDay(today)}>
-            {todayOut === 'above' ? <ArrowDown /> : <ArrowUp />} Back to today
+          {/* The arrow points the way to scroll: up to a today above the view, down to one below it. */}
+          <Button size="sm" variant="outline" className="bg-background" onClick={() => scrollToDay(today)} data-today-is={todayOut}>
+            {todayOut === 'above' ? <ArrowUp /> : <ArrowDown />} Back to today
           </Button>
         </div>
       )}
-      <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 py-2 text-center text-meta text-muted-foreground">
+      <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background py-2 text-center text-meta text-muted-foreground">
         {wide ? (
           <span><kbd className="font-sans">j</kbd> / <kbd className="font-sans">k</kbd> move · <kbd className="font-sans">enter</kbd> open · <kbd className="font-sans">d</kbd> dismiss</span>
         ) : hint ? (
@@ -308,7 +309,7 @@ function DaySection({ day, name, wide, density, tz, decision, update }: {
     <section className="pb-6" aria-label={name} data-section>
       <h2
         data-day={day.date}
-        className="sticky z-10 -mx-1 border-b bg-background/95 px-1 py-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground"
+        className="sticky z-10 -mx-1 border-b bg-background px-1 py-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground"
         style={{ top: 'var(--masthead-h, 0px)' }}
       >
         {name}

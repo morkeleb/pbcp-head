@@ -208,17 +208,41 @@
     border-radius: 6px;
     font-size: 12px;
   }
+  /* A producer's table: it keeps its words whole and scrolls sideways in its own box when it is wider than the card
+     (as shadcn's Table wraps itself in an overflow-x-auto container), never squeezing a number or a heading to a letter a
+     line. Rows ruled, the header muted, as shadcn's. */
   .rendered table {
-    border-collapse: collapse;
     display: block;
-    overflow-x: auto;
     max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: var(--text-lead);
+    font-variant-numeric: tabular-nums;
+    overscroll-behavior-x: contain;
   }
   .rendered th,
   .rendered td {
-    border: 1px solid var(--border);
-    padding: 4px 8px;
+    overflow-wrap: normal;
+    word-break: normal;
+    padding: 6px 8px;
     text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  .rendered th:first-child,
+  .rendered td:first-child {
+    padding-left: 0;
+  }
+  .rendered th {
+    font-weight: 500;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .rendered th[align="right"],
+  .rendered td[align="right"],
+  .rendered th[style*="right"],
+  .rendered td[style*="right"] {
+    text-align: right;
   }
   .rendered img {
     max-width: 100%;
@@ -268,4 +292,14 @@
   .viewer .caption { padding: 6px 12px; font-size: var(--text-lead); }
   .viewer details { padding: 0 12px 12px; max-height: 30vh; overflow: auto; }
   .viewer pre { white-space: pre-wrap; font-size: 12px; color: #c9d1dc; }
+}
+
+/* iOS Safari zooms the page into a focused field whose text is under 16px and leaves it zoomed, cutting off the right
+   edge. On a touch screen every field is at least 16px. Outside the layers, so it outranks a field's text-size utility. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
 }

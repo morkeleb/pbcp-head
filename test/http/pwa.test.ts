@@ -85,6 +85,25 @@ async function briefThroughWorker() {
   await page.waitForFunction(() => document.body.innerText.includes('When should M4 ship?'));
 }
 
+describe('a new version', () => {
+  it('says nothing when the worker first takes over, and offers a reload when a new one replaces it', async () => {
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise((r) => navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }));
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await page.$('[data-update-available]')).toBeNull(); // the first install
+    // A deployment's worker taking over the open page: the same event the browser fires.
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
+    await page.waitForSelector('[data-update-available]');
+    expect(await page.$eval('[data-update-available]', (e) => e.textContent)).toContain('A new version of Brief is ready.Reload');
+    await (await page.$('xpath/.//*[@data-update-available]//button[.="Reload"]'))!.click();
+    await page.waitForNavigation({ waitUntil: 'networkidle0' });
+    expect(await page.$('[data-update-available]')).toBeNull();
+  });
+});
+
 describe('installable app', () => {
   it('serves a manifest with standalone display, /brief as start URL, and PNG icons of the sizes it names', async () => {
     const res = await fetch(`${headUrl()}/manifest.webmanifest`);
