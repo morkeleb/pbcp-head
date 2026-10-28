@@ -77,12 +77,12 @@ export function MastheadTools({ children }: { children: ReactNode }) {
   return pageTools ? createPortal(children, pageTools) : null;
 }
 
-/** "← Brief" and the page's own title: the row of every route but the brief. */
-export function PageRow({ title }: { title: string }) {
+/** "← Brief" (or `back`, a settings page's "← Settings") and the page's own title: the row of every route but the brief. */
+export function PageRow({ title, back = { href: '/brief', label: 'Brief' } }: { title: string; back?: { href: string; label: string } }) {
   return (
     <MastheadRow>
       <div className="flex h-full min-w-0 items-center gap-3 font-serif text-day font-semibold tracking-editorial" data-page-row>
-        <Link href="/brief" className="flex-none text-muted-foreground hover:text-foreground">← Brief</Link>
+        <Link href={back.href} className="flex-none text-muted-foreground hover:text-foreground">← {back.label}</Link>
         <h2 className="min-w-0 truncate text-foreground">{title}</h2>
       </div>
     </MastheadRow>

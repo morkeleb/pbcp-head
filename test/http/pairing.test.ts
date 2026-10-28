@@ -162,7 +162,7 @@ describe('the flow, described', () => {
   it('/llms.txt and /connect tell an agent to ask for a code, POST it with a root to /api/pair, and keep the token', async () => {
     const text = (await call('GET', '/llms.txt')).body as string;
     const api = `${headUrl()}/api`;
-    expect(text).toContain('## Pairing: getting a token with a code');
+    expect(text).toContain('### Pairing: getting a token with a code');
     expect(text).toContain('1. Ask the owner for a pairing code.');
     expect(text).toContain('it is six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. It is valid 10 minutes and works once.');
     expect(text).toContain(`to ${api}/pair: {"code": "<code>", "root": "<root>", "name": "<what you are>"}`);

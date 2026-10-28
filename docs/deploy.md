@@ -220,7 +220,7 @@ pnpm revoke-token morten n8n                        # revoke every live token of
 docker compose exec head pnpm mint-token morten hermes
 ```
 
-A root that already has a live token is refused (409): revoke it first, or pass `--instance <name>` for a second installation of the same connector (§12). The same is on the head's Settings page (`/settings` → Producers), which mints a token, shows it once, and revokes; it and these scripts share `lib/settings/producers.ts`. Ceilings are set there too, or from `PATCH /api/me/producers/{root}`.
+A root that already has a live token is refused (409): revoke it first, or pass `--instance <name>` for a second installation of the same connector (§12). The same is on the head's Settings → Producers page (`/settings/producers`), which mints a token, shows it once with the three values, and revokes; it and these scripts share `lib/settings/producers.ts`. Ceilings are set there too, or from `PATCH /api/me/producers/{root}`.
 
 The producer routes live under `/api` (`PUT /api/cards/{id}`, `GET /api/changes`, and `GET /api` describes the head). So the head URL a producer uses is the origin plus `/api`.
 

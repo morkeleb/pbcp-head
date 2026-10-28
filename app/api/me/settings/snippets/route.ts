@@ -16,6 +16,6 @@ export const GET = meHandler(async (s, req) => {
   if (root !== undefined && !/^[A-Za-z0-9-]{1,64}$/.test(root)) throw new HttpError(400, 'invalid_root', 'a producer root is letters, digits or - (§5)');
   const origin = headOrigin(req.url);
   const facts = await headFacts(db(), s.headId, producerUrl(origin));
-  const { config, curl, curlRoot } = connectSnippets({ api: facts.url, owner: facts.owner, protocol: facts.protocol, extensions: facts.extensions }, TOKEN, root);
+  const { config, curl, curlRoot } = connectSnippets({ api: facts.url, owner: facts.owner }, TOKEN, root);
   return json({ api: facts.url, owner: facts.owner, token: TOKEN, config, curl, curl_root: curlRoot, connectors: connectLinks(origin).connectors.map((l) => ({ name: l.label, url: l.href })) });
 });

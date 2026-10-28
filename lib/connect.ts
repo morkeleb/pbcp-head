@@ -21,12 +21,16 @@ export const PROTOCOL_REPO = 'https://github.com/morkeleb/pbcp';
 export const connectorSetup = (name: string) => `${PROTOCOL_REPO}/blob/main/connectors/${name}/README.md#setup`;
 
 export interface ConnectFacts {
+  /** The head's own URL: where GET / describes it (§7.5). */
+  url: string;
   /** The base URL of the producer operations, as the description gives it (§7.5 `api`). */
   api: string;
   /** The owner's person id (§10), or null on a deployment with several heads. */
   owner: string | null;
   protocol: string;
   extensions: string[];
+  /** The mermaid tiers it draws (§3.1 render.mermaid). */
+  mermaid: string[];
 }
 
 export interface Link {
@@ -35,17 +39,37 @@ export interface Link {
   note?: string;
 }
 
-/** Where to read more: this head's API contract, the protocol documentation and its RFC, and each connector's setup. */
+/** Where to read more: this head's API contract, the protocol's site and its RFC; and each connector's setup. */
 export function connectLinks(origin: string): { head: Link[]; connectors: Link[] } {
   const docs = DOCS_URL.replace(/\/+$/, '');
   return {
     head: [
       { label: 'This head’s API', href: `${origin}/api/openapi.json`, note: 'OpenAPI, the owner’s /api/me routes' },
-      { label: 'The protocol documentation', href: docs },
-      { label: 'The specification', href: `${docs}/rfc.md`, note: 'the RFC as markdown' },
+      { label: 'The protocol', href: docs, note: 'the Personal Brief Card Protocol’s site' },
+      { label: 'The specification', href: `${docs}/rfc/`, note: 'the RFC' },
     ],
     connectors: CONNECTORS.map((name) => ({ label: name, href: connectorSetup(name) })),
   };
+}
+
+/** The reference page's sections, in order, with the ids /connect anchors and Settings links to. */
+export const CONNECT_SECTIONS = [
+  { id: 'head', title: 'This head' },
+  { id: 'producer', title: 'Connect a producer' },
+  { id: 'assistant', title: 'Use from an assistant' },
+  { id: 'links', title: 'Links' },
+] as const;
+
+/** "This head", as rows: what GET / describes (§7.5), in words. */
+export function headRows(facts: ConnectFacts): Array<[string, string]> {
+  return [
+    ['URL', facts.url],
+    ['API base', facts.api],
+    ['Owner id', facts.owner ?? OWNER],
+    ['Protocol', facts.protocol],
+    ['Extensions', facts.extensions.length ? facts.extensions.join(', ') : 'none'],
+    ['Mermaid tiers', facts.mermaid.length ? facts.mermaid.join(', ') : 'none'],
+  ];
 }
 
 /**
@@ -74,15 +98,28 @@ export function pairCurl(api: string): string {
 
 /**
  * Using the head from an assistant (an MCP client) on the owner's behalf: not as a producer, but as the owner, through
- * the owner's MCP server at /api/mcp (lib/oauth.ts, packages/owner-mcp).
+ * the owner's MCP server at /api/mcp (lib/oauth.ts, packages/owner-mcp). The steps for each assistant name its own menus,
+ * which its makers change; the head's side (the URL, OAuth with dynamic registration, the passkey) does not.
  */
 export function assistantAccess(origin: string) {
+  const url = mcpUrl(origin);
   return {
-    url: mcpUrl(origin),
+    url,
     tools: [...TOOL_NAMES],
+    claude: [
+      'In Claude, open Settings → Connectors → Add custom connector.',
+      `Name it (say, Brief) and give the URL ${url}. Leave the OAuth client fields empty: the head registers the app itself.`,
+      'Connect: your head’s sign-in page opens. Sign in with your passkey and Allow.',
+    ],
+    chatgpt: [
+      'In ChatGPT, open Settings → Apps & Connectors → Advanced settings and turn on Developer mode (which plans have it is ChatGPT’s to say).',
+      `Create a connector: a name, the MCP server URL ${url}, and OAuth as its authentication.`,
+      'Your head’s sign-in page opens. Sign in with your passkey and Allow. In a chat, turn the connector on.',
+    ],
+    revoke: 'An assistant you allowed is listed in Settings → Devices as an assistant; Sign out ends its access at once.',
     lines: [
-      `MCP server (streamable HTTP): ${mcpUrl(origin)}`,
-      `Authorisation: OAuth 2.1 with PKCE (S256) and dynamic client registration; the metadata is at ${origin}/.well-known/oauth-authorization-server and ${origin}/.well-known/oauth-protected-resource. The owner signs in with a passkey and allows the app; they can sign it out in Settings → Devices.`,
+      `MCP server (streamable HTTP): ${url}`,
+      `Authorisation: OAuth 2.1 with PKCE (S256) and dynamic client registration; the metadata is at ${origin}/.well-known/oauth-authorization-server and ${origin}/.well-known/oauth-protected-resource. The owner signs in with a passkey and allows the app.`,
       `Tools: ${TOOL_NAMES.join(', ')}.`,
     ],
   };
@@ -104,7 +141,7 @@ export function curlCard(owner: string, root?: string): ProducerCard | undefined
 }
 
 /** What a producer pastes: the three values and a curl that PUTs a card, for `token` (a placeholder on public pages). */
-export function connectSnippets(facts: ConnectFacts, token: string, root?: string) {
+export function connectSnippets(facts: Pick<ConnectFacts, 'api' | 'owner'>, token: string, root?: string) {
   const owner = facts.owner ?? OWNER;
   const card = curlCard(owner, root);
   return {
@@ -115,16 +152,37 @@ export function connectSnippets(facts: ConnectFacts, token: string, root?: strin
   };
 }
 
-/** /llms.txt: what this head is, how a producer talks to it, the facts, and the links; the same as /connect. */
+/** /llms.txt: the same reference as /connect, section by section, as text. */
 export function llmsTxt(facts: ConnectFacts, origin: string): string {
   const { config, curl, curlRoot } = connectSnippets(facts, TOKEN);
   const links = connectLinks(origin);
+  const assistant = assistantAccess(origin);
+  const title = (id: (typeof CONNECT_SECTIONS)[number]['id']) => CONNECT_SECTIONS.find((s) => s.id === id)!.title;
   const lines = [
     '# This head',
     '',
-    `This is a head for the Personal Brief Card Protocol (PBCP): a person's agents and tools ("producers") send it cards — things they made, things they noticed, and decisions only that person can make — and the head folds them into one brief a day and records each decision. A producer talks to it over HTTP with a bearer token bound to one namespace root: it PUTs cards to ${facts.api}/cards/{id}, reads what happened to them from ${facts.api}/changes?after={seq}, and reads this head's description from GET ${origin}/. Tokens come from this head's owner: either they mint one on the settings page and give it to you, or they give you a pairing code and you mint your own.`,
+    `This is a head for the Personal Brief Card Protocol (PBCP): a person's agents and tools ("producers") send it cards — things they made, things they noticed, and decisions only that person can make — and the head folds them into one brief a day and records each decision. A producer talks to it over HTTP with a bearer token bound to one namespace root: it PUTs cards to ${facts.api}/cards/{id}, reads what happened to them from ${facts.api}/changes?after={seq}, and reads this head's description from GET ${origin}/. Tokens come from this head's owner: either they mint one in Settings → Producers and give it to you, or they give you a pairing code and you mint your own.`,
     '',
-    '## Pairing: getting a token with a code',
+    'Sections: ' + CONNECT_SECTIONS.map((s) => s.title).join(' · '),
+    '',
+    `## ${title('head')}`,
+    '',
+    ...headRows(facts).map(([k, v]) => `- ${k}: ${v}`),
+    ...(facts.owner === null ? ['', `(This deployment serves several heads: ${OWNER} stands for the owner id, which the owner gives you.)`] : []),
+    '',
+    `## ${title('producer')}`,
+    '',
+    `### The three values (replace ${TOKEN} with the token the owner gave you)`,
+    '',
+    ...Object.entries(config).map(([k, v]) => `- ${k}=${v}`),
+    '',
+    `### A first card (the token must be bound to the root ${curlRoot})`,
+    '',
+    '```sh',
+    curl,
+    '```',
+    '',
+    '### Pairing: getting a token with a code',
     '',
     ...pairingSteps(facts.api).map((step, i) => `${i + 1}. ${step}`),
     '',
@@ -134,33 +192,29 @@ export function llmsTxt(facts: ConnectFacts, origin: string): string {
     '',
     'A wrong, expired or used code is answered 400 invalid_code: ask the owner for a new one (attempts are limited per address). A root that already has a token is 409 root_taken; choose another and try again with the same code.',
     '',
-    '## Facts',
+    '### Connector setup',
     '',
-    `- API base: ${facts.api}`,
-    `- Owner id (to_person): ${facts.owner ?? `${OWNER} (this deployment serves several heads; the owner id comes from the owner's settings page)`}`,
-    `- Protocol: ${facts.protocol}`,
-    `- Extensions: ${facts.extensions.length ? facts.extensions.join(', ') : 'none'}`,
+    ...links.connectors.map((l) => `- [${l.label}](${l.href})`),
     '',
-    '## The three values',
-    '',
-    ...Object.entries(config).map(([k, v]) => `- ${k}=${v}`),
-    '',
-    `## A first card (the token must be bound to the root ${curlRoot})`,
-    '',
-    '```sh',
-    curl,
-    '```',
-    '',
-    '## Use this head from an assistant',
+    `## ${title('assistant')}`,
     '',
     'An assistant acting for the owner (reading the brief to them, recording what they decide) connects to the owner’s MCP server, not as a producer:',
     '',
-    ...assistantAccess(origin).lines.map((l) => `- ${l}`),
+    ...assistant.lines.map((l) => `- ${l}`),
     '',
-    '## Links',
+    '### Claude',
+    '',
+    ...assistant.claude.map((l, i) => `${i + 1}. ${l}`),
+    '',
+    '### ChatGPT',
+    '',
+    ...assistant.chatgpt.map((l, i) => `${i + 1}. ${l}`),
+    '',
+    assistant.revoke,
+    '',
+    `## ${title('links')}`,
     '',
     ...links.head.map((l) => `- [${l.label}](${l.href})${l.note ? `: ${l.note}` : ''}`),
-    ...links.connectors.map((l) => `- [Connector setup: ${l.label}](${l.href})`),
     '',
   ];
   return lines.join('\n');
