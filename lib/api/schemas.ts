@@ -276,6 +276,10 @@ export const ProducerToken = z.object({
   ceiling: z.enum(URGENCIES),
   created_at: Timestamp,
   last_used_at: Timestamp.nullable().describe('The last request it authenticated, to the minute'),
+  paired: z
+    .object({ name: z.string().nullable(), address: z.string().nullable(), at: Timestamp })
+    .nullable()
+    .describe('When the producer minted this token itself with a pairing code: the name it gave, its address, when'),
 }).register(responses, { id: 'ProducerToken' });
 
 export const ProducerTokenList = z.object({ producers: z.array(ProducerToken) }).register(responses, { id: 'ProducerTokenList' });
@@ -295,6 +299,33 @@ export const MintedToken = z.object({
 export const TokenPatch = z.object({
   ceiling: z.enum(URGENCIES).describe('The producer’s ceiling (§9): every live token of its root; cards stored from now on'),
 }).register(requests, { id: 'TokenPatch' });
+
+export const PairingCode = z.object({
+  id: z.string().describe('Names the code to cancel it; not the code'),
+  created_at: Timestamp,
+  expires_at: Timestamp,
+}).register(responses, { id: 'PairingCode' });
+
+export const PairingCodeList = z.object({ codes: z.array(PairingCode).describe('Codes not yet used, cancelled or expired') }).register(responses, { id: 'PairingCodeList' });
+
+export const NewPairingCode = PairingCode.extend({
+  code: z.string().describe('6 characters as two groups, e.g. K7Q-4MX. In this answer only'),
+  api: z.string().describe('Where the agent pairs: POST {api}/pair'),
+  say: z.string().describe('The sentence to give the agent: "Pair with <api>, code <code>."'),
+}).register(responses, { id: 'NewPairingCode' });
+
+export const PairRequest = z.object({
+  code: z.string().describe('The code the owner gave you; case and separators do not matter'),
+  root: z.string().describe('The root you choose (RFC §5): letters, digits and -; every card id you send starts with it'),
+  name: z.string().optional().describe('What you are, for the owner’s record'),
+}).register(requests, { id: 'PairRequest' });
+
+export const Paired = z.object({
+  token: z.string().describe('Your producer token. Shown once: the head keeps only its hash'),
+  api: z.string().describe('The base URL of the producer operations (§7.5)'),
+  owner: z.string().describe('The owner’s person id: every card’s to_person (§10)'),
+  root: z.string(),
+}).register(responses, { id: 'Paired' });
 
 export const Enrolment = z.object({
   url: z.string().describe('Opens the sign-in page ready to register a passkey on this head'),

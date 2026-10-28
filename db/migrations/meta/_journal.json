@@ -71,6 +71,13 @@
       "when": 1793145770518,
       "tag": "0009_token_last_used",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793151644989,
+      "tag": "0010_pairing",
+      "breakpoints": true
     }
   ]
 }

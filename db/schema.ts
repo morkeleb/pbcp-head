@@ -35,7 +35,26 @@ export const producerTokens = pgTable('producer_tokens', {
   createdAt: tstz('created_at').notNull().defaultNow(),
   lastUsedAt: tstz('last_used_at'), // the last request it authenticated, to the minute (lib/auth/producer.ts)
   revokedAt: tstz('revoked_at'),
+  // Set when the producer minted this token itself with a pairing code (lib/settings/pairing.ts): who, from where, when.
+  pairedName: text('paired_name'),
+  pairedAddress: text('paired_address'),
+  pairedAt: tstz('paired_at'),
 });
+
+// Pairing codes (lib/settings/pairing.ts): made by the owner, given to an agent, which trades one for its own producer
+// token at POST /api/pair. Only the code's hash is kept; a code is single use, bound to its head, and short-lived.
+export const pairingCodes = pgTable(
+  'pairing_codes',
+  {
+    id: text('id').primaryKey(), // how the owner names it to cancel it; not the code
+    headId: text('head_id').notNull().references(() => heads.id),
+    codeHash: bytea('code_hash').notNull(),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    expiresAt: tstz('expires_at').notNull(),
+    usedAt: tstz('used_at'), // paired, cancelled, or burned by a failed attempt: either way, never again
+  },
+  (t) => [uniqueIndex('pairing_codes_hash').on(t.codeHash), index('pairing_codes_head').on(t.headId)],
+);
 
 export const cards = pgTable(
   'cards',

@@ -17,7 +17,11 @@ type Urgency = 'log' | 'brief' | 'immediate';
 const URGENCIES: Urgency[] = ['log', 'brief', 'immediate'];
 
 interface HeadFacts { owner: string; url: string; protocol: string; extensions: string[]; render: { mermaid: string[] } }
-interface Token { id: string; root: string; instance: string | null; executor: boolean; ceiling: Urgency; created_at: string; last_used_at: string | null }
+interface Token {
+  id: string; root: string; instance: string | null; executor: boolean; ceiling: Urgency; created_at: string; last_used_at: string | null;
+  paired: { name: string | null; address: string | null; at: string } | null;
+}
+interface OpenCode { id: string; created_at: string; expires_at: string }
 interface Label { label: string; cards: number; ceiling: Urgency | null }
 interface Device { id: string; name: string | null; platform: string; last_seen_at: string | null; created_at: string; current: boolean }
 interface HeadSettings { timezone: string; timezone_source: 'override' | 'device' | 'default'; timezone_override: string | null }
@@ -150,7 +154,14 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
             <tbody className="divide-y border-y">
               {tokens.map((t) => (
                 <tr key={t.id} data-token={t.root}>
-                  <td className="py-2 pr-3 font-medium">{t.root}{t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}</td>
+                  <td className="py-2 pr-3 font-medium">
+                    {t.root}{t.instance && <span className="text-muted-foreground"> · {t.instance}</span>}{t.executor && <span className="text-lead text-muted-foreground"> · executor</span>}
+                    {t.paired && (
+                      <span className="block text-lead font-normal text-muted-foreground" data-paired>
+                        paired{t.paired.name ? ` · ${t.paired.name}` : ''} · {when(t.paired.at)}{t.paired.address ? ` · ${t.paired.address}` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{when(t.created_at)}</td>
                   <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{t.last_used_at ? when(t.last_used_at) : 'never'}</td>
                   <td className="py-2 pr-3">
@@ -189,6 +200,8 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
         </div>
       )}
 
+      <Pairing onPaired={load} onError={onError} />
+
       <h4 className="pb-2 pt-6 text-meta font-semibold uppercase tracking-meta text-muted-foreground">Ceilings by label</h4>
       {labels === null ? null : labels.length === 0 ? (
         <p className="text-lead text-muted-foreground">No card carries a label yet.</p>
@@ -215,6 +228,76 @@ function Producers({ minted, onMinted, onError }: { minted: { root: string; toke
       <p className="pt-2 text-lead text-muted-foreground">A card under a producer’s ceiling and a label’s takes the lower. Changes apply to cards stored from now on.</p>
       {deferred.toast}
     </Section>
+  );
+}
+
+/**
+ * Pairing (lib/settings/pairing.ts): a code to give an agent, which mints its own token with it at POST /api/pair. The
+ * code is shown when it is made and never again (only its hash is kept); open codes are listed by when they expire,
+ * each with Cancel.
+ */
+function Pairing({ onPaired, onError }: { onPaired: () => void; onError: (e: unknown) => void }) {
+  const [codes, setCodes] = useState<OpenCode[]>([]);
+  const [made, setMade] = useState<{ id: string; code: string; say: string; expires_at: string } | null>(null);
+  const online = useOnline();
+  const load = useCallback(async () => {
+    const r = await api<{ codes: OpenCode[] }>('/api/me/settings/pairing');
+    if (r.status === 200) setCodes(r.body.codes);
+  }, []);
+  useEffect(() => void load(), [load]);
+  // A code that is no longer open was used (or expired): the producer list may have a new row.
+  useEffect(() => {
+    if (made && !codes.some((c) => c.id === made.id)) onPaired();
+  }, [codes, made, onPaired]);
+  useEffect(() => {
+    if (!made) return;
+    const t = setInterval(() => void load(), 5000);
+    return () => clearInterval(t);
+  }, [made, load]);
+  const create = async () => {
+    try {
+      setMade(await call('/api/me/settings/pairing', 'POST'));
+    } catch (e) {
+      onError(e);
+    }
+    await load();
+  };
+  const cancel = async (id: string) => {
+    try {
+      await call(`/api/me/settings/pairing/${id}`, 'DELETE');
+      if (made?.id === id) setMade(null);
+    } catch (e) {
+      onError(e);
+    }
+    await load();
+  };
+  const open = (id: string) => codes.some((c) => c.id === id);
+  return (
+    <div className="mt-5" data-pairing>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={!online} onClick={() => void create()}>Pair a producer</Button>
+        <span className="text-lead text-muted-foreground">An agent mints its own token with a code, valid 10 minutes, once.</span>
+      </div>
+      {made && open(made.id) && (
+        <div className="mt-3 rounded-lg border border-ring p-3" data-pairing-code>
+          <p className="font-mono text-[22px] font-semibold tracking-[0.15em]" data-code>{made.code}</p>
+          <p className="pb-2 pt-1 text-lead text-muted-foreground">Give the agent this, before {when(made.expires_at)}:</p>
+          <Copyable text={made.say} label="pairing sentence" block wrap />
+        </div>
+      )}
+      {codes.length > 0 && (
+        <ul className="mt-3 divide-y border-y text-body" data-open-codes>
+          {codes.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-muted-foreground">
+                {made?.id === c.id ? <span className="font-mono text-foreground">{made.code}</span> : 'A code'} · made {when(c.created_at)}, open until {when(c.expires_at)}
+              </span>
+              <Button size="xs" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void cancel(c.id)}>Cancel</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -247,7 +330,13 @@ function Connect({ minted }: { minted: { root: string; token: string } | null })
     <Section
       id="connect"
       title="Connect a producer"
-      intro={minted ? `Filled in with ${minted.root}’s token.` : `Mint a token above and it is filled in here; until then these say ${c?.token ?? '<token>'}.`}
+      intro={
+        <>
+          {minted ? `Filled in with ${minted.root}’s token.` : `Mint a token above and it is filled in here; until then these say ${c?.token ?? '<token>'}.`}{' '}
+          Or pair instead: make a code with “Pair a producer” and give it to the agent, which mints its own token (
+          <a href="/connect" className="underline decoration-border underline-offset-2">how it works</a>).
+        </>
+      }
     >
       {!c ? (
         <p className="text-lead text-muted-foreground">Loading…</p>

@@ -1222,7 +1222,7 @@
             }
           },
           "409": {
-            "description": "`root_in_use`: the root already has a live token",
+            "description": "`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1368,6 +1368,206 @@
           },
           "404": {
             "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/pairing": {
+      "get": {
+        "operationId": "listPairingCodes",
+        "summary": "The open pairing codes (never the codes themselves)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCodeList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPairingCode",
+        "summary": "Make a pairing code to give an agent: 6 characters, 10 minutes, once",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The code, in this answer only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewPairingCode"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/pairing/{id}": {
+      "delete": {
+        "operationId": "cancelPairingCode",
+        "summary": "Cancel an open pairing code",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A pairing code’s id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cancelled"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair": {
+      "post": {
+        "operationId": "pair",
+        "summary": "Trade a pairing code from the owner for your own producer token (public; no credential)",
+        "description": "The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).",
+        "security": [],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Paired: the token, once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paired"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
             "content": {
               "application/json": {
                 "schema": {
@@ -3730,6 +3930,41 @@
               }
             ],
             "description": "The last request it authenticated, to the minute"
+          },
+          "paired": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "address": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "at": {
+                    "type": "string",
+                    "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                  }
+                },
+                "required": [
+                  "name",
+                  "address",
+                  "at"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the producer minted this token itself with a pairing code: the name it gave, its address, when"
           }
         },
         "required": [
@@ -3739,7 +3974,8 @@
           "executor",
           "ceiling",
           "created_at",
-          "last_used_at"
+          "last_used_at",
+          "paired"
         ],
         "additionalProperties": false
       },
@@ -3772,6 +4008,110 @@
         "required": [
           "token",
           "producer"
+        ],
+        "additionalProperties": false
+      },
+      "PairingCode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Names the code to cancel it; not the code"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "PairingCodeList": {
+        "type": "object",
+        "properties": {
+          "codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairingCode"
+            },
+            "description": "Codes not yet used, cancelled or expired"
+          }
+        },
+        "required": [
+          "codes"
+        ],
+        "additionalProperties": false
+      },
+      "NewPairingCode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Names the code to cancel it; not the code"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+          },
+          "code": {
+            "type": "string",
+            "description": "6 characters as two groups, e.g. K7Q-4MX. In this answer only"
+          },
+          "api": {
+            "type": "string",
+            "description": "Where the agent pairs: POST {api}/pair"
+          },
+          "say": {
+            "type": "string",
+            "description": "The sentence to give the agent: \"Pair with <api>, code <code>.\""
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "expires_at",
+          "code",
+          "api",
+          "say"
+        ],
+        "additionalProperties": false
+      },
+      "Paired": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Your producer token. Shown once: the head keeps only its hash"
+          },
+          "api": {
+            "type": "string",
+            "description": "The base URL of the producer operations (§7.5)"
+          },
+          "owner": {
+            "type": "string",
+            "description": "The owner’s person id: every card’s to_person (§10)"
+          },
+          "root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "api",
+          "owner",
+          "root"
         ],
         "additionalProperties": false
       },
@@ -4132,6 +4472,27 @@
         },
         "required": [
           "ceiling"
+        ]
+      },
+      "PairRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The code the owner gave you; case and separators do not matter"
+          },
+          "root": {
+            "type": "string",
+            "description": "The root you choose (RFC §5): letters, digits and -; every card id you send starts with it"
+          },
+          "name": {
+            "description": "What you are, for the owner’s record",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "root"
         ]
       }
     }

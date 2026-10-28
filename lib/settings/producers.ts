@@ -14,6 +14,18 @@ import { HttpError } from '../http';
 const ROOT = /^[A-Za-z0-9-]+$/;
 const ROOT_MAX = 64;
 
+/** Whether `root` can be a producer's root: the §5 segment grammar, at most ROOT_MAX characters, not `head`. */
+export const isProducerRoot = (root: string) => ROOT.test(root) && root.length <= ROOT_MAX && root !== 'head';
+
+/** Whether `root` already has a live token on the head (for `instance`, when given). */
+export async function rootTaken(db: Db, headId: string, root: string, instance: string | null = null): Promise<boolean> {
+  const live = await db
+    .select({ instance: producerTokens.instance })
+    .from(producerTokens)
+    .where(and(eq(producerTokens.headId, headId), eq(producerTokens.root, root), isNull(producerTokens.revokedAt)));
+  return live.some((t) => (t.instance ?? null) === instance);
+}
+
 /** A token's id in the owner's API: the first 16 hex digits of the stored sha256, never the token itself. */
 export const tokenId = (hash: Buffer) => hash.toString('hex').slice(0, 16);
 
@@ -25,6 +37,8 @@ export interface TokenRow {
   ceiling: Urgency;
   created_at: string;
   last_used_at: string | null;
+  /** Set when the producer paired itself (lib/settings/pairing.ts): the name it gave, its address, when. */
+  paired: { name: string | null; address: string | null; at: string } | null;
 }
 
 /** The head's live producer tokens, oldest first. */
@@ -42,6 +56,7 @@ export async function listTokens(db: Db, headId: string): Promise<TokenRow[]> {
     ceiling: (URGENCIES as readonly string[]).includes(r.urgencyCeiling) ? (r.urgencyCeiling as Urgency) : 'brief',
     created_at: iso(r.createdAt),
     last_used_at: r.lastUsedAt ? iso(r.lastUsedAt) : null,
+    paired: r.pairedAt ? { name: r.pairedName, address: r.pairedAddress, at: iso(r.pairedAt) } : null,
   }));
 }
 

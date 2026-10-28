@@ -133,6 +133,28 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `DELETE /api/me/settings/producers/{id}`.
     /// - Remark: Generated from `#/paths//api/me/settings/producers/{id}/delete(revokeProducerToken)`.
     func revokeProducerToken(_ input: Operations.RevokeProducerToken.Input) async throws -> Operations.RevokeProducerToken.Output
+    /// The open pairing codes (never the codes themselves)
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/pairing`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/get(listPairingCodes)`.
+    func listPairingCodes(_ input: Operations.ListPairingCodes.Input) async throws -> Operations.ListPairingCodes.Output
+    /// Make a pairing code to give an agent: 6 characters, 10 minutes, once
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/pairing`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/post(createPairingCode)`.
+    func createPairingCode(_ input: Operations.CreatePairingCode.Input) async throws -> Operations.CreatePairingCode.Output
+    /// Cancel an open pairing code
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/pairing/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/{id}/delete(cancelPairingCode)`.
+    func cancelPairingCode(_ input: Operations.CancelPairingCode.Input) async throws -> Operations.CancelPairingCode.Output
+    /// Trade a pairing code from the owner for your own producer token (public; no credential)
+    ///
+    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+    ///
+    /// - Remark: HTTP `POST /api/pair`.
+    /// - Remark: Generated from `#/paths//api/pair/post(pair)`.
+    func pair(_ input: Operations.Pair.Input) async throws -> Operations.Pair.Output
     /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)
     ///
     /// - Remark: HTTP `GET /api/me/settings/labels`.
@@ -441,6 +463,48 @@ extension APIProtocol {
         try await revokeProducerToken(Operations.RevokeProducerToken.Input(
             path: path,
             headers: headers
+        ))
+    }
+    /// The open pairing codes (never the codes themselves)
+    ///
+    /// - Remark: HTTP `GET /api/me/settings/pairing`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/get(listPairingCodes)`.
+    public func listPairingCodes(headers: Operations.ListPairingCodes.Input.Headers = .init()) async throws -> Operations.ListPairingCodes.Output {
+        try await listPairingCodes(Operations.ListPairingCodes.Input(headers: headers))
+    }
+    /// Make a pairing code to give an agent: 6 characters, 10 minutes, once
+    ///
+    /// - Remark: HTTP `POST /api/me/settings/pairing`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/post(createPairingCode)`.
+    public func createPairingCode(headers: Operations.CreatePairingCode.Input.Headers = .init()) async throws -> Operations.CreatePairingCode.Output {
+        try await createPairingCode(Operations.CreatePairingCode.Input(headers: headers))
+    }
+    /// Cancel an open pairing code
+    ///
+    /// - Remark: HTTP `DELETE /api/me/settings/pairing/{id}`.
+    /// - Remark: Generated from `#/paths//api/me/settings/pairing/{id}/delete(cancelPairingCode)`.
+    public func cancelPairingCode(
+        path: Operations.CancelPairingCode.Input.Path,
+        headers: Operations.CancelPairingCode.Input.Headers = .init()
+    ) async throws -> Operations.CancelPairingCode.Output {
+        try await cancelPairingCode(Operations.CancelPairingCode.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// Trade a pairing code from the owner for your own producer token (public; no credential)
+    ///
+    /// The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).
+    ///
+    /// - Remark: HTTP `POST /api/pair`.
+    /// - Remark: Generated from `#/paths//api/pair/post(pair)`.
+    public func pair(
+        headers: Operations.Pair.Input.Headers = .init(),
+        body: Operations.Pair.Input.Body
+    ) async throws -> Operations.Pair.Output {
+        try await pair(Operations.Pair.Input(
+            headers: headers,
+            body: body
         ))
     }
     /// The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)

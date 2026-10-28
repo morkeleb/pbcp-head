@@ -7,7 +7,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { db } from '../../../db/client';
-import { connectLinks, connectSnippets, OWNER, TOKEN, type Link as DocLink } from '../../../lib/connect';
+import { connectLinks, connectSnippets, OWNER, pairCurl, pairingSteps, TOKEN, type Link as DocLink } from '../../../lib/connect';
 import { connectFacts, headOrigin } from '../../../lib/settings/head';
 import { PageRow } from '../chrome';
 import { Copyable } from '../copy';
@@ -35,7 +35,7 @@ export default async function ConnectPage() {
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-4 min-[900px]:px-6" data-connect-page>
         <p className="text-body">
           A producer sends cards to this head with a token bound to one root. Tokens are minted by this head’s owner on the{' '}
-          <Link href="/settings" className={link}>settings page</Link>.
+          <Link href="/settings" className={link}>settings page</Link>: either the owner gives you one, or gives you a pairing code and you mint your own.
         </p>
         {facts.owner === null && (
           <p className="mt-2 text-lead text-muted-foreground" data-multi-head>
@@ -52,6 +52,16 @@ export default async function ConnectPage() {
               <Row name="Extensions">{facts.extensions.length ? facts.extensions.map((e) => <code key={e} className="mr-2 text-body">{e}</code>) : 'none'}</Row>
             </tbody>
           </table>
+        </Section>
+
+        <Section title="Pairing: a token with a code">
+          <ol className="list-decimal space-y-1 pl-5 text-body" data-pairing-steps>
+            {pairingSteps(facts.api).map((step) => <li key={step}>{step}</li>)}
+          </ol>
+          <div className="mt-3"><Copyable text={pairCurl(facts.api)} label="pair" block /></div>
+          <p className="pt-2 text-lead text-muted-foreground">
+            A wrong, expired or used code is <code>400 invalid_code</code>, and every outstanding code is then void: ask for a new one. A root that already has a token is <code>409 root_taken</code>: choose another and use the same code.
+          </p>
         </Section>
 
         <Section title="The three values">

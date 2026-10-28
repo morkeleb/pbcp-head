@@ -92,6 +92,14 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('PATCH', `/api/me/settings/producers/${minted.body.producer.id}`, { ceiling: 'log' });
     await api('DELETE', `/api/me/settings/producers/${minted.body.producer.id}`);
     await api('GET', '/api/me/settings/snippets?root=n8n');
+    const code = await api('POST', '/api/me/settings/pairing');
+    await api('GET', '/api/me/settings/pairing');
+    await api('POST', '/api/pair', { code: code.body.code, root: 'hermes' }, null); // 409: hermes has a token
+    await api('POST', '/api/pair', { code: code.body.code, root: 'paired-agent', name: 'An agent' }, null);
+    await api('POST', '/api/pair', { code: code.body.code, root: 'paired-agent' }, null); // 400: used
+    const other = await api('POST', '/api/me/settings/pairing');
+    await api('DELETE', `/api/me/settings/pairing/${other.body.id}`);
+    await api('DELETE', `/api/me/settings/pairing/${other.body.id}`); // 404
     await api('GET', '/api/me/settings/devices');
     await api('POST', '/api/me/settings/enrolment');
     await api('DELETE', '/api/me/settings/devices/nope'); // 404
