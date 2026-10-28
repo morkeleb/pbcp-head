@@ -488,6 +488,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for an invite to the hosted head (public; no credential)
+         * @description The front door’s form. A request with an Authorization header is refused (400). An address already asked is accepted again and changes nothing. No mail is sent. Rate-limited per address (429). A form-encoded post (the form without JavaScript) is answered 303 to `/?invite=requested`.
+         */
+        post: operations["requestInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/settings/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The requests for an invite, oldest first: for the deployment’s own head only (403 `not_the_operator`) */
+        get: operations["listInviteRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/settings/invites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an invite request */
+        delete: operations["deleteInviteRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/push/key": {
         parameters: {
             query?: never;
@@ -1137,6 +1191,19 @@ export interface components {
                 subscribed: boolean;
             };
         };
+        InviteAccepted: {
+            /** @constant */
+            requested: true;
+        };
+        InviteList: {
+            requests: {
+                id: string;
+                email: string;
+                /** @description RFC 3339, UTC (`2026-10-07T09:00:00Z`) */
+                created_at: string;
+                user_agent: string | null;
+            }[];
+        };
         PushKey: {
             /** @description The VAPID public key, base64url: the applicationServerKey */
             public_key: string;
@@ -1331,6 +1398,10 @@ export interface components {
                 p256dh: string;
                 auth: string;
             };
+        };
+        InviteBody: {
+            /** @description An email address, at most 254 characters (400 `invalid_email`) */
+            email: string;
         };
         MintTokenRequest: {
             /** @description The producer root (§5): letters, digits and -; not `head`; not already held by a live token */
@@ -3098,6 +3169,167 @@ export interface operations {
             };
             /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    requestInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteBody"];
+            };
+        };
+        responses: {
+            /** @description Recorded */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteAccepted"];
+                };
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `too_large`: the body is over 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `rate_limited`: too many requests from this address; Retry-After says when to try again */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listInviteRequests: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteList"];
+                };
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteInviteRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
+                "X-Timezone"?: components["parameters"]["XTimezone"];
+            };
+            path: {
+                /** @description An invite request’s id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request is malformed (`invalid_request`, `malformed_json`, or a protocol code) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `not_found` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -49,7 +49,7 @@ describe('GET /: JSON for producers, the front door for a browser (Accept)', () 
     }
   });
 
-  it('serves the front door when text/html is preferred over application/json, with the describe facts in words', async () => {
+  it('serves the front door when text/html is preferred over application/json', async () => {
     for (const accept of [BROWSER, 'text/html', 'text/html, application/json;q=0.9']) {
       const r = await call('GET', '/', { headers: { accept } });
       expect(r.status).toBe(200);
@@ -57,17 +57,11 @@ describe('GET /: JSON for producers, the front door for a browser (Accept)', () 
       expect(r.headers.get('vary')).toMatch(/accept/i);
       expect(r.headers.get('content-security-policy')).toMatch(/script-src 'self' 'nonce-/);
       const html = r.body as string;
-      expect(html).toMatch(/<h1[^>]*>Brief<\/h1>/);
-      expect(html).not.toContain('Morning Brief');
-      expect(html).toContain('href="/signin"');
-      expect(html).toContain('href="/brief"');
+      expect(html).toContain('Your day, unified.');
       expect(html).toContain('href="https://morkeleb.github.io/pbcp"');
-      expect(html).toContain('href="/api/openapi.json"');
-      expect(html).toContain('What producers see at GET /');
-      expect(html).toMatch(new RegExp(`<code>${OWNER}</code>`));
-      expect(html).toContain('<code>pbcp/1</code>');
-      expect(html).toMatch(/<code[^>]*>orders<\/code>/);
-      expect(html).toContain('core, extended');
+      expect(html).toContain('>Personal Brief Card Protocol</a>');
+      expect(html).toContain('href="/connect"');
+      expect(html).toContain('href="/signin"');
     }
   });
 

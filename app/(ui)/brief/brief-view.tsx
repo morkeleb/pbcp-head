@@ -10,38 +10,22 @@
 //              updates and signals on the right; the same past-above, future-below scrolling; j/k/enter/d.
 
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MastheadRow, MastheadTools, useChrome, useChromeCards } from '../chrome';
 import type { MeCard } from '../components';
-import { composeParagraphs, matchesLabels } from '../../../lib/brief/paragraph';
-import { DailyBrief } from './DailyBrief';
+import { matchesLabels } from '../../../lib/brief/paragraph';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
-import { clock, DecisionCard, type DecisionCardHandle, type Density } from './DecisionCard';
+import { DecisionCard, type DecisionCardHandle } from './DecisionCard';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
 import { addDays, useBrief, type Day } from './use-brief';
+import { dayName, DaySection, shortDay, weekOf } from './day-section';
 import { WeekStrip, type WeekDay } from './WeekStrip';
 
-/** Updates are folded after this many, behind "More updates (N)". */
-const FOLD_AT = 6;
 const HINT_KEY = 'pbcp.swipe-hint';
 /** How long the swipe hint stays up, unless the person scrolls first. */
 const HINT_MS = 8000;
-
-const dayName = (d: Day, today: string): string => {
-  const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d.date}T00:00:00Z`));
-  if (d.date === today) return `Today · ${date}`;
-  if (d.date === addDays(today, -1)) return `Yesterday · ${date}`;
-  if (d.date === addDays(today, 1)) return `Tomorrow · ${date}`;
-  return date;
-};
-
-/** The Monday-first week around `date`. */
-const weekOf = (date: string): string[] => {
-  const dow = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
-  return Array.from({ length: 7 }, (_, i) => addDays(date, i - dow));
-};
 
 export function BriefView() {
   // The masthead is the layout's (app/(ui)/chrome.tsx): density and the layout come from it, the week strip goes into it.
@@ -264,13 +248,6 @@ export function BriefView() {
   );
 }
 
-/** "Fri 31 Oct". */
-const shortDay = (date: string) => {
-  const parts = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${date}T00:00:00Z`));
-  const part = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${part('weekday')} ${part('day')} ${part('month')}`;
-};
-
 /**
  * A day with the label filter applied: only cards carrying one of `chosen`, in decisions, updates and signals (a thread
  * by its newest card); the paragraph keeps only their entries. A paragraph the head did not keep in parts cannot follow
@@ -288,101 +265,3 @@ function filtered(day: Day, chosen: string[]): Day {
   };
 }
 
-function DaySection({ day, name, wide, density, tz, decision, update }: {
-  day: Day; name: string; wide: boolean; density: Density; tz: string;
-  decision: (c: MeCard, under: string) => ReactNode; update: (t: UpdateThread) => ReactNode;
-}) {
-  // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
-  const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'Morning brief' : '';
-  const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0;
-  // One short paragraph per part of the brief (lib/brief/paragraph.ts), filtered by the chosen labels; a paragraph the
-  // head did not keep in parts is the one run of prose it was written as.
-  const p = day.paragraph;
-  const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
-  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} compact={density === 'ledger'} />;
-  const decisions = day.decisions.length > 0 && (
-    <Group title="Decisions" count={day.decisions.length}>
-      <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap={density === 'ledger' ? 'gap-2' : 'gap-3'} />
-    </Group>
-  );
-  const updates = day.updates.length > 0 && <Updates title="Updates" threads={day.updates} wide={wide} update={update} />;
-  const signals = day.signals.length > 0 && <Updates title="Signals" threads={day.signals} wide={wide} update={update} />;
-
-  return (
-    <section className="pb-6" aria-label={name} data-section>
-      <h2
-        data-day={day.date}
-        className="sticky z-10 -mx-1 border-b bg-background px-1 py-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground"
-        style={{ top: 'var(--masthead-h, 0px)' }}
-      >
-        {name}
-      </h2>
-      {day.kind === 'tomorrow' && empty ? (
-        <p className="py-3 text-lead text-muted-foreground">Nothing set for tomorrow yet.</p>
-      ) : day.nothing ? (
-        <p className="py-3 text-lead text-muted-foreground">Nothing arrived this day.</p>
-      ) : wide ? (
-        <div className="grid grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] gap-6 pt-3">
-          <div className="min-w-0">
-            {brief}
-            {decisions}
-          </div>
-          <div className="min-w-0">
-            {updates}
-            {signals}
-          </div>
-        </div>
-      ) : (
-        <div className="pt-1">
-          {brief}
-          {decisions}
-          {updates}
-          {signals}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Group({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
-  return (
-    <div className="pt-3">
-      <h3 className="pb-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground">
-        {title}
-        {count !== undefined && <span className="font-normal"> ({count})</span>}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-/** On the timeline, each item sits beside a thin rail carrying its time; on the broadsheet, items stand alone. */
-function Rail({ wide, items, gap, tz }: { wide: boolean; items: Array<{ key: string; at: string; node: ReactNode }>; gap: string; tz: string }) {
-  if (wide) return <div className={cn('flex flex-col', gap)}>{items.map((i) => <div key={i.key}>{i.node}</div>)}</div>;
-  return (
-    <ol className={cn('flex flex-col', gap)}>
-      {items.map((i) => (
-        <li key={i.key} className="grid grid-cols-[2.75rem_minmax(0,1fr)]">
-          <span className="border-r pr-2 pt-3 text-right text-meta tabular-nums text-muted-foreground">{clock(i.at, tz)}</span>
-          <div className="min-w-0 pl-3">{i.node}</div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** Updates or signals: rows separated by hairlines, folded after FOLD_AT behind "More updates (N)". */
-function Updates({ title, threads, wide, update }: { title: string; threads: UpdateThread[]; wide: boolean; update: (t: UpdateThread) => ReactNode }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? threads : threads.slice(0, FOLD_AT);
-  return (
-    <Group title={title}>
-      <div className={cn('divide-y border-y', !wide && 'ml-[2.75rem] border-l pl-3')}>{shown.map((t) => update(t))}</div>
-      {threads.length > FOLD_AT && !all && (
-        <button className="mt-2 text-lead text-muted-foreground hover:text-foreground" onClick={() => setAll(true)}>
-          More {title.toLowerCase()} ({threads.length - FOLD_AT})
-        </button>
-      )}
-    </Group>
-  );
-}

@@ -107,6 +107,11 @@ describe('every /api/me response matches packages/api-types/openapi.json', () =>
     await api('POST', '/api/me/settings/enrolment');
     await api('DELETE', '/api/me/settings/devices/nope'); // 404
     await api('GET', '/api/push/key', undefined, null);
+    await api('POST', '/api/invite', { email: 'contract@example.com' }, null);
+    await api('POST', '/api/invite', { email: 'nope' }, null); // 400
+    const invites = (await api('GET', '/api/me/settings/invites')).body.requests;
+    await api('DELETE', `/api/me/settings/invites/${invites[0].id}`);
+    await api('DELETE', `/api/me/settings/invites/${invites[0].id}`); // 404
     const p256dh = createECDH('prime256v1');
     p256dh.generateKeys();
     await api('POST', '/api/me/settings/push', { endpoint: 'https://push.example/send/abc', expirationTime: null, keys: { p256dh: p256dh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') } });

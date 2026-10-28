@@ -1,5 +1,5 @@
 // pnpm demo:purge --head <owner> [--dry-run] — removes what `pnpm demo` left on a head: the demo producers' cards and
-// their tokens. The demo's roots (scripts/demo-data.ts) are names real connectors use too, so a real producer is left
+// their tokens. The demo's roots (lib/demo/data.ts) are names real connectors use too, so a real producer is left
 // alone: a root that holds a live token other than the demo's is a real producer's, and on it only the demo's own cards
 // go (namespace `demo`, and the demo orders with the executors' cards in their threads). A root no real producer holds
 // loses every card, earlier demo runs' included. The demo's tokens (instance `demo`) are deleted either way. Decisions
@@ -11,7 +11,7 @@ import { and, eq, inArray, isNull, like, ne, or, sql } from 'drizzle-orm';
 import { parseArgs } from 'node:util';
 import { openDb } from '../db/client';
 import { cards, decisionLog, producerTokens } from '../db/schema';
-import { DEMO_INSTANCE, DEMO_MARK, DEMO_NAMESPACE, DEMO_ROOTS } from './demo-data';
+import { DEMO_INSTANCE, DEMO_MARK, DEMO_NAMESPACE, DEMO_ROOTS } from '../lib/demo/data';
 
 const { values } = parseArgs({ options: { head: { type: 'string' }, 'dry-run': { type: 'boolean', default: false } } });
 const head = values.head;

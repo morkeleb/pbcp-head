@@ -12,7 +12,7 @@ import { clock } from '../brief/DecisionCard';
 import { UpdateRow } from '../brief/UpdateRow';
 import { PageRow, useChrome, useChromeCards } from '../chrome';
 import { api, cardHref, OfflineError, OFFLINE_REASON, useOnline, when } from '../client';
-import { NOT_SENT, useDeferred, type MeCard } from '../components';
+import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 
 export interface Order extends MeCard {
   to_producer: string;
@@ -149,6 +149,7 @@ function NewOrder({ producers, onGiven }: { producers: string[]; onGiven: () => 
  */
 export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; timezone: string; onChanged: (c?: MeCard) => void }) {
   const online = useOnline();
+  const locale = useLocale();
   const deferred = useDeferred();
   const [error, setError] = useState<string | null>(null);
   const cancel = async () => {
@@ -166,14 +167,14 @@ export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; time
     ['State', <span key="s" data-exec-state>{order.exec_state}</span>],
     ['To', to],
     ['Held by', order.claimed_by ?? '—'],
-    ['Lease', order.claim_expires_at ? `until ${when(order.claim_expires_at, timezone)}${order.claim_seq ? ` (claim ${order.claim_seq})` : ''}` : '—'],
+    ['Lease', order.claim_expires_at ? `until ${when(order.claim_expires_at, timezone, locale)}${order.claim_seq ? ` (claim ${order.claim_seq})` : ''}` : '—'],
   ];
   return (
     <article data-card={order.id} data-kind="order" className={cn('rounded-lg border bg-card p-4 text-card-foreground max-[899px]:p-3', !isActive(order as Order) && 'opacity-72')}>
       <div className="flex items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
         <span>Order</span>
         <span aria-hidden>·</span>
-        <time dateTime={order.received_at}>{clock(order.received_at, timezone)}</time>
+        <time dateTime={order.received_at}>{clock(order.received_at, timezone, locale)}</time>
       </div>
       <h3 className="font-serif text-title font-semibold tracking-editorial">
         <Link href={cardHref(order.id)} className="hover:underline">{order.title}</Link>

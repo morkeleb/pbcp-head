@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, CardLabels, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useSwipe, Viewer, type MeCard } from '../components';
+import { announce, CardLabels, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useLocale, useSwipe, Viewer, type MeCard } from '../components';
 import { clock, type Density } from './DecisionCard';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
@@ -47,6 +47,7 @@ export interface UpdateRowProps {
 
 export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, handle, expanded = false }: UpdateRowProps) {
   const c = thread.latest;
+  const locale = useLocale();
   const cards = [c, ...thread.earlier];
   const ids = cards.map((x) => x.id);
   const done = cards.every((x) => x.acknowledged_at);
@@ -106,7 +107,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
             <span className="max-w-[45%] flex-none truncate">{c.producer}</span>
             <CardLabels labels={ledger ? c.labels?.slice(0, 1) : c.labels} />
             <span aria-hidden>·</span>
-            <time className="flex-none" dateTime={c.received_at}>{clock(c.received_at, timezone)}</time>
+            <time className="flex-none" dateTime={c.received_at}>{clock(c.received_at, timezone, locale)}</time>
             {sourceLink(c.source) && (
               <>
                 <span aria-hidden>·</span>
@@ -121,7 +122,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
         </div>
         <div className="flex-none pt-3">
           {acked ? (
-            <span className="state-line text-meta text-muted-foreground" role="status">Acknowledged · {clock(acked, timezone)}</span>
+            <span className="state-line text-meta text-muted-foreground" role="status">Acknowledged · {clock(acked, timezone, locale)}</span>
           ) : (
             <Button size="xs" variant="outline" disabled={!online} onClick={() => void ack()}>Acknowledge</Button>
           )}
@@ -154,7 +155,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
             <ul className="mt-1 space-y-0.5 text-lead">
               {thread.earlier.map((e) => (
                 <li key={e.id} className="truncate">
-                  <span className="text-muted-foreground">{clock(e.received_at, timezone)}</span> <Link href={cardHref(e.id)} className="hover:underline">{e.title}</Link>
+                  <span className="text-muted-foreground">{clock(e.received_at, timezone, locale)}</span> <Link href={cardHref(e.id)} className="hover:underline">{e.title}</Link>
                 </li>
               ))}
             </ul>

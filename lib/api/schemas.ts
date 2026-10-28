@@ -288,6 +288,14 @@ export const PushSubscription = z.object({
   keys: z.object({ p256dh: z.string(), auth: z.string() }),
 }).register(requests, { id: 'PushSubscription' });
 
+export const InviteBody = z.object({ email: z.string().describe('An email address, at most 254 characters (400 `invalid_email`)') }).register(requests, { id: 'InviteBody' });
+
+export const InviteAccepted = z.object({ requested: z.literal(true) }).register(responses, { id: 'InviteAccepted' });
+
+export const InviteList = z.object({
+  requests: z.array(z.object({ id: z.string(), email: z.string(), created_at: Timestamp, user_agent: z.string().nullable() })),
+}).register(responses, { id: 'InviteList' });
+
 export const PushKey = z.object({ public_key: z.string().describe('The VAPID public key, base64url: the applicationServerKey') }).register(responses, { id: 'PushKey' });
 
 export const DeviceList = z.object({ devices: z.array(Device) }).register(responses, { id: 'DeviceList' });

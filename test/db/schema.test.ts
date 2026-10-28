@@ -13,7 +13,7 @@ describe('migrations', () => {
     const rows = await client<{ table_name: string }[]>`
       select table_name from information_schema.tables where table_schema = 'public' order by table_name`;
     expect(rows.map((r) => r.table_name)).toEqual(
-      ['cards', 'change_counter', 'cron_runs', 'decision_log', 'devices', 'diagrams', 'heads', 'identities', 'label_ceilings', 'oauth_clients', 'oauth_codes', 'pairing_codes', 'producer_tokens', 'rate_limits'],
+      ['cards', 'change_counter', 'cron_runs', 'decision_log', 'devices', 'diagrams', 'heads', 'identities', 'invite_requests', 'label_ceilings', 'oauth_clients', 'oauth_codes', 'pairing_codes', 'producer_tokens', 'rate_limits'],
     );
   });
 });

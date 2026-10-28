@@ -2017,6 +2017,185 @@
         }
       }
     },
+    "/api/invite": {
+      "post": {
+        "operationId": "requestInvite",
+        "summary": "Ask for an invite to the hosted head (public; no credential)",
+        "description": "The front door’s form. A request with an Authorization header is refused (400). An address already asked is accepted again and changes nothing. No mail is sent. Rate-limited per address (429). A form-encoded post (the form without JavaScript) is answered 303 to `/?invite=requested`.",
+        "security": [],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: the body is over 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: too many requests from this address; Retry-After says when to try again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/invites": {
+      "get": {
+        "operationId": "listInviteRequests",
+        "summary": "The requests for an invite, oldest first: for the deployment’s own head only (403 `not_the_operator`)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/settings/invites/{id}": {
+      "delete": {
+        "operationId": "deleteInviteRequest",
+        "summary": "Delete an invite request",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "An invite request’s id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/push/key": {
       "get": {
         "operationId": "pushKey",
@@ -4229,6 +4408,59 @@
         ],
         "additionalProperties": false
       },
+      "InviteAccepted": {
+        "type": "object",
+        "properties": {
+          "requested": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "additionalProperties": false
+      },
+      "InviteList": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string",
+                  "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
+                },
+                "user_agent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "email",
+                "created_at",
+                "user_agent"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "additionalProperties": false
+      },
       "PushKey": {
         "type": "object",
         "properties": {
@@ -4911,6 +5143,18 @@
         "required": [
           "endpoint",
           "keys"
+        ]
+      },
+      "InviteBody": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "An email address, at most 254 characters (400 `invalid_email`)"
+          }
+        },
+        "required": [
+          "email"
         ]
       },
       "MintTokenRequest": {

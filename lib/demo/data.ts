@@ -1,4 +1,4 @@
-// What `pnpm demo` seeds, in one place for it and for `pnpm demo:purge`: the producer roots it mints tokens for (each
+// What `pnpm demo` seeds, in one place for it, for `pnpm demo:purge` and for the front door's demo brief (lib/demo): the producer roots it mints tokens for (each
 // with instance `demo`), the namespace of every card it puts (`<root>:demo:…`), and the line every demo order carries.
 
 import type { Urgency } from '@pbcp/core';
