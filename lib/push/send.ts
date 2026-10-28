@@ -1,6 +1,6 @@
 // Web Push for the web app (RFC 8030, 8291 and 8292 VAPID): a device's service worker subscribes, the subscription is
-// kept on its devices row, and the head sends to it. One send function for every notification: the daily brief now
-// (lib/push/daily.ts); immediate-urgency cards later go through `sendPush` the same way.
+// kept on its devices row, and the head sends to it. One send function for every notification: the daily brief
+// (lib/push/daily.ts) and each card stored with delivery immediate (lib/push/urgent.ts).
 //
 // web-push builds the request (payload encryption and the VAPID JWT); it is sent with fetch, so a subscription whose
 // push service answers 404 or 410 (gone: unsubscribed, expired, the app removed) is removed here, from its device row.
@@ -8,6 +8,7 @@
 // else WEBAUTHN_ORIGIN when it is https, else a mailto: placeholder for a local head. Never logged: endpoints, keys.
 
 import { and, eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import webpush from 'web-push';
 import type { Db } from '../../db/client';
 import { devices } from '../../db/schema';
@@ -27,6 +28,12 @@ export interface Subscription {
 }
 
 export type SendResult = 'sent' | 'gone' | 'failed';
+
+/**
+ * The Topic header for a tag (RFC 8030 §5.4: at most 32 URL-safe base64 characters), so a push service replaces a
+ * pending push with a newer one of the same tag. A tag holds a card id, with colons, so it is hashed.
+ */
+const topicFor = (tag: string) => createHash('sha256').update(tag).digest('base64url').slice(0, 32);
 
 export function vapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || null;
@@ -65,7 +72,7 @@ export function parseSubscription(body: unknown): Subscription {
 export async function sendPush(db: Db, device: { id: string; pushEndpoint: string | null; pushP256dh: string | null; pushAuth: string | null }, payload: PushPayload): Promise<SendResult> {
   if (!device.pushEndpoint || !device.pushP256dh || !device.pushAuth) return 'failed';
   const subscription = { endpoint: device.pushEndpoint, keys: { p256dh: device.pushP256dh, auth: device.pushAuth } };
-  const details = webpush.generateRequestDetails(subscription, JSON.stringify(payload), { vapidDetails: vapid(), TTL: 4 * 60 * 60, urgency: 'normal', ...(payload.tag ? { topic: payload.tag } : {}) });
+  const details = webpush.generateRequestDetails(subscription, JSON.stringify(payload), { vapidDetails: vapid(), TTL: 4 * 60 * 60, urgency: 'normal', ...(payload.tag ? { topic: topicFor(payload.tag) } : {}) });
   // fetch sets Content-Length itself and refuses one given.
   const headers = Object.fromEntries(Object.entries(details.headers).filter(([k]) => k.toLowerCase() !== 'content-length').map(([k, v]) => [k, String(v)]));
   let status: number;

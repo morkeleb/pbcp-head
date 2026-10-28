@@ -444,10 +444,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * This device’s daily brief notification: on or off, at a quarter hour in its timezone
-         * @description Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one push a day, at the first run after the time.
+         * This device’s notifications: the daily brief (on or off, at a quarter hour in its timezone) and urgent cards
+         * @description Only the device itself may change it (403 `not_this_device`): it is the one that subscribes (POST /api/me/settings/push). The cron sends one daily push, at the first run after the time; an urgent push goes for each card stored with delivery immediate, after the PUT commits.
          */
-        patch: operations["setDailyNotification"];
+        patch: operations["setNotifications"];
         trace?: never;
     };
     "/api/me/settings/push": {
@@ -1081,6 +1081,12 @@ export interface components {
                 /** @description The device has a Web Push subscription the head can send to */
                 subscribed: boolean;
             };
+            /** @description A push for each card stored with delivery immediate (§9), off by default */
+            urgent_notification: {
+                enabled: boolean;
+                /** @description The device has a Web Push subscription the head can send to */
+                subscribed: boolean;
+            };
         };
         PushKey: {
             /** @description The VAPID public key, base64url: the applicationServerKey */
@@ -1259,10 +1265,13 @@ export interface components {
             ceiling: ("immediate" | "brief" | "log") | null;
         };
         DevicePatch: {
-            daily_notification: {
+            daily_notification?: {
                 enabled?: boolean;
                 /** @description HH:MM on a quarter hour */
                 time?: string;
+            };
+            urgent_notification?: {
+                enabled: boolean;
             };
         };
         PushSubscription: {
@@ -2842,7 +2851,7 @@ export interface operations {
             };
         };
     };
-    setDailyNotification: {
+    setNotifications: {
         parameters: {
             query?: never;
             header?: {

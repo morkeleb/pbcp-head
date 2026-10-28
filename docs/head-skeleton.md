@@ -20,9 +20,9 @@ head/
 │   │   ├── app/(ui)/brief, day/[date], card/[id]  the review surface, on /api/me
 │   │   ├── db/schema.ts        Drizzle schema (Postgres)
 │   │   └── lib/                auth (producer + session), counter, folding, push outbox
-│   └── ios/                   SwiftUI; client generated from the head's OpenAPI
+│   └── ios/                   (deferred) SwiftUI; its client generated on demand from the head's OpenAPI
 ├── packages/
-│   └── api-types/             OpenAPI from the Zod schemas, consumed by ios/
+│   └── api-types/             OpenAPI from the Zod schemas: the contract clients generate from
 └── docker-compose.yml         Postgres for self-hosters
 ```
 

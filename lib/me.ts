@@ -481,5 +481,6 @@ export async function listDevices(db: Db, headId: string, current: string) {
     timezone_seen_at: d.tzSeenAt ? iso(d.tzSeenAt) : null,
     current: d.id === current,
     daily_notification: { enabled: d.notifyDaily, time: formatTime(d.notifyAtMinutes), subscribed: d.pushEndpoint !== null },
+    urgent_notification: { enabled: d.notifyUrgent, subscribed: d.pushEndpoint !== null },
   }));
 }

@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { openApiDocument } from './openapi';
 
 export const API_TYPES_DIR = join(process.cwd(), 'packages/api-types');
-export const IOS_GENERATED_DIR = join(process.cwd(), 'apps/ios/Generated');
 
 export function openApiText(): string {
   const { version } = JSON.parse(readFileSync(join(API_TYPES_DIR, 'package.json'), 'utf8')) as { version: string };

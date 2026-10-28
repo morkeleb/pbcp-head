@@ -219,6 +219,8 @@ export const devices = pgTable(
     notifyDaily: boolean('notify_daily').notNull().default(false),
     notifyAtMinutes: integer('notify_at_minutes').notNull().default(7 * 60),
     lastNotifiedOn: date('last_notified_on', { mode: 'string' }),
+    // A push for each card stored with delivery immediate (§9, after the ceiling; lib/push/urgent.ts). Off by default.
+    notifyUrgent: boolean('notify_urgent').notNull().default(false),
     timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
     clientId: text('client_id'), // platform 'mcp': the OAuth client it was authorised for (lib/oauth)
     tzSeenAt: tstz('tz_seen_at'), // when it last sent one: the most recent of these is the active device

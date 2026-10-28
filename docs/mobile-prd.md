@@ -114,11 +114,15 @@ Push is the one capability the protocol deliberately does not have, and the phon
 - Quiet hours are a device setting; `immediate` during quiet hours is delivered silently and surfaces at the top of the next Brief.
 - Self-hosted heads can configure their own APNs key; without one the setting is simply absent and `immediate` cards wait for the next open.
 
+**In the web app now (Oct 28, 2026).** While the native app is deferred, the installed web app gets this through Web Push: Settings → Devices has an "Urgent cards" switch per device (off by default), and the PUT that stores a card with `delivery: immediate` sends after its commit, best effort, to each device with it on (`lib/push/urgent.ts`). Unlike the APNs payload above, a Web Push payload is encrypted end to end to the device (RFC 8291), so the push service can't read it: it carries the card's title and its lead as plain text (at most 120 characters), and the card's URL to open. A replacement sends again only if its title or lead changed. There is no outbox: a failed push is not retried.
+
 The head needs one addition for this: an outbox row written in the same transaction as the card, and a tiny sender triggered on write (a Vercel function invoked by the PUT handler after commit). No queue infrastructure; if the send fails the card is still in the brief.
 
 ## Build plan
 
-**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list and a card. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase. That contract is `packages/api-types/openapi.json`, generated from the head's schemas; the Swift client in `apps/ios/Generated/` is generated from it.
+**iOS first, in Swift.** The toolchain, the developer account and the SwiftUI experience already exist from Spejl, and the app is a list and a card. Native is worth it here because the whole value is that the morning flow feels instant; a cross-platform shell would be the thing people notice. Android follows against the same `/api/me/` JSON once the iOS gestures have settled; the API is the contract, not a shared UI codebase. That contract is `packages/api-types/openapi.json`, generated from the head's schemas.
+
+**Deferred (Oct 28, 2026).** The native app is deferred: the web app, installed to the Home Screen, carries the morning brief and its notifications (Web Push) for now. No Swift client is checked in. When the app starts, its client is generated on demand from `packages/api-types/openapi.json` with swift-openapi-generator; mind the nullable fields (`packages/api-types/README.md`).
 
 **What must exist in the head first** (these are milestone-1 and milestone-2 items in the repo skeleton, pulled forward where mobile needs them):
 
@@ -126,7 +130,7 @@ The head needs one addition for this: an outbox row written in the same transact
 - [ ] Sign in with Apple configured on the Vercel project (Services ID, key, team id) and tested from the web head
 - [ ] Passkey registration and sign-in on the web head
 - [ ] `/api/me/` endpoints, with the web UI moved onto them so the phone shares one data path
-- [ ] OpenAPI generated from the Zod schemas, so the Swift client is generated rather than hand-written
+- [x] OpenAPI generated from the Zod schemas, so the Swift client is generated rather than hand-written (on demand, when the app starts)
 - [ ] The brief (its timeline of days) working on the web for a few weeks — the phone copies what proved useful there
 - [ ] APNs outbox and sender (hosted tier), behind a config flag
 
