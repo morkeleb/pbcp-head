@@ -67,7 +67,7 @@ export function httpHead(opts: HttpHeadOptions): HeadUnderTest {
 
   return {
     async reset() {
-      await opts.db.execute(sql`truncate decision_log, devices, identities, cards, label_ceilings, producer_tokens, change_counter, heads restart identity`);
+      await opts.db.execute(sql`truncate decision_log, devices, identities, cards, label_ceilings, pairing_codes, producer_tokens, change_counter, heads restart identity`);
       await ensureHead(opts.db, owner);
       session = `Session ${(await startSession(opts.db, { headId: owner, identityId: null, platform: 'web', name: 'conformance' })).access_token}`;
       minted.clear();

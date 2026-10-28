@@ -3,7 +3,7 @@
 // packages: `curlSnippet` and `producerConfig` (@pbcp/client), the §3 example card (@pbcp/core); each connector's setup
 // lives in its README in the protocol repository, linked from here. Nothing connector-specific is written in this repo.
 
-import { curlSnippet, producerConfig } from '@pbcp/client';
+import { curlSnippet, producerConfig, shellQuote } from '@pbcp/client';
 import { exampleCard, type ProducerCard } from '@pbcp/core';
 import { DOCS_URL } from './front-door';
 
@@ -45,6 +45,30 @@ export function connectLinks(origin: string): { head: Link[]; connectors: Link[]
   };
 }
 
+/**
+ * Pairing (lib/settings/pairing.ts), in the words an agent needs: how a producer gets a token of its own from a code the
+ * owner gives it, instead of the owner copying a token across.
+ */
+export function pairingSteps(api: string): string[] {
+  return [
+    'Ask the owner for a pairing code. They make one in Settings → Producers; it is 6 characters, valid 10 minutes, and works once.',
+    `POST it with the root you choose (letters, digits and -; every card id you send starts with it) to ${api}/pair: {"code": "<code>", "root": "<root>", "name": "<what you are>"}.`,
+    'Keep the token in the answer: it is shown this once. The answer also gives `api`, `owner` and `root`.',
+    'Use `api`, `owner` and the token as the three values (PBCP_HEAD_URL, PBCP_TO_PERSON, PBCP_TOKEN).',
+  ];
+}
+
+/** The pairing request as a curl, with <code>, <root> and <name> to fill in. */
+export function pairCurl(api: string): string {
+  return [
+    `curl -s -X POST ${shellQuote(`${api.replace(/\/+$/, '')}/pair`)} \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  --data-binary @- <<'PAIR'`,
+    JSON.stringify({ code: '<code>', root: '<root>', name: '<name>' }, null, 2),
+    'PAIR',
+  ].join('\n');
+}
+
 /** The card the curl sends: the §3 example (its root is `hermes`), or, for a token of another root, a one-line artifact under it. */
 export function curlCard(owner: string, root?: string): ProducerCard | undefined {
   if (root === undefined || root === exampleCard.producer) return undefined; // curlSnippet sends the §3 example
@@ -79,7 +103,17 @@ export function llmsTxt(facts: ConnectFacts, origin: string): string {
   const lines = [
     '# This head',
     '',
-    `This is a head for the Personal Brief Card Protocol (PBCP): a person's agents and tools ("producers") send it cards — things they made, things they noticed, and decisions only that person can make — and the head folds them into one brief a day and records each decision. A producer talks to it over HTTP with a bearer token bound to one namespace root: it PUTs cards to ${facts.api}/cards/{id}, reads what happened to them from ${facts.api}/changes?after={seq}, and reads this head's description from GET ${origin}/. Tokens are minted by this head's owner on the settings page; there is no other way to get one.`,
+    `This is a head for the Personal Brief Card Protocol (PBCP): a person's agents and tools ("producers") send it cards — things they made, things they noticed, and decisions only that person can make — and the head folds them into one brief a day and records each decision. A producer talks to it over HTTP with a bearer token bound to one namespace root: it PUTs cards to ${facts.api}/cards/{id}, reads what happened to them from ${facts.api}/changes?after={seq}, and reads this head's description from GET ${origin}/. Tokens come from this head's owner: either they mint one on the settings page and give it to you, or they give you a pairing code and you mint your own.`,
+    '',
+    '## Pairing: getting a token with a code',
+    '',
+    ...pairingSteps(facts.api).map((step, i) => `${i + 1}. ${step}`),
+    '',
+    '```sh',
+    pairCurl(facts.api),
+    '```',
+    '',
+    'A wrong, expired or used code is answered 400 invalid_code, and every outstanding code is then void: ask the owner for a new one. A root that already has a token is 409 root_taken; choose another and try again with the same code.',
     '',
     '## Facts',
     '',

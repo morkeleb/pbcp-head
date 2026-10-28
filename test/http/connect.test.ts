@@ -30,6 +30,7 @@ describe('GET /connect', () => {
     expect(html).toContain('pbcp/1');
     expect(html).toMatch(/<code[^>]*>orders<\/code>/);
     expect(html).toContain('Tokens are minted by this head’s owner on the');
+    expect(html).toContain('or gives you a pairing code and you mint your own');
     expect(html).toContain('href="/settings"');
     for (const href of [`${headUrl()}/api/openapi.json`, '/rfc.md', 'connectors/hermes/README.md#setup', 'connectors/goalpath/README.md#setup']) expect(html).toContain(href);
     expect(html).toContain('PBCP_TOKEN');
@@ -59,7 +60,7 @@ describe('GET /llms.txt', () => {
     expect(text).toContain(`- PBCP_HEAD_URL=${api}`);
     expect(text).toContain('- PBCP_TOKEN=<token>');
     expect(text).toContain(curlSnippet({ api, owner: OWNER, token: '<token>' }));
-    expect(text).toContain("Tokens are minted by this head's owner on the settings page");
+    expect(text).toContain("Tokens come from this head's owner: either they mint one on the settings page and give it to you, or they give you a pairing code and you mint your own.");
     expect(text).toContain(`(${headUrl()}/api/openapi.json)`);
     expect(text).toContain('/rfc.md)');
     expect(text).toContain('connectors/todoist/README.md#setup');

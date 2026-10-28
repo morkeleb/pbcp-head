@@ -54,6 +54,8 @@ export interface MintOptions {
   executor?: boolean;
   /** §9: a new producer defaults to `brief` until the person raises it. */
   ceiling?: Urgency;
+  /** A token the producer minted itself with a pairing code (lib/settings/pairing.ts): who said it was, from where, when. */
+  paired?: { name: string | null; address: string; at: Date };
 }
 
 /** Issues a token for `root` on a head. The plaintext is returned once and only its hash is stored. */
@@ -69,6 +71,7 @@ export async function mintProducerToken(db: Db, opts: MintOptions): Promise<stri
     instance: opts.instance ?? null,
     executor: opts.executor ?? false,
     urgencyCeiling: opts.ceiling ?? 'brief',
+    ...(opts.paired ? { pairedName: opts.paired.name, pairedAddress: opts.paired.address, pairedAt: opts.paired.at } : {}),
   });
   return token;
 }

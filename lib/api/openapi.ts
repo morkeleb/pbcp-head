@@ -26,7 +26,7 @@ const errors = (statuses: number[], conflict: 'card' | 'error' = 'card') =>
           401: '`unauthorized`: no session, an expired one, a signed-out device, or a producer token',
           403: '`forbidden`',
           404: '`not_found`',
-          409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use`: the root already has a live token',
+          409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token',
           413: '`too_large`: the body is over 1 MiB',
           502: '`image_unavailable`: the image could not be fetched, or is not an image of at most 2 MB',
         }[s],
@@ -177,6 +177,25 @@ const PATHS: Record<string, Record<string, Json>> = {
   '/api/me/settings/producers/{id}': {
     patch: operation('setProducerCeiling', { summary: 'Set the ceiling of that token’s producer (§9)', parameters: [idParam('id', 'A token id from the list')], body: S.TokenPatch, ok: ok(S.ProducerToken), errors: [400, 401, 404, 413] }),
     delete: operation('revokeProducerToken', { summary: 'Revoke a producer token (§12)', parameters: [idParam('id', 'A token id from the list')], ok: { 204: { description: 'Revoked' } }, errors: [400, 401, 404] }),
+  },
+  '/api/me/settings/pairing': {
+    get: operation('listPairingCodes', { summary: 'The open pairing codes (never the codes themselves)', ok: ok(S.PairingCodeList), errors: [400, 401] }),
+    post: operation('createPairingCode', { summary: 'Make a pairing code to give an agent: 6 characters, 10 minutes, once', ok: ok(S.NewPairingCode, 'The code, in this answer only', 201), errors: [400, 401] }),
+  },
+  '/api/me/settings/pairing/{id}': {
+    delete: operation('cancelPairingCode', { summary: 'Cancel an open pairing code', parameters: [idParam('id', 'A pairing code’s id')], ok: { 204: { description: 'Cancelled' } }, errors: [400, 401, 404] }),
+  },
+  '/api/pair': {
+    post: operation('pair', {
+      summary: 'Trade a pairing code from the owner for your own producer token (public; no credential)',
+      description:
+        'The code is the credential: a request with an Authorization header is refused (400). A code that does not exist, has expired or was used is 400 `invalid_code`, and every outstanding code is then void. With a good code, a malformed root is 400 `invalid_root` and a taken one 409 `root_taken`, and the code stays usable. Rate-limited per address (429).',
+      body: S.PairRequest,
+      ok: ok(S.Paired, 'Paired: the token, once', 201),
+      errors: [400, 409, 413],
+      conflict: 'error',
+      public: true,
+    }),
   },
   '/api/me/settings/labels': {
     get: operation('listLabels', { summary: 'The labels on the head’s cards, with counts and the owner’s ceilings (§4.1, §9)', ok: ok(S.LabelList), errors: [400, 401] }),

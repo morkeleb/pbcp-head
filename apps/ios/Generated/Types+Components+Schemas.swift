@@ -4923,6 +4923,63 @@ extension Components {
             ///
             /// - Remark: Generated from `#/components/schemas/ProducerToken/last_used_at`.
             public var lastUsedAt: Swift.String?
+            /// When the producer minted this token itself with a pairing code: the name it gave, its address, when
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/paired`.
+            public struct PairedPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/ProducerToken/paired/name`.
+                public var name: Swift.String?
+                /// - Remark: Generated from `#/components/schemas/ProducerToken/paired/address`.
+                public var address: Swift.String?
+                /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+                ///
+                /// - Remark: Generated from `#/components/schemas/ProducerToken/paired/at`.
+                public var at: Swift.String
+                /// Creates a new `PairedPayload`.
+                ///
+                /// - Parameters:
+                ///   - name:
+                ///   - address:
+                ///   - at: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+                public init(
+                    name: Swift.String? = nil,
+                    address: Swift.String? = nil,
+                    at: Swift.String
+                ) {
+                    self.name = name
+                    self.address = address
+                    self.at = at
+                }
+                public enum CodingKeys: String, CodingKey {
+                    case name
+                    case address
+                    case at
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    self.name = try container.decodeIfPresent(
+                        Swift.String.self,
+                        forKey: .name
+                    )
+                    self.address = try container.decodeIfPresent(
+                        Swift.String.self,
+                        forKey: .address
+                    )
+                    self.at = try container.decode(
+                        Swift.String.self,
+                        forKey: .at
+                    )
+                    try decoder.ensureNoAdditionalProperties(knownKeys: [
+                        "name",
+                        "address",
+                        "at"
+                    ])
+                }
+            }
+            /// When the producer minted this token itself with a pairing code: the name it gave, its address, when
+            ///
+            /// - Remark: Generated from `#/components/schemas/ProducerToken/paired`.
+            public var paired: Components.Schemas.ProducerToken.PairedPayload?
             /// Creates a new `ProducerToken`.
             ///
             /// - Parameters:
@@ -4933,6 +4990,7 @@ extension Components {
             ///   - ceiling:
             ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
             ///   - lastUsedAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///   - paired: When the producer minted this token itself with a pairing code: the name it gave, its address, when
             public init(
                 id: Swift.String,
                 root: Swift.String,
@@ -4940,7 +4998,8 @@ extension Components {
                 executor: Swift.Bool,
                 ceiling: Components.Schemas.ProducerToken.CeilingPayload,
                 createdAt: Swift.String,
-                lastUsedAt: Swift.String? = nil
+                lastUsedAt: Swift.String? = nil,
+                paired: Components.Schemas.ProducerToken.PairedPayload? = nil
             ) {
                 self.id = id
                 self.root = root
@@ -4949,6 +5008,7 @@ extension Components {
                 self.ceiling = ceiling
                 self.createdAt = createdAt
                 self.lastUsedAt = lastUsedAt
+                self.paired = paired
             }
             public enum CodingKeys: String, CodingKey {
                 case id
@@ -4958,6 +5018,7 @@ extension Components {
                 case ceiling
                 case createdAt = "created_at"
                 case lastUsedAt = "last_used_at"
+                case paired
             }
             public init(from decoder: any Swift.Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -4989,6 +5050,10 @@ extension Components {
                     Swift.String.self,
                     forKey: .lastUsedAt
                 )
+                self.paired = try container.decodeIfPresent(
+                    Components.Schemas.ProducerToken.PairedPayload.self,
+                    forKey: .paired
+                )
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "id",
                     "root",
@@ -4996,7 +5061,8 @@ extension Components {
                     "executor",
                     "ceiling",
                     "created_at",
-                    "last_used_at"
+                    "last_used_at",
+                    "paired"
                 ])
             }
         }
@@ -5062,6 +5128,248 @@ extension Components {
                 try decoder.ensureNoAdditionalProperties(knownKeys: [
                     "token",
                     "producer"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/PairingCode`.
+        public struct PairingCode: Codable, Hashable, Sendable {
+            /// Names the code to cancel it; not the code
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairingCode/id`.
+            public var id: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairingCode/created_at`.
+            public var createdAt: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairingCode/expires_at`.
+            public var expiresAt: Swift.String
+            /// Creates a new `PairingCode`.
+            ///
+            /// - Parameters:
+            ///   - id: Names the code to cancel it; not the code
+            ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///   - expiresAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            public init(
+                id: Swift.String,
+                createdAt: Swift.String,
+                expiresAt: Swift.String
+            ) {
+                self.id = id
+                self.createdAt = createdAt
+                self.expiresAt = expiresAt
+            }
+            public enum CodingKeys: String, CodingKey {
+                case id
+                case createdAt = "created_at"
+                case expiresAt = "expires_at"
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.id = try container.decode(
+                    Swift.String.self,
+                    forKey: .id
+                )
+                self.createdAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .createdAt
+                )
+                self.expiresAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .expiresAt
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "id",
+                    "created_at",
+                    "expires_at"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/PairingCodeList`.
+        public struct PairingCodeList: Codable, Hashable, Sendable {
+            /// Codes not yet used, cancelled or expired
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairingCodeList/codes`.
+            public var codes: [Components.Schemas.PairingCode]
+            /// Creates a new `PairingCodeList`.
+            ///
+            /// - Parameters:
+            ///   - codes: Codes not yet used, cancelled or expired
+            public init(codes: [Components.Schemas.PairingCode]) {
+                self.codes = codes
+            }
+            public enum CodingKeys: String, CodingKey {
+                case codes
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.codes = try container.decode(
+                    [Components.Schemas.PairingCode].self,
+                    forKey: .codes
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "codes"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/NewPairingCode`.
+        public struct NewPairingCode: Codable, Hashable, Sendable {
+            /// Names the code to cancel it; not the code
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/id`.
+            public var id: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/created_at`.
+            public var createdAt: Swift.String
+            /// RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/expires_at`.
+            public var expiresAt: Swift.String
+            /// 6 characters as two groups, e.g. K7Q-4MX. In this answer only
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/code`.
+            public var code: Swift.String
+            /// Where the agent pairs: POST {api}/pair
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/api`.
+            public var api: Swift.String
+            /// The sentence to give the agent: "Pair with <api>, code <code>."
+            ///
+            /// - Remark: Generated from `#/components/schemas/NewPairingCode/say`.
+            public var say: Swift.String
+            /// Creates a new `NewPairingCode`.
+            ///
+            /// - Parameters:
+            ///   - id: Names the code to cancel it; not the code
+            ///   - createdAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///   - expiresAt: RFC 3339, UTC (`2026-10-07T09:00:00Z`)
+            ///   - code: 6 characters as two groups, e.g. K7Q-4MX. In this answer only
+            ///   - api: Where the agent pairs: POST {api}/pair
+            ///   - say: The sentence to give the agent: "Pair with <api>, code <code>."
+            public init(
+                id: Swift.String,
+                createdAt: Swift.String,
+                expiresAt: Swift.String,
+                code: Swift.String,
+                api: Swift.String,
+                say: Swift.String
+            ) {
+                self.id = id
+                self.createdAt = createdAt
+                self.expiresAt = expiresAt
+                self.code = code
+                self.api = api
+                self.say = say
+            }
+            public enum CodingKeys: String, CodingKey {
+                case id
+                case createdAt = "created_at"
+                case expiresAt = "expires_at"
+                case code
+                case api
+                case say
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.id = try container.decode(
+                    Swift.String.self,
+                    forKey: .id
+                )
+                self.createdAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .createdAt
+                )
+                self.expiresAt = try container.decode(
+                    Swift.String.self,
+                    forKey: .expiresAt
+                )
+                self.code = try container.decode(
+                    Swift.String.self,
+                    forKey: .code
+                )
+                self.api = try container.decode(
+                    Swift.String.self,
+                    forKey: .api
+                )
+                self.say = try container.decode(
+                    Swift.String.self,
+                    forKey: .say
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "id",
+                    "created_at",
+                    "expires_at",
+                    "code",
+                    "api",
+                    "say"
+                ])
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/Paired`.
+        public struct Paired: Codable, Hashable, Sendable {
+            /// Your producer token. Shown once: the head keeps only its hash
+            ///
+            /// - Remark: Generated from `#/components/schemas/Paired/token`.
+            public var token: Swift.String
+            /// The base URL of the producer operations (§7.5)
+            ///
+            /// - Remark: Generated from `#/components/schemas/Paired/api`.
+            public var api: Swift.String
+            /// The owner’s person id: every card’s to_person (§10)
+            ///
+            /// - Remark: Generated from `#/components/schemas/Paired/owner`.
+            public var owner: Swift.String
+            /// - Remark: Generated from `#/components/schemas/Paired/root`.
+            public var root: Swift.String
+            /// Creates a new `Paired`.
+            ///
+            /// - Parameters:
+            ///   - token: Your producer token. Shown once: the head keeps only its hash
+            ///   - api: The base URL of the producer operations (§7.5)
+            ///   - owner: The owner’s person id: every card’s to_person (§10)
+            ///   - root:
+            public init(
+                token: Swift.String,
+                api: Swift.String,
+                owner: Swift.String,
+                root: Swift.String
+            ) {
+                self.token = token
+                self.api = api
+                self.owner = owner
+                self.root = root
+            }
+            public enum CodingKeys: String, CodingKey {
+                case token
+                case api
+                case owner
+                case root
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.token = try container.decode(
+                    Swift.String.self,
+                    forKey: .token
+                )
+                self.api = try container.decode(
+                    Swift.String.self,
+                    forKey: .api
+                )
+                self.owner = try container.decode(
+                    Swift.String.self,
+                    forKey: .owner
+                )
+                self.root = try container.decode(
+                    Swift.String.self,
+                    forKey: .root
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "token",
+                    "api",
+                    "owner",
+                    "root"
                 ])
             }
         }
@@ -5830,6 +6138,41 @@ extension Components {
             }
             public enum CodingKeys: String, CodingKey {
                 case ceiling
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/PairRequest`.
+        public struct PairRequest: Codable, Hashable, Sendable {
+            /// The code the owner gave you; case and separators do not matter
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairRequest/code`.
+            public var code: Swift.String
+            /// The root you choose (RFC §5): letters, digits and -; every card id you send starts with it
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairRequest/root`.
+            public var root: Swift.String
+            /// What you are, for the owner’s record
+            ///
+            /// - Remark: Generated from `#/components/schemas/PairRequest/name`.
+            public var name: Swift.String?
+            /// Creates a new `PairRequest`.
+            ///
+            /// - Parameters:
+            ///   - code: The code the owner gave you; case and separators do not matter
+            ///   - root: The root you choose (RFC §5): letters, digits and -; every card id you send starts with it
+            ///   - name: What you are, for the owner’s record
+            public init(
+                code: Swift.String,
+                root: Swift.String,
+                name: Swift.String? = nil
+            ) {
+                self.code = code
+                self.root = root
+                self.name = name
+            }
+            public enum CodingKeys: String, CodingKey {
+                case code
+                case root
+                case name
             }
         }
     }

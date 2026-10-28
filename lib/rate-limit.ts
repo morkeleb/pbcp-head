@@ -17,11 +17,13 @@ export interface Limit {
   windowSeconds: number;
 }
 
-/** Per producer token for the producer routes, per client address for sign-in. */
+/** Per producer token for the producer routes, per client address for sign-in and pairing. */
 export const LIMITS = {
   put: { limit: 120, windowSeconds: 60 },
   changes: { limit: 120, windowSeconds: 60 },
   auth: { limit: 30, windowSeconds: 60 },
+  // POST /api/pair, per client address: a pairing code is short, so guessing is slow as well as burning every code.
+  pair: { limit: 10, windowSeconds: 3600 },
 } as const satisfies Record<string, Limit>;
 
 export type Bucket = keyof typeof LIMITS;
