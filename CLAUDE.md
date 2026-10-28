@@ -23,6 +23,8 @@ H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (ord
 
 The native phone app is deferred, and the Swift client was removed: the web app on a phone, with push, is the phone client for now. There is no milestone list to work through. New work arrives as a brief or an issue, and `docs/` describes what exists.
 
+Not here yet, and known: encryption of card content at rest (before anyone but the owner has an account); an offline outbox in the PWA for decisions made without a network; Obsidian vault sync of the decision log; OAuth clients identified by a Client ID Metadata Document.
+
 ## Rules
 
 - **Protocol logic lives in `@pbcp/core`.** If a route needs to decide something the core does not, that is either a head concern (auth, storage, rendering) or an RFC gap. Never reimplement a core rule in a handler.
