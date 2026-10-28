@@ -702,6 +702,34 @@ describe('no horizontal overflow', () => {
   });
 });
 
+describe('settings at phone widths', () => {
+  it('keeps every section on the screen, with nothing scrolling sideways, and a paired producer’s root on one line', async () => {
+    const auth = `Session ${session.access_token}`;
+    await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', instance: 'mac-mini-in-the-office', executor: true });
+    const c = (await call('POST', '/api/me/settings/pairing', { auth })).body;
+    await call('POST', '/api/pair', { body: { code: c.code, root: 'n8n', name: 'n8n on MacBook Pro of the kitchen table' }, headers: { 'x-real-ip': '203.0.113.77' } });
+    for (const width of [360, 390]) {
+      await page.setViewport({ width, height: 844, isMobile: true, hasTouch: true });
+      await page.goto(`${headUrl()}/settings`, { waitUntil: 'networkidle0' });
+      await page.waitForSelector('[data-token="n8n"] [data-paired]');
+      const r = await page.evaluate(() => {
+        const W = document.documentElement.clientWidth;
+        // No exemption for boxes that scroll, except a code snippet: a settings row that needs sideways scrolling is the bug.
+        const wide = [...document.querySelectorAll('main *')].filter((e) => e.getBoundingClientRect().right > W + 1).map((e) => `${e.tagName}.${String(e.className).slice(0, 40)}`);
+        const scrollers = [...document.querySelectorAll('main *')].filter((e) => e.tagName !== 'PRE' && e.scrollWidth > e.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(e).overflowX)).map((e) => e.tagName);
+        const root = document.querySelector('[data-token="n8n"] [data-root]')!;
+        const line = parseFloat(getComputedStyle(root).lineHeight);
+        return { W, scrollW: document.documentElement.scrollWidth, wide: wide.slice(0, 5), scrollers, rootLines: Math.round(root.getBoundingClientRect().height / line) };
+      });
+      expect(r.wide, String(width)).toEqual([]);
+      expect(r.scrollers, String(width)).toEqual([]);
+      expect(r.scrollW, String(width)).toBe(r.W);
+      expect(r.rootLines, String(width)).toBe(1);
+    }
+    await page.setViewport({ width: 1280, height: 844 });
+  });
+});
+
 describe('one masthead', () => {
   /** The masthead's shared parts, with the ids Radix generates per render taken out, and its height. */
   const shared = () =>
@@ -787,7 +815,7 @@ describe('settings', () => {
     expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
     expect(await page.$eval('[data-value="owner id"]', (v) => v.textContent)).toBe(OWNER);
     expect(await page.$eval('[data-value="head URL"]', (v) => v.textContent)).toBe(`${headUrl()}/api`);
-    expect(await page.$eval('[data-this-device]', (d) => d.closest('tr')!.textContent)).toContain('browser');
+    expect(await page.$eval('[data-this-device]', (d) => d.closest('[data-device]')!.textContent)).toContain('browser');
 
     await page.type('input[aria-label="New producer’s root"]', 'n8n');
     await (await page.$('xpath/.//button[.="New producer"]'))!.click();
