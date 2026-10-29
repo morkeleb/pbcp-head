@@ -81,7 +81,7 @@ export const MeCard = Card.extend({
   rendered_actions: z.record(z.string(), z.string()).optional().describe('Rendered bodies of choice options (§4.4), by action id'),
   first_visual: Visual.optional().describe('The first diagram or image in the body, for a thumbnail'),
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),
-  day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored'),
+  day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored'),
   paragraph: ParagraphParts.optional().describe('On a `head:daily` card: its paragraph in parts'),
 }).register(responses, { id: 'MeCard', description: 'A card as the owner’s devices show it: the protocol card plus what the head rendered.' });
 

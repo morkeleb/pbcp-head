@@ -58,3 +58,17 @@ export function dayRange(date: string, tz: string): [Date, Date] {
 }
 
 export const isDate = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+
+/** A timestamp as §2 defines it, as an instant: a leap second (`:60`) counts as the end of its minute, as core reads it. */
+export const instant = (ts: string): Date => new Date(Date.parse(ts.replace(/:60(\.\d+)?(?=Z|[+-])/, ':59.999')));
+
+/**
+ * §8 a card's time: within a day, cards that carry `at` first, earliest first; then those without, by `received_at`. For
+ * `Array.prototype.sort`, so ties keep the order they came in.
+ */
+export function byTime(a: { at?: string; received_at: string }, b: { at?: string; received_at: string }): number {
+  if (a.at !== undefined && b.at !== undefined) return instant(a.at).getTime() - instant(b.at).getTime();
+  if (a.at !== undefined) return -1;
+  if (b.at !== undefined) return 1;
+  return Date.parse(a.received_at) - Date.parse(b.received_at);
+}

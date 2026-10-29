@@ -96,8 +96,8 @@ export const cards = pgTable(
     state: text('state').notNull(), // open | decided | superseded
     changeSeq: bigint('change_seq', { mode: 'number' }).notNull(),
     receivedAt: tstz('received_at').notNull(),
-    // §8 a card's day: its `about` when it has one, else the day of received_at in the head's effective timezone when it
-    // was stored. Head-owned and derived; set on every write (lib/store.ts), never synced.
+    // §8 a card's day: its `about` when it has one, else the day of `at`, else of received_at, in the head's effective
+    // timezone when the content was stored. Head-owned and derived; set on every write (lib/store.ts), never synced.
     day: date('day', { mode: 'string' }).notNull(),
     changedAt: tstz('changed_at').notNull(),
     seenAt: tstz('seen_at'),

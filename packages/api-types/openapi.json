@@ -3231,7 +3231,7 @@
           },
           "day": {
             "type": "string",
-            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored"
           },
           "paragraph": {
             "description": "On a `head:daily` card: its paragraph in parts",
@@ -3975,7 +3975,7 @@
           },
           "day": {
             "type": "string",
-            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored"
           },
           "paragraph": {
             "description": "On a `head:daily` card: its paragraph in parts",

@@ -7,7 +7,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, changeCounter } from '../db/schema';
 import { iso } from './clock';
-import { localDate } from './time';
+import { instant, localDate } from './time';
 import { effectiveTimezone } from './timezone';
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -62,15 +62,18 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   const seq = await nextSeq(tx, headId);
   const stored = { ...card, change_seq: seq } as Card;
   const head = headColumns(stored);
-  // §8 a card's day: `about` as written, else received_at's day in the head's timezone. A rewrite that keeps
-  // received_at keeps the day it was given, so a decision made after the owner travelled does not move the card.
-  const received = await receivedDay(tx, headId, head.receivedAt);
+  // §8 a card's day: `about` as written, else the day of `at`, else of received_at, in the head's timezone. The day is
+  // fixed when the content is stored (OPEN.md 4): a rewrite that keeps the content and received_at (a decision, seen,
+  // snooze) keeps the day it was given, so a decision made after the owner travelled does not move the card.
+  const doc = producerPart(stored);
+  const placed = await localDay(tx, headId, stored.at !== undefined ? instant(stored.at) : head.receivedAt);
+  const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and ${cards.producerDoc} = ${JSON.stringify(doc)}::jsonb`;
   const updated = await tx
     .update(cards)
     .set({
-      producerDoc: producerPart(stored),
+      producerDoc: doc,
       ...head,
-      day: stored.about ?? sql`case when ${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz then ${cards.day} else ${received}::date end`,
+      day: stored.about ?? sql`case when ${kept} then ${cards.day} else ${placed}::date end`,
       ...(opts.decidedDoc !== undefined ? { decidedDoc: opts.decidedDoc } : {}),
       ...(opts.outcome !== undefined ? { outcome: opts.outcome } : {}),
     })
@@ -83,9 +86,9 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
       id: stored.id,
       producer: id.producer,
       namespace: id.namespace,
-      producerDoc: producerPart(stored),
+      producerDoc: doc,
       ...head,
-      day: stored.about ?? received,
+      day: stored.about ?? placed,
       decidedDoc: opts.decidedDoc ?? null,
       wildcardEligible: opts.eligible ? [...opts.eligible] : null,
       outcome: opts.outcome ?? null,
@@ -94,8 +97,8 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   return stored;
 }
 
-/** The day of `at` in the head's effective timezone (lib/timezone.ts), as it is when the card is stored. */
-async function receivedDay(tx: Tx, headId: string, at: Date): Promise<string> {
+/** The day of an instant in the head's effective timezone (lib/timezone.ts), as it is when the card is stored. */
+async function localDay(tx: Tx, headId: string, at: Date): Promise<string> {
   const { timezone } = await effectiveTimezone(tx as unknown as Db, headId);
   return localDate(at, timezone);
 }

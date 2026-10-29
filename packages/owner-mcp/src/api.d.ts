@@ -882,7 +882,7 @@ export interface components {
              * @enum {string}
              */
             order_outcome?: "applied" | "stale";
-            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
+            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored */
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];
@@ -1091,7 +1091,7 @@ export interface components {
              * @enum {string}
              */
             order_outcome?: "applied" | "stale";
-            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
+            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored */
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];

@@ -183,6 +183,33 @@ describe('a card’s time (RFC 0.8 §4.1, §8)', () => {
     expect(late.status).toBe(409);
     expect(late.body).toMatchObject({ at: '2026-10-07T13:30:00Z', state: 'decided' });
   });
+
+  it('places a card with at and no about on the day of at in the head’s timezone; about wins; the day is fixed when stored', async () => {
+    await me('PATCH', '/api/me/settings', { timezone: 'America/Denver' }); // 2026-10-07T09:00Z is the 7th, 03:00
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-08T05:00:00Z' }); // still the 7th in Denver (23:00)
+    await put('hermes:cal:next', { kind: 'artifact', at: '2026-10-08T07:00:00Z' }); // the 8th, 01:00
+    await put('hermes:cal:filed', { kind: 'artifact', at: '2026-10-08T07:00:00Z', about: '2026-10-09' });
+    const day = async (id: string) => (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card.day;
+    expect([await day('hermes:cal:early'), await day('hermes:cal:next'), await day('hermes:cal:filed')]).toEqual(['2026-10-07', '2026-10-08', '2026-10-09']);
+    // Acknowledged after the owner moved: the day stays where the content put it.
+    await me('PATCH', '/api/me/settings', { timezone: 'UTC' });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:cal:early')}/ack`);
+    expect(await day('hermes:cal:early')).toBe('2026-10-07');
+    // A re-PUT with a new time places it again.
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-09T12:00:00Z' });
+    expect(await day('hermes:cal:early')).toBe('2026-10-09');
+  });
+
+  it('orders a day’s cards by at, earliest first, then the cards without at by received_at', async () => {
+    await clock('2026-10-07T06:00:00Z');
+    await put('hermes:gmail:plain-1', { kind: 'artifact' });
+    await clock('2026-10-07T07:00:00Z');
+    await put('hermes:cal:late', { kind: 'artifact', at: '2026-10-07T16:00:00Z' });
+    await put('hermes:gmail:plain-2', { kind: 'signal' });
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-07T08:00:00Z', until: '2026-10-07T09:00:00Z' });
+    await put('hermes:cal:leap', { kind: 'artifact', at: '2016-12-31T23:59:60Z', about: '2026-10-07' }); // a leap second is a valid time
+    expect(ids((await me('GET', '/api/me/cards?date=2026-10-07')).body.cards)).toEqual(['hermes:cal:leap', 'hermes:cal:early', 'hermes:cal:late', 'hermes:gmail:plain-1', 'hermes:gmail:plain-2']);
+  });
 });
 
 describe('ceilings per label (RFC 0.7 §9)', () => {
