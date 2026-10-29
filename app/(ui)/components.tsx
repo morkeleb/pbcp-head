@@ -537,10 +537,9 @@ export function options(card: MeCard): { list: Option[]; edit: boolean; byDefaul
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
     .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
   const edit = actions.some((a) => (typeof a === 'string' ? a : a.id) === 'edit');
-  // §4.4: the default is the option marked so; on the plain string list it is `approve` (the bare approve
-  // gesture). With neither, there is no default, and no option is drawn above the others.
-  const plain = actions.every((a) => typeof a === 'string');
-  const byDefault = list.find((o) => o.isDefault) ?? (plain ? (list.find((o) => o.id === 'approve') ?? null) : null);
+  // §4.4, §4.5: the default is the option marked `default: true`, and only that one; a string entry cannot be marked, so
+  // the plain `[approve, reject]` has none. Without one there is no bare approve and no option is drawn above the others.
+  const byDefault = list.find((o) => o.isDefault) ?? null;
   return { list, edit, byDefault };
 }
 
