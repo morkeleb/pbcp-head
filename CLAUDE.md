@@ -1,16 +1,16 @@
 # head — reference head for PBCP
 
-This repo is the **product**: the reference head (Next.js on Vercel, Postgres). It implements RFC draft 0.7 of the Personal Brief Card Protocol. The protocol itself lives in `morkeleb/pbcp` and arrives here as `@pbcp/core` and `@pbcp/client`; this repo never redefines a protocol rule.
+This repo is the **product**: the reference head (Next.js on Vercel, Postgres). It implements RFC draft 0.8 of the Personal Brief Card Protocol. The protocol itself lives in `morkeleb/pbcp` and arrives here as `@pbcp/core` and `@pbcp/client`; this repo never redefines a protocol rule.
 
 ## Read first
 
-- `vendor/pbcp/rfc/pbcp-draft-0.7.md` — the spec, as pinned by the submodule. The canonical text is in the `pbcp` repo. If the head needs the RFC to change, open an issue there; never edit the vendored copy.
+- `vendor/pbcp/rfc/pbcp-draft-0.8.md` — the spec, as pinned by the submodule. The canonical text is in the `pbcp` repo. If the head needs the RFC to change, open an issue there; never edit the vendored copy.
 - `docs/head-skeleton.md` — the schema, routes, rendering pipeline and build order for this repo.
 - `docs/mobile-prd.md` — why the human auth layer is built API-first from day one, and the `/api/me/` surface the phone will use.
 
 ## Dependency on the protocol
 
-`@pbcp/core` and `@pbcp/client` are not on npm yet. They come from a git submodule at `vendor/pbcp` (`morkeleb/pbcp`), pinned to `5583c95`, and linked as workspace packages (`pnpm-workspace.yaml`). Move the pin in its own commit, and run the conformance gate with it. When the packages are published, switch to the npm versions in one commit and remove the submodule.
+`@pbcp/core` and `@pbcp/client` are not on npm yet. They come from a git submodule at `vendor/pbcp` (`morkeleb/pbcp`), pinned to `d9b9c1f`, and linked as workspace packages (`pnpm-workspace.yaml`). Move the pin in its own commit, and run the conformance gate with it. When the packages are published, switch to the npm versions in one commit and remove the submodule.
 
 ## Where this is
 

@@ -2,7 +2,7 @@ import { parseCard } from '@pbcp/core';
 import { HeadClient } from '@pbcp/client';
 import { describe, expect, it } from 'vitest';
 
-// Guards the pinned protocol dependency (vendor/pbcp at e8521db): if the import breaks, nothing else here can work.
+// Guards the pinned protocol dependency (vendor/pbcp, pinned in CLAUDE.md): if the import breaks, nothing else here can work.
 describe('@pbcp/core and @pbcp/client', () => {
   it('parses a card', () => {
     const r = parseCard({
