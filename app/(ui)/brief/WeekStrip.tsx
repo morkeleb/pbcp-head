@@ -1,15 +1,10 @@
 'use client';
 
-// WeekStrip: the brief page's day navigation, and the only control above its columns. The selected day's month, the
-// previous and next day, and what the brief asks of the person ("3 new"); then seven days, the selected one filled with
-// the accent, a small dot under days with open decisions. Choosing a day changes both columns. The month label opens
-// the DatePicker, for any day from the head's first card on. The iOS app mirrors this component.
-//
-//   OCTOBER 2026 ⌄                                 ‹ ›   3 new
-//   Mon Tue Wed Thu Fri Sat Sun
+// WeekStrip: the selected day's month, then seven days, the selected one filled with the accent, a small dot under days
+// with open decisions; tapping a day jumps the timeline to it. The month label opens the DatePicker, for any day from
+// the head's first card on. The iOS app mirrors this component.
 
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { DatePicker } from './DatePicker';
@@ -19,7 +14,7 @@ export interface WeekDay {
   date: string;
   /** Has open decisions received that day. */
   open: boolean;
-  /** The page can show it (from the head's first card to a week ahead). */
+  /** The timeline can show it (today and earlier, and tomorrow). */
   reachable: boolean;
 }
 
@@ -31,46 +26,25 @@ export interface WeekStripProps {
   min: string;
   max: string;
   onSelect: (date: string) => void;
-  /** Beside the arrows: what the brief asks of the person ("3 new"). */
-  status?: ReactNode;
   className?: string;
 }
 
-const step = (date: string, n: number) => {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-
 const part = (date: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { ...o, timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 
-export function WeekStrip({ days, selected, today, min, max, onSelect, status, className }: WeekStripProps) {
+export function WeekStrip({ days, selected, today, min, max, onSelect, className }: WeekStripProps) {
   const [picking, setPicking] = useState(false);
   return (
     <div className={className}>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-haspopup="dialog"
-          aria-label={`${part(selected, { month: 'long', year: 'numeric' })}: go to a day`}
-          onClick={() => setPicking(true)}
-          className="-my-1 inline-flex min-h-7 items-center gap-1 rounded-md px-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          data-month
-        >
-          {part(selected, { month: 'long', year: 'numeric' })} <ChevronDown className="size-3.5" aria-hidden />
-        </button>
-        <span className="ml-auto flex items-center">
-          <button type="button" aria-label="Previous day" disabled={selected <= min} onClick={() => onSelect(step(selected, -1))} data-step="-1"
-            className="-my-1 grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
-            <ChevronLeft className="size-4" aria-hidden />
-          </button>
-          <button type="button" aria-label="Next day" disabled={selected >= max} onClick={() => onSelect(step(selected, 1))} data-step="1"
-            className="-my-1 grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
-            <ChevronRight className="size-4" aria-hidden />
-          </button>
-          {status}
-        </span>
-      </div>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={`${part(selected, { month: 'long', year: 'numeric' })}: go to a day`}
+        onClick={() => setPicking(true)}
+        className="-my-1 inline-flex min-h-7 items-center gap-1 rounded-md px-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        data-month
+      >
+        {part(selected, { month: 'long', year: 'numeric' })} <ChevronDown className="size-3.5" aria-hidden />
+      </button>
       <DatePicker open={picking} onOpenChange={setPicking} selected={selected} today={today} min={min} max={max} onPick={onSelect} />
       <nav aria-label="Week" className="grid grid-cols-7 gap-1">
         {days.map((d) => {

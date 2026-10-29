@@ -52,6 +52,9 @@ export default async function FrontDoor({ searchParams }: { searchParams: Promis
     console.error('the front door’s demo brief could not be made', e);
   }
   const line = head ? dateline(head.date) : '';
+  // Named here, in one locale, so the demo reads the same before and after it hydrates.
+  const name = (date: string, word: string) => `${word} · ${new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))}`;
+  const names = head ? { [head.date]: name(head.date, 'Today'), [head.tomorrow.date]: name(head.tomorrow.date, 'Tomorrow') } : {};
 
   return (
     <div className="min-h-dvh bg-background text-foreground" id="top">
@@ -98,7 +101,7 @@ export default async function FrontDoor({ searchParams }: { searchParams: Promis
             </div>
           </div>
           {head ? (
-            <HeroBrief head={head} dateline={line} />
+            <HeroBrief head={head} names={names} dateline={line} />
           ) : (
             <p className="rounded-lg border p-6 text-lead text-muted-foreground">The example brief is being drawn; reload in a moment.</p>
           )}
@@ -150,11 +153,11 @@ export default async function FrontDoor({ searchParams }: { searchParams: Promis
               <p className={eyebrow}>See it in action</p>
               <h2 className="mt-3 font-serif text-[30px] font-semibold leading-tight tracking-editorial">The same card. Any device. Any view.</h2>
               <p className="mt-4 max-w-[40rem] text-body text-muted-foreground">
-                Brief fits your screen: what asks for you beside the day’s timeline on your desk, one above the other on your
-                phone. The same cards and the same actions, wherever you are. These are the app’s own views, on the same example cards as above.
+                Brief fits your screen: a timeline on your phone, a broadsheet on your desk. The same cards and the same actions,
+                in the layout that suits where you are. These are the app’s own views, on the same example cards as above.
               </p>
               <div className="mt-8">
-                <SameCard head={head} dateline={line} />
+                <SameCard head={head} names={names} dateline={line} />
               </div>
             </div>
           </section>

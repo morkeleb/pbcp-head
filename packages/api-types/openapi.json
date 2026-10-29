@@ -3231,7 +3231,7 @@
           },
           "day": {
             "type": "string",
-            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored"
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
           },
           "paragraph": {
             "description": "On a `head:daily` card: its paragraph in parts",
@@ -3655,12 +3655,11 @@
             "items": {
               "$ref": "#/components/schemas/Fold"
             },
-            "description": "Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8)"
+            "description": "Today’s artifacts and signals, folded by thread; immediate first"
           },
           "snoozed": {
             "type": "integer",
-            "minimum": 0,
-            "description": "How many open decisions are snoozed: counted, never listed (§8)"
+            "minimum": 0
           },
           "late_outcomes": {
             "type": "array",
@@ -3976,7 +3975,7 @@
           },
           "day": {
             "type": "string",
-            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored"
+            "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
           },
           "paragraph": {
             "description": "On a `head:daily` card: its paragraph in parts",

@@ -33,6 +33,8 @@ interface Chrome {
   /** A wide screen (≥ 900 px): the masthead on one line, keys on the brief; null until known on the client. */
   wide: boolean | null;
   row: HTMLElement | null;
+  /** The page's own tool in the masthead's tools (the brief's label filter); empty elsewhere. */
+  pageTools: HTMLElement | null;
   setCards: (cards: MeCard[]) => void;
   setAsOf: (asOf: { at: string | null; timezone?: string }) => void;
 }
@@ -62,6 +64,12 @@ export function useChromeCards(cards: MeCard[], asOf: { at: string | null; timez
 export function MastheadRow({ children }: { children: ReactNode }) {
   const { row } = useChrome();
   return row ? createPortal(children, row) : null;
+}
+
+/** Puts the page's own tool into the masthead, first among its tools (the brief's label filter). */
+export function MastheadTools({ children }: { children: ReactNode }) {
+  const { pageTools } = useChrome();
+  return pageTools ? createPortal(children, pageTools) : null;
 }
 
 /** "← Brief" (or `back`, a settings page's "← Settings") and the page's own title: the row of every route but the brief. */
@@ -103,12 +111,13 @@ function useDateline(): string | null {
 export function ChromeProvider({ children }: { children: ReactNode }) {
   const wide = useWide();
   const [row, setRow] = useState<HTMLElement | null>(null);
+  const [pageTools, setPageTools] = useState<HTMLElement | null>(null);
   const [cards, setCards] = useState<MeCard[]>([]);
   const [asOf, setAsOf] = useState<{ at: string | null; timezone?: string }>({ at: null });
-  const value = useMemo<Chrome>(() => ({ wide, row, setCards, setAsOf }), [wide, row]);
+  const value = useMemo<Chrome>(() => ({ wide, row, pageTools, setCards, setAsOf }), [wide, row, pageTools]);
   return (
     <ChromeContext.Provider value={value}>
-      <Masthead wide={wide} cards={cards} asOf={asOf} rowRef={setRow} />
+      <Masthead wide={wide} cards={cards} asOf={asOf} rowRef={setRow} pageToolsRef={setPageTools} />
       {children}
     </ChromeContext.Provider>
   );
@@ -251,13 +260,16 @@ interface MastheadProps {
   cards: MeCard[];
   asOf: { at: string | null; timezone?: string };
   rowRef: (el: HTMLElement | null) => void;
+  pageToolsRef: (el: HTMLElement | null) => void;
 }
 
-function Masthead({ wide, cards, asOf, rowRef }: MastheadProps) {
+function Masthead({ wide, cards, asOf, rowRef, pageToolsRef }: MastheadProps) {
   const date = useDateline();
   // `data-masthead-shared`: the parts that are the same on every route (the UI tests compare them).
   const tools = (
     <div className="flex items-center gap-1" data-masthead-shared="tools">
+      {/* The page's own tool, if it has one (MastheadTools); takes no room when empty. */}
+      <span ref={pageToolsRef} className="contents" data-masthead-page-tools />
       <SearchDialog cards={cards} />
       <ThemeMenu />
       <PagesMenu />

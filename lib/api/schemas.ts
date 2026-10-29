@@ -81,7 +81,7 @@ export const MeCard = Card.extend({
   rendered_actions: z.record(z.string(), z.string()).optional().describe('Rendered bodies of choice options (§4.4), by action id'),
   first_visual: Visual.optional().describe('The first diagram or image in the body, for a thumbnail'),
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),
-  day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored'),
+  day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored'),
   paragraph: ParagraphParts.optional().describe('On a `head:daily` card: its paragraph in parts'),
 }).register(responses, { id: 'MeCard', description: 'A card as the owner’s devices show it: the protocol card plus what the head rendered.' });
 
@@ -160,8 +160,8 @@ export const Brief = z.object({
     .object({ date: z.string().describe('YYYY-MM-DD in `timezone`'), cards: z.array(MeCard).describe('Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)') })
     .describe('What is already set for tomorrow'),
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
-  threads: z.array(Fold).describe('Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8)'),
-  snoozed: z.number().int().nonnegative().describe('How many open decisions are snoozed: counted, never listed (§8)'),
+  threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
+  snoozed: z.number().int().nonnegative(),
   late_outcomes: z.array(MeCard).describe('Order outcomes that came late or from an earlier claim (A.3)'),
   lapsed_orders: z.array(MeCard).describe('Orders whose lease lapsed with no outcome (A.2)'),
   new: z.array(z.string()).describe('Ids changed since the last visit'),

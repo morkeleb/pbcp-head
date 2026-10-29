@@ -39,8 +39,7 @@ describe('GET /api/cron/brief', () => {
     // Its lead is its opening paragraph: the leads of what is open and of yesterday's threads, each linked.
     expect(brief.daily.lead).toMatch(/^1 decision: \[Card hermes:gmail:1\]\(<http:\/\/localhost:\d+\/card\/hermes%3Agmail%3A1>\) — .+\. What mattered yesterday: \[/);
     expect(brief.daily.lead_source).toBe('body');
-    // The head's own card is the brief, not one of its folds; yesterday's signal is (§8), until acknowledged.
-    expect(brief.threads.map((t: { latest: { id: string } }) => t.latest.id)).toEqual(['hermes:gmail:2']);
+    expect(brief.threads).toEqual([]); // the head's own card is the brief, not one of its folds
   });
 
   it('follows the owner from Denver to Stockholm mid-day and mints the day exactly once', async () => {

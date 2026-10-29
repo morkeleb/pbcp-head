@@ -882,7 +882,7 @@ export interface components {
              * @enum {string}
              */
             order_outcome?: "applied" | "stale";
-            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored */
+            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];
@@ -989,9 +989,8 @@ export interface components {
             };
             /** @description Open decisions, newest first, snoozed ones left out */
             decisions: components["schemas"]["MeCard"][];
-            /** @description Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8) */
+            /** @description Today’s artifacts and signals, folded by thread; immediate first */
             threads: components["schemas"]["Fold"][];
-            /** @description How many open decisions are snoozed: counted, never listed (§8) */
             snoozed: number;
             /** @description Order outcomes that came late or from an earlier claim (A.3) */
             late_outcomes: components["schemas"]["MeCard"][];
@@ -1092,7 +1091,7 @@ export interface components {
              * @enum {string}
              */
             order_outcome?: "applied" | "stale";
-            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `at`, else of `received_at`, in the head’s timezone when it was stored */
+            /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];

@@ -1,9 +1,9 @@
 'use client';
 
-// LabelFilter: the brief's filter by label (RFC 0.7 §4.1: a head SHOULD let the owner filter the brief by label), beside
-// the brief column's heading, and only when there are labels to choose from. On a phone it is a tag icon. It lists the
-// labels on the brief's cards with how many cards carry each; choosing
-// one or more shows only the cards that carry any of them, in the open asks and the threads, and the daily paragraph
+// LabelFilter: the brief's filter by label (RFC 0.7 §4.1: a head SHOULD let the owner filter the brief by label), in the
+// masthead right of the density control (MastheadTools), and only when there are labels to choose from. On a phone it
+// is a tag icon, so the masthead's tools still fit on one line. It lists the labels on the loaded days with how many cards carry each; choosing
+// one or more shows only the cards that carry any of them, in decisions, updates and signals, and the daily paragraph
 // keeps only their entries. The choice is remembered on this device and shown as a chip with a clear control while it
 // is on. Labels filter; they never group (§8). The iOS app mirrors this component.
 //

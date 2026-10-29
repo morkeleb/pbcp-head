@@ -55,10 +55,11 @@ export function CardMeta({ card, timezone, showTime = true, want, extra, unseen 
       )}
       {unseen && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
       {want && (
-        <>
+        // On a narrow line the row's own controls say it (its options, "Acknowledge"), so the host keeps its room.
+        <span className="flex flex-none items-center gap-2 max-[899px]:hidden">
           <span aria-hidden>·</span>
-          <span className="flex-none text-foreground" data-wants={want}>{want}</span>
-        </>
+          <span className="text-foreground" data-wants={want}>{want}</span>
+        </span>
       )}
       {sourceLink(card.source) && (
         <>

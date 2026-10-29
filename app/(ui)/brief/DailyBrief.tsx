@@ -14,13 +14,12 @@ export interface DailyBriefProps {
   paragraphs: string[];
   /** Until the day's nightly card exists: the same fold, made now. */
   soFar?: boolean;
-  compact?: boolean;
 }
 
-export function DailyBrief({ heading, paragraphs, soFar, compact }: DailyBriefProps) {
+export function DailyBrief({ heading, paragraphs, soFar }: DailyBriefProps) {
   if (paragraphs.length === 0) return null;
   return (
-    <section aria-label={heading} className={compact ? 'py-2' : 'py-3'}>
+    <section aria-label={heading} className="py-3">
       <h2 className="flex items-center gap-2 font-serif text-day font-semibold tracking-editorial">
         {heading}
         {soFar && (

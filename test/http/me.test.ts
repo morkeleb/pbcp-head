@@ -27,13 +27,12 @@ describe('GET /api/me/brief', () => {
     await put('hermes:gmail:new');
     await put('hermes:gmail:decided');
     await put('hermes:gmail:snoozed');
-    await put('hermes:gmail:snoozed-report', { kind: 'artifact' });
     await clock('2026-10-07T09:00:00Z');
     await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:decided')}/decision`, { decision: 'approve' });
-    for (const id of ['hermes:gmail:snoozed', 'hermes:gmail:snoozed-report']) await me('POST', `/api/me/cards/${encodeURIComponent(id)}/snooze`, { preset: 'tomorrow' });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:snoozed')}/snooze`, { preset: 'tomorrow' });
     const b = (await me('GET', '/api/me/brief')).body;
     expect(ids(b.decisions)).toEqual(['hermes:gmail:new', 'hermes:gmail:old']);
-    expect(b.snoozed).toBe(1); // §8: the snoozed open decisions, counted; a snoozed artifact is not one
+    expect(b.snoozed).toBe(1);
     expect(b.decisions[0].rendered_html).toContain('<h2>Proposal</h2>');
     expect(b).toMatchObject({ date: '2026-10-07', timezone: 'UTC', daily: null, last_visit: { seq: 0, at: null }, first_day: '2026-10-07' });
   });
@@ -52,9 +51,7 @@ describe('GET /api/me/brief', () => {
     expect((await me('GET', '/api/me/brief')).body.daily_paragraph.html).toMatch(/^5 decisions: /);
   });
 
-  it("folds yesterday's and today's unacknowledged artifacts and signals by thread, immediate first, leaving log, acknowledged and older ones out", async () => {
-    await clock('2026-10-05T20:00:00Z');
-    await put('hermes:gmail:older', { kind: 'artifact' });
+  it("folds today's artifacts and signals by thread, immediate first, leaving log and yesterday's out", async () => {
     await clock('2026-10-06T20:00:00Z');
     await put('hermes:gmail:yesterday', { kind: 'artifact' });
     await clock('2026-10-07T06:00:00Z');
@@ -62,10 +59,8 @@ describe('GET /api/me/brief', () => {
     await put('hermes:gmail:a2', { kind: 'signal', thread: 'gmail:t1', title: 'Second in thread' });
     await put('hermes:gmail:quiet', { kind: 'signal', urgency: 'log' });
     await put('hermes:gmail:loud', { kind: 'signal', urgency: 'immediate' });
-    await put('hermes:gmail:read', { kind: 'artifact' });
-    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:read')}/ack`);
     const b = (await me('GET', '/api/me/brief')).body;
-    expect(b.threads.map((t: { latest: { id: string }; count: number }) => [t.latest.id, t.count])).toEqual([['hermes:gmail:loud', 1], ['hermes:gmail:a2', 2], ['hermes:gmail:yesterday', 1]]);
+    expect(b.threads.map((t: { latest: { id: string }; count: number }) => [t.latest.id, t.count])).toEqual([['hermes:gmail:loud', 1], ['hermes:gmail:a2', 2]]);
     expect(b.threads[1]).toMatchObject({ producer: 'hermes', thread: 'gmail:t1', cards: [{ id: 'hermes:gmail:a1' }, { id: 'hermes:gmail:a2' }] });
   });
 

@@ -41,9 +41,9 @@ describe('the front door', () => {
     expect(html).toContain('data-hero-brief');
     // Leads as the head renders them, in the markup itself.
     expect(shown(html)).toContain('Anna wants to pay the September invoice on the 20th instead of the 15th');
-    // The day view beside it: the calendar's timed cards on the rail, and the moved call, which the brief presents, as a
+    // Today's schedule: the calendar's timed cards on the rail, and the moved call, which the brief presents, as a
     // marker that links to its row there (§4.5, §8).
-    expect(shown(html)).toContain('data-day-view');
+    expect(shown(html)).toContain('data-schedule');
     expect(shown(html)).toMatch(/data-rail-entry="cal:demo:standup-\d{8}"/);
     expect(shown(html)).toMatch(/href="#brief-cal:demo:3f9a0c1d2e4b5a69-\d{8}T1600Z:moved"[^>]*data-marker=/);
     expect(html).not.toContain('A private card on this head');
