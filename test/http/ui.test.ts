@@ -592,6 +592,8 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector(`${today()} [data-rail-entry="todoist:task:due"]`);
+    await (await page.$(`${today()} button[data-schedule-mode="timeline"]`))!.click();
+    await page.waitForSelector(`${today()} [data-rail]`);
     const rail = await page.$$eval(`${today()} [data-rail-entry]`, (es) => es.map((e) => {
       const bar = e.querySelector(':scope > span[aria-hidden]') as HTMLElement;
       return { id: e.getAttribute('data-rail-entry'), span: e.hasAttribute('data-span'), height: Math.round(bar.getBoundingClientRect().height), colour: getComputedStyle(bar).backgroundColor };
@@ -606,6 +608,35 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect(await page.$('article[data-card="cal:work:long"]')).toBeNull();
     expect(await page.$eval('[data-rail-entry="cal:work:long"] a', (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent('cal:work:long')}`);
     expect(await page.$('[data-marker="todoist:task:due"]')).not.toBeNull();
+  });
+
+  it('lists the schedule as an agenda, no free time between, and toggles to the timeline that shows it; remembered on the device', async () => {
+    await put('cal', 'cal:work:early', { kind: 'artifact', urgency: 'log', title: 'Early call', at: todayAt('08:30'), until: todayAt('09:00') });
+    await put('cal', 'cal:work:late', { kind: 'artifact', urgency: 'log', title: 'Evening routine', at: todayAt('22:00'), until: todayAt('22:30') });
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const schedule = `${today()} [data-schedule]`;
+    await page.waitForSelector(`${schedule} [data-agenda]`);
+    // The agenda: in time order, one right under the other, whatever the hours between them.
+    const gap = () => page.$eval(schedule, (s) => {
+      const [a, b] = [...s.querySelectorAll('[data-rail-entry]')].map((e) => e.getBoundingClientRect());
+      return Math.round(b!.top - a!.bottom);
+    });
+    expect(await page.$$eval(`${schedule} [data-rail-entry]`, (es) => es.map((e) => e.getAttribute('data-rail-entry')))).toEqual(['cal:work:early', 'cal:work:late']);
+    expect(await gap()).toBeLessThan(12);
+    expect(await page.$eval(`${today()} button[data-schedule-mode="agenda"]`, (b) => b.getAttribute('aria-pressed'))).toBe('true');
+    // The timeline: thirteen hours apart.
+    await (await page.$(`${today()} button[data-schedule-mode="timeline"]`))!.click();
+    await page.waitForSelector(`${schedule} [data-rail]`);
+    expect(await gap()).toBeGreaterThan(500);
+    // Every day follows, and the choice stays on this device.
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${schedule} [data-rail]`);
+    expect(await page.evaluate(() => localStorage.getItem('pbcp.schedule'))).toBe('timeline');
+    await (await page.$(`${today()} button[data-schedule-mode="agenda"]`))!.click();
+    await page.waitForSelector(`${schedule} [data-agenda]`);
+    expect(await page.evaluate(() => localStorage.getItem('pbcp.schedule'))).toBeNull();
+    expect(errors).toEqual([]);
   });
 
   it('puts the schedule above the updates and signals: in the right column on a wide screen, after the decisions on a phone', async () => {
