@@ -694,6 +694,8 @@ export interface components {
             thread?: string;
             labels?: string[];
             about?: string;
+            at?: string;
+            until?: string;
             references?: string[];
             supersedes?: string;
             actions?: (string | ({
@@ -811,6 +813,8 @@ export interface components {
             thread?: string;
             labels?: string[];
             about?: string;
+            at?: string;
+            until?: string;
             references?: string[];
             supersedes?: string;
             actions?: (string | ({
@@ -1018,6 +1022,8 @@ export interface components {
             thread?: string;
             labels?: string[];
             about?: string;
+            at?: string;
+            until?: string;
             references?: string[];
             supersedes?: string;
             actions?: (string | ({

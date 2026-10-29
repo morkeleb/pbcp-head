@@ -42,6 +42,7 @@ const decisionRow = (c: MeCard) => ({
   lead: c.lead ?? '',
   ...(c.labels?.length ? { labels: c.labels } : {}),
   ...(c.about ? { about: c.about } : {}),
+  ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
   actions: choices(c),
   ...(editable(c) ? { editable: true } : {}),
   ...(c.state !== 'open' ? { state: c.state, decision: c.decision } : {}),
@@ -148,7 +149,7 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
     {
       title: 'List cards',
       description:
-        'Cards by their day (an `about` date when the producer gave one, else the day they arrived), as compact rows: id, day, kind, producer, title, state, labels. ' +
+        'Cards by their day (an `about` date when the producer gave one, else the day of its time `at`, else the day they arrived), as compact rows: id, day, kind, producer, title, state, labels. ' +
         'Use it to answer questions such as “what did GoalPath send this week” or “which billing decisions are still open”: give a day range and narrow by ' +
         '`label`, `producer`, `kind` (decision, artifact, signal, order) or `state` (open, decided, superseded). Without a range it covers the last seven days. ' +
         'Then call get_card for the one the owner wants to hear in full.',
@@ -209,6 +210,7 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
             day: c.day,
             ...(c.labels?.length ? { labels: c.labels } : {}),
             ...(c.about ? { about: c.about } : {}),
+            ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
             ...(c.source ? { source: c.source } : {}),
             ...(c.kind === 'decision' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : {}),
             ...(c.decision ? { decision: c.decision, decided_at: c.decided_at } : {}),

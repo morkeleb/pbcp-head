@@ -161,6 +161,30 @@ describe('a card’s day (RFC 0.7 §8)', () => {
   });
 });
 
+describe('a card’s time (RFC 0.8 §4.1, §8)', () => {
+  it('rejects at and until that break §4.1 with 400 invalid_card and a §7.4 error body', async () => {
+    for (const extra of [{ at: '2026-10-07' }, { at: '2026-10-07T09:00:00+02:00' }, { until: '2026-10-07T10:00:00Z' }, { at: '2026-10-07T10:00:00Z', until: '2026-10-07T09:59:59Z' }]) {
+      const r = await put('hermes:gmail:bad-time', extra);
+      expect(r.status, JSON.stringify(extra)).toBe(400);
+      expect(r.body).toEqual({ error: 'invalid_card', message: expect.any(String) });
+    }
+  });
+
+  it('stores at and until unchanged and returns them; a changed at on an open card replaces it, on a decided one is 409', async () => {
+    const times = { at: '2026-10-07T13:00:00.500Z', until: '2026-10-07T14:00:00+00:00' };
+    const r = await put('hermes:gmail:meet', times);
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject(times);
+    const moved = await put('hermes:gmail:meet', { ...times, at: '2026-10-07T13:30:00Z' });
+    expect(moved.status).toBe(200);
+    expect(moved.body).toMatchObject({ at: '2026-10-07T13:30:00Z', change_seq: r.body.change_seq + 1 });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:meet')}/decision`, { decision: 'approve' });
+    const late = await put('hermes:gmail:meet', { at: '2026-10-07T15:00:00Z' });
+    expect(late.status).toBe(409);
+    expect(late.body).toMatchObject({ at: '2026-10-07T13:30:00Z', state: 'decided' });
+  });
+});
+
 describe('ceilings per label (RFC 0.7 §9)', () => {
   const delivered = async (id: string) => (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card.delivery;
 

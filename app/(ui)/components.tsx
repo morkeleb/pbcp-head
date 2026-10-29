@@ -53,7 +53,10 @@ export interface MeCard {
   labels?: string[];
   /** RFC 0.7 §4.1: the local day the card concerns. */
   about?: string;
-  /** §8 the card's day, from the head: `about`, else the day it was received in the head's timezone. */
+  /** RFC 0.8 §4.1: when the card's subject happens or begins, and when it ends. */
+  at?: string;
+  until?: string;
+  /** §8 the card's day, from the head: `about`, else the day of `at`, else the day it was received, in the head's timezone. */
   day?: string;
   /** On a `head:daily` card: its paragraph in parts, for the label filter. */
   paragraph?: ParagraphParts;
