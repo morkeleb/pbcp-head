@@ -1014,6 +1014,21 @@ describe('the front door in a browser', () => {
     await p.close();
   });
 
+  it('lays out each frame by its own width: side by side in the hero and the desktop still, stacked in the phone still', async () => {
+    const p = await visitor();
+    await p.setViewport({ width: 1280, height: 844 });
+    await p.goto(`${headUrl()}/`, { waitUntil: 'networkidle0' });
+    const layout = (frame: string) => p.$eval(frame, (f) => {
+      const b = f.querySelector('[data-brief-column]')!.getBoundingClientRect();
+      const d = f.querySelector('[data-day-view]')!.getBoundingClientRect();
+      return d.left >= b.right ? 'side by side' : d.top >= b.bottom ? 'stacked' : 'overlapping';
+    });
+    expect(await layout('[data-hero-layout="wide"]')).toBe('side by side');
+    expect(await layout('[data-still="Desktop"]')).toBe('side by side');
+    expect(await layout('[data-still="Phone"]')).toBe('stacked');
+    await p.close();
+  });
+
   it('sends a visitor who is signed in on this device on to the brief', async () => {
     const p = await visitor();
     await p.goto(`${headUrl()}/signin`);

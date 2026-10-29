@@ -1,8 +1,9 @@
 'use client';
 
 // The brief page's two columns, for the app (brief-view.tsx) and the front door's demo (app/about) alike. One layout at
-// every width: the brief first in the document and on the left, the day view second and on the right; below 900 px the
-// two stack in that order. Nothing above them but the masthead's day navigation.
+// every width: the brief first in the document and on the left, the day view second and on the right; when they have
+// less than 840 px (a phone, or the front door's phone-sized frame on a wide screen) the two stack in that order. The
+// width is the columns' own, a container query, not the window's. Nothing above them but the masthead's day navigation.
 //
 //   Brief                                   [labels]     │  Day view
 //   the day's paragraph                                  │  08:00 ┼
@@ -40,7 +41,8 @@ export function BriefColumns({ column, rail, date, timezone, tools, decision, th
   const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
   const empty = column && column.decisions.length === 0 && column.threads.length === 0;
   return (
-    <div className="grid gap-x-8 gap-y-6 min-[900px]:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)]" data-columns>
+    <div className="@container">
+    <div className="grid gap-x-8 gap-y-6 @min-[840px]:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)]" data-columns>
       <section aria-labelledby="brief-heading" className="min-w-0" data-brief-column>
         <div className="flex min-h-8 items-center justify-between gap-2 border-b pb-1">
           <h2 id="brief-heading" className={heading}>Brief</h2>
@@ -89,6 +91,7 @@ export function BriefColumns({ column, rail, date, timezone, tools, decision, th
           )}
         </div>
       </section>
+    </div>
     </div>
   );
 }
