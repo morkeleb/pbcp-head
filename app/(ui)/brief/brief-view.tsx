@@ -1,9 +1,9 @@
 'use client';
 
 // The brief page: the masthead's day navigation (WeekStrip, the only control above the columns), then two columns
-// (columns.tsx): the brief (§8, the generated brief: the paragraph, the open decisions presented as §4.5 requires, the
-// artifact and signal threads to acknowledge, the snoozed count) and the day view (§8, a card's time: the day's cards
-// with `at` on a time rail, markers for what the brief presents). One layout at every width; below 900 px the day view
+// (columns.tsx): on the left the paragraph, the open decisions presented as §4.5 requires and the snoozed count; on the
+// right the day (§8, a card's time: the day's cards with `at` on a time rail, markers for what the page presents), and
+// under it the artifact and signal threads to acknowledge. Together they are the generated brief of §8. One layout at every width; below 900 px the day view
 // follows the brief. Keys: j/k move between cards, enter opens, d dismisses a decision (after the undo window).
 
 import { useEffect, useRef, useState } from 'react';
@@ -62,14 +62,14 @@ export function BriefView() {
     const key = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (e.metaKey || e.ctrlKey || e.altKey || target.closest('input, textarea, select, [role="dialog"], [role="menu"]')) return;
-      const ids = [...document.querySelectorAll<HTMLElement>('[data-brief-column] [data-card]')].map((el) => el.dataset.card!);
+      const ids = [...document.querySelectorAll<HTMLElement>('[data-columns] article[data-card]')].map((el) => el.dataset.card!);
       if (e.key === 'j' || e.key === 'k') {
         e.preventDefault();
         const i = focus ? ids.indexOf(focus) : -1;
         const next = ids[Math.min(Math.max(e.key === 'j' ? i + 1 : i - 1, 0), ids.length - 1)];
         if (!next) return;
         setFocus(next);
-        document.querySelector<HTMLElement>(`[data-brief-column] [data-card="${CSS.escape(next)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        document.querySelector<HTMLElement>(`[data-columns] article[data-card="${CSS.escape(next)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       } else if (focus && e.key === 'Enter' && !target.closest('button, a, summary')) {
         e.preventDefault();
         const h = handles.current.get(focus);

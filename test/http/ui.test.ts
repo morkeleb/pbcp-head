@@ -401,7 +401,7 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
   }
   const put = async (root: string, id: string, extra: Record<string, unknown>) =>
     expect((await call('PUT', cardPath(id), { auth: await token(root), body: card(id, { producer: root, ...extra }) })).status).toBeLessThan(300);
-  const brief = () => page.$eval('[data-brief-column]', (c) => c.textContent ?? '');
+  const brief = () => page.$eval('[data-columns]', (c) => c.textContent ?? '');
 
   it('decides a decision card from its brief row without opening it', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
@@ -440,7 +440,7 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     await page.setViewport({ width: 1280, height: 844 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     expect(await page.$eval('[data-new-count]', (c) => c.textContent)).toBe('2 new'); // the open decision and the report
-    const burndown = (await page.$('[data-brief-column] article.update-row[data-card="goalpath:report:1"]'))!;
+    const burndown = (await page.$('[data-day-view] [data-brief-threads] article.update-row[data-card="goalpath:report:1"]'))!;
     expect(await burndown.$eval('[data-wants]', (w) => w.textContent)).toBe('acknowledge');
     expect(await burndown.$$eval('figure img', (is) => is.length)).toBe(1); // one thumbnail, the first visual
     await (await burndown.$('xpath/.//button[.="Acknowledge"]'))!.click();
@@ -464,8 +464,8 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     const marker = (await page.$('[data-day-view] a[data-marker="cal:work:review"]'))!;
     expect(await marker.evaluate((a) => a.getAttribute('href'))).toBe('#brief-cal:work:review');
     expect(await marker.evaluate((a) => a.textContent)).toBe('15:00–15:30calMove the design review?');
-    expect(await page.$$eval('[data-day-view] button, [data-day-view] article', (es) => es.length)).toBe(0);
-    expect(await page.$eval('[data-day-view]', (d) => d.textContent)).not.toContain('It clashes with the offsite call.');
+    expect(await page.$$eval('[data-rail] button, [data-rail] article', (es) => es.length)).toBe(0);
+    expect(await page.$eval('[data-rail]', (d) => d.textContent)).not.toContain('It clashes with the offsite call.');
     await marker.click();
     await page.waitForFunction(() => document.activeElement?.id === 'brief-cal:work:review');
     expect(errors).toEqual([]);
@@ -483,6 +483,13 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-rail-entry="cal:work:standup"]');
     expect(await boxes()).toEqual({ below: true, beside: false, sameLeft: true, briefFirst: true, width: 390 });
+    // Left: the paragraph and the decisions. Right: the day's timeline, then what it brought to acknowledge.
+    expect(await page.$$eval('[data-brief-column] article[data-card]', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual(['goalpath:item:1:ship']);
+    expect(await page.$eval('[data-day-view]', (d) => {
+      const rail = d.querySelector('[data-rail]')!.getBoundingClientRect();
+      const rows = d.querySelector('[data-brief-threads]')!.getBoundingClientRect();
+      return [rows.top >= rail.bottom, [...d.querySelectorAll('article[data-card]')].map((a) => a.getAttribute('data-card'))];
+    })).toEqual([true, ['goalpath:report:1']]);
     expect(await page.$$('[role="tablist"]')).toEqual([]); // no tabs
     await page.setViewport({ width: 1280, height: 844 });
     await page.waitForFunction(() => document.querySelector('[data-day-view]')!.getBoundingClientRect().left >= document.querySelector('[data-brief-column]')!.getBoundingClientRect().right);
@@ -531,8 +538,8 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     await call('POST', '/api/test', { body: { clock: null } });
     await put('goalpath', 'goalpath:m:4:late', { kind: 'signal', thread: 'm4', title: 'Billing revamp: 11 days late', summary: 'Forecast moved to the 24th.' });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const rows = await page.$$('[data-brief-column] article.update-row');
-    const fold = (await page.$('[data-brief-column] article.update-row[data-card="goalpath:m:4:late"]'))!;
+    const rows = await page.$$('[data-columns] article.update-row');
+    const fold = (await page.$('[data-columns] article.update-row[data-card="goalpath:m:4:late"]'))!;
     expect(rows.length).toBe(2); // the thread and the report
     expect(await fold.$eval('h4', (h) => h.textContent)).toBe('Billing revamp: 11 days late');
     expect(await fold.$eval('.lead', (l) => l.textContent)).toBe('Forecast moved to the 24th.');
@@ -545,7 +552,7 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     await page.setViewport({ width: 1280, height: 844 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     expect(await page.$eval('article[data-card="hermes:x:labelled"] [data-labels]', (l) => l.textContent)).toBe('alpha · zeta');
-    const metas = await page.$$eval('[data-brief-column] [data-meta]', (ms) => ms.map((m) => m.textContent ?? ''));
+    const metas = await page.$$eval('[data-columns] [data-meta]', (ms) => ms.map((m) => m.textContent ?? ''));
     expect(metas.length).toBeGreaterThan(2);
     for (const m of metas) expect(m).not.toMatch(/decision|signal|artifact/i);
     expect(metas.find((m) => m.startsWith('hermes'))).toMatch(/^hermes·alpha · zeta·\d\d:\d\d·decide$/);
@@ -595,7 +602,7 @@ describe('the brief page: two columns, one day (RFC 0.8 §4.5, §8)', () => {
     await page.waitForSelector(`main[data-day="${day(0)}"]`);
     await (await page.$('button[aria-label="Next day"]'))!.click();
     await page.waitForSelector(`main[data-day="${day(1)}"]`);
-    await page.waitForFunction(() => document.querySelector('[data-brief-column]')!.textContent!.includes('Tomorrow’s agenda'));
+    await page.waitForFunction(() => document.querySelector('[data-columns]')!.textContent!.includes('Tomorrow’s agenda'));
     // The date picker, to a day with nothing on it.
     const empty = day(-5);
     await (await page.$('[data-month]'))!.click();
@@ -647,7 +654,7 @@ describe('labels (RFC 0.7)', () => {
     await seed();
     await page.setViewport({ width: 1280, height: 844 }); // the filter as a button with its chip (a phone has the icon)
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    expect(await page.$$eval('[data-brief-column] [data-card]', (cs) => cs.length)).toBeGreaterThanOrEqual(5); // goalpath's two + the four above
+    expect(await page.$$eval('[data-columns] article[data-card]', (cs) => cs.length)).toBeGreaterThanOrEqual(5); // goalpath's two + the four above
     // The filter lists the labels on the brief's cards, with counts.
     await (await page.$('[data-label-filter] button'))!.click();
     await page.waitForSelector('[data-label="alpha"]');
@@ -658,7 +665,7 @@ describe('labels (RFC 0.7)', () => {
 
     const shown = async () => ({
       decisions: await titles('[data-brief-column] article[data-kind="decision"]'),
-      rows: await titles('[data-brief-column] article.update-row'),
+      rows: await titles('[data-columns] article.update-row'),
       paragraph: await page.$eval('.daily-paragraph', (p) => [...p.querySelectorAll('a')].map((a) => a.textContent)),
       text: await page.$eval('.daily-paragraph', (p) => p.textContent),
     });

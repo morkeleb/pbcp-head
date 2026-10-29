@@ -12,11 +12,11 @@ Success looks like: the person opens the app once in the morning, clears every d
 
 ## Scope
 
-Three screens, and a deliberate list of what the phone does not do. All three share one masthead: the name "Brief", a dateline in words ("Tue 27 Oct · morning", on the device's clock), search, theme and the menu, in the same places on every screen. Under the name sits one row of the same height everywhere: the day navigation on the Brief (the week strip, previous and next day, and "3 new": the undecided decisions and unacknowledged artifacts and signals in the brief column), "← Brief" and the screen's title on the others.
+Three screens, and a deliberate list of what the phone does not do. All three share one masthead: the name "Brief", a dateline in words ("Tue 27 Oct · morning", on the device's clock), search, theme and the menu, in the same places on every screen. Under the name sits one row of the same height everywhere: the day navigation on the Brief (the week strip, previous and next day, and "3 new": the undecided decisions and unacknowledged artifacts and signals on the page), "← Brief" and the screen's title on the others.
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
-| **Brief** | One selected day (today at open), in two columns: the brief (the paragraph; every open decision not snoozed, newest first; yesterday's and today's unacknowledged artifact and signal threads; a count of snoozed decisions) and the day view (the day's cards with `at` on a time rail, RFC 0.8 §8, a marker for a card the brief presents). On another day, the brief column is that day's cards. Built from the components below | Tap an action, swipe, pull to refresh, change the day; marks the last-visit cursor on close |
+| **Brief** | One selected day (today at open), in two columns: on the left the paragraph, every open decision not snoozed (newest first) and a count of snoozed decisions; on the right the day's cards with `at` on a time rail (RFC 0.8 §8, a marker for a card the page presents) and under it yesterday's and today's unacknowledged artifact and signal threads. On another day, the brief column is that day's cards. Built from the components below | Tap an action, swipe, pull to refresh, change the day; marks the last-visit cursor on close |
 | **Card** | The card as the Brief shows it (`DecisionCard`, or `UpdateRow` for an artifact or signal) with its body fully open; then its thread as the Brief lists threads; then its decision log entries as a small table | Decide, snooze, open source, see thread |
 | **Orders** | Open orders, each a block styled like a `DecisionCard` with `exec_state`, who holds it and the lease in a small table, its latest progress as an `UpdateRow` beneath; then done orders as `UpdateRow`s of their outcomes | Dictate a new order (text or voice); cancel |
 
@@ -33,7 +33,7 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 
 **The nightly card's day.** The `head:daily` card dated D is the morning paper for D and reports on D−1; the brief column opens D with it.
 
-One layout at every width: from 900 px the brief on the left (60 %) and the day view on the right (40 %), with j/k/enter/d; below it the two stacked in that order. No tabs and no separate phone layout.
+One layout at every width: with 840 px or more for the columns, decisions on the left (60 %) and the day on the right (40 %), with j/k/enter/d; with less, the two stacked in that order. No tabs and no separate phone layout.
 
 **Visuals** (RFC §3.1 Presentation). Diagrams and images in a card are thumbnails fitted to the card width, captioned, in reading order; the Brief shows at most the first visual of a folded card. Tap opens a full-screen viewer with pinch-zoom and pan on the cached SVG or image at native size, a share action, and the fence source behind a disclosure. The viewer is the same component for mermaid output and for producer images, so there is one zoom experience to get right.
 
