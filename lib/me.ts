@@ -16,7 +16,7 @@ import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { toCard } from './store';
 import { effectiveTimezone } from './timezone';
-import { addDays, dayRange, isDate, localDate } from './time';
+import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { formatTime } from './push/daily';
 
 type Row = typeof cards.$inferSelect;
@@ -32,7 +32,7 @@ export type MeCard = Card & {
   order_outcome?: 'applied' | 'stale';
   rendered_actions?: Record<string, string>;
   first_visual?: Visual;
-  /** §8 the card's day: its `about`, else the day of received_at in the head's timezone (YYYY-MM-DD). */
+  /** §8 the card's day: its `about`, else the day of `at`, else of received_at, in the head's timezone (YYYY-MM-DD). */
   day: string;
   /** On a `head:daily` card: its paragraph in parts, each entry with its card's labels, for filtering (lib/brief/paragraph.ts). */
   paragraph?: ParagraphParts;
@@ -175,7 +175,7 @@ export async function brief(db: Db, headId: string) {
         sql`${cards.producerDoc}->>'kind' in ('artifact', 'signal')`,
         inArray(cards.delivery, ['brief', 'immediate']),
         ne(cards.producer, 'head'),
-        eq(cards.day, today), // §8: today's cards are those whose day is today, `about` or received
+        eq(cards.day, today), // §8: today's cards are those whose day is today, `about`, `at` or received
         notSnoozed(at),
       ),
     )
@@ -296,7 +296,7 @@ export interface CardQuery {
 }
 
 /**
- * GET /api/me/cards: cards by their day (§8: `about`, else received_at's day in the head's timezone) — one day
+ * GET /api/me/cards: cards by their day (§8: `about`, else the day of `at` or of received_at in the head's timezone) — one day
  * (`date`) or days `from`–`to` inclusive (the timeline, a week at a time) — or received between `since`/`until`
  * instants, optionally of one `state`, in change_seq order, paginated by change_seq (`after`, `next`). With `from`,
  * `before` is the latest earlier day that has a card (null when there is none), so the timeline skips empty weeks and
@@ -307,7 +307,7 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
   const where: SQL[] = [eq(cards.headId, headId)];
   if (q.date) {
     if (!isDate(q.date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
-    where.push(eq(cards.day, q.date)); // §8: a card's day, `about` or received
+    where.push(eq(cards.day, q.date)); // §8: a card's day, `about`, `at` or received
   }
   let before: string | null | undefined;
   if (q.from || q.to) {
@@ -339,8 +339,10 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
   const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
 
   const rows = await db.select().from(cards).where(and(...where)).orderBy(asc(cards.changeSeq)).limit(limit);
+  const presented = await presentCards(db, rows);
   return {
-    cards: await presentCards(db, rows),
+    // One day: in the day's order (§8, by `at`, then by received_at); the page and `next` stay in change_seq order.
+    cards: q.date ? presented.sort(byTime) : presented,
     next: rows.length === limit ? rows.at(-1)!.changeSeq : null,
     timezone: head.timezone,
     ...(before !== undefined ? { before } : {}),

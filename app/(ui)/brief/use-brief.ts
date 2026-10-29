@@ -2,14 +2,15 @@
 
 // The brief's data for both layouts: today (GET /api/me/brief), earlier days loaded a week at a time as the person
 // scrolls up (GET /api/me/cards?from=&to=), as far back as the head has cards (§8: every card stays reachable), and
-// tomorrow (from the brief). Days are shaped once here, the same for the timeline and
+// tomorrow (from the brief). Each day's schedule (its cards with `at`, RFC 0.8 §8) comes from its cards: an earlier
+// day's as loaded, today's and tomorrow's from GET /api/me/cards?date=, since the brief leaves `log` cards out. Days are shaped once here, the same for the timeline and
 // the broadsheet: the day's paragraph, its decisions, its updates (artifacts) and signals as threads.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
 
-import { addDays, localDay, pastOf, todayOf, tomorrowOf, WEEK, type BriefResponse, type Day } from './days';
+import { addDays, localDay, pastOf, railCards, referencedBy, todayOf, tomorrowOf, WEEK, type BriefResponse, type Day } from './days';
 
 export { addDays, type BriefResponse, type Day };
 
@@ -29,6 +30,20 @@ export function useBrief() {
   reachRef.current = reach;
   const loading = useRef<Promise<boolean> | null>(null);
   const seq = useRef<number | null>(null);
+  // Today's and tomorrow's cards, every one of them, for their schedules: by date.
+  const [near, setNear] = useState<Map<string, MeCard[]>>(new Map());
+  const loadNear = useCallback(async (dates: string[], network = false) => {
+    for (const date of dates) {
+      const cards: MeCard[] = [];
+      for (let after: number | null = 0; after !== null; ) {
+        const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?date=${date}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
+        if (r.status !== 200) return;
+        cards.push(...r.body.cards);
+        after = r.body.next;
+      }
+      setNear((m) => new Map(m).set(date, cards));
+    }
+  }, []);
 
   const load = useCallback(async (network = false, quiet = false) => {
     const r = await api<BriefResponse>('/api/me/brief', { network });
@@ -40,6 +55,7 @@ export function useBrief() {
     seq.current ??= r.body.seq; // the first view sets what "seen" means when the owner leaves
   }, []);
   useEffect(() => void load(), [load]);
+  useEffect(() => void (brief?.date && loadNear([brief.date, addDays(brief.date, 1)])), [brief?.date, loadNear]);
   const fresh = useCallback((b: BriefResponse) => {
     setBrief(b);
     setCachedAt(null);
@@ -64,7 +80,10 @@ export function useBrief() {
       try {
         const r = await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
         const b = current.current;
-        if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) await load(true, true);
+        if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) {
+          await load(true, true);
+          await loadNear([r.body.date, addDays(r.body.date, 1)], true);
+        }
       } catch {
         // offline, or signed out: the next check tries again
       } finally {
@@ -83,7 +102,7 @@ export function useBrief() {
       navigator.serviceWorker?.removeEventListener('message', onMessage);
       clearInterval(timer);
     };
-  }, [load]);
+  }, [load, loadNear]);
 
   // Leaving the brief advances the global last-visit cursor to what was on screen (mobile PRD: on close).
   useEffect(() => {
@@ -189,6 +208,9 @@ export function useBrief() {
   }, []);
 
   const pastDays = [...past.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => pastOf(date, cards));
-  const days: Day[] = brief ? [...pastDays, todayOf(brief), tomorrowOf(brief)] : [];
-  return { brief, days, cachedAt, error, loadEarlier, loadedFrom: reach.from, atStart: reach.before === null, loadedBack: past, change };
+  const withRail = (d: Day): Day => (near.has(d.date) ? { ...d, rail: railCards(near.get(d.date)!) } : d);
+  const days: Day[] = brief ? [...pastDays, withRail(todayOf(brief)), withRail(tomorrowOf(brief))] : [];
+  // §8 pairing: the later cards that reference a card, from everything loaded.
+  const references = referencedBy([...past.values(), ...near.values()].flat());
+  return { brief, days, references, cachedAt, error, loadEarlier, loadedFrom: reach.from, atStart: reach.before === null, loadedBack: past, change };
 }

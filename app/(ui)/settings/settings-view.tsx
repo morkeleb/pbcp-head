@@ -10,7 +10,7 @@ import { ConnectLink } from './shared';
 export const SETTINGS_PAGES = [
   { href: '/settings/producers', title: 'Producers', line: 'Tokens, pairing codes and ceilings.' },
   { href: '/settings/devices', title: 'Devices', line: 'Where you’re signed in, notifications, and assistants.' },
-  { href: '/settings/preferences', title: 'Preferences', line: 'Density, theme and timezone.' },
+  { href: '/settings/preferences', title: 'Preferences', line: 'Theme and timezone.' },
   { href: '/settings/invites', title: 'Invite requests', line: 'Who asked for an invite at the front door.' },
 ] as const;
 

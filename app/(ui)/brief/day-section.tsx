@@ -1,17 +1,19 @@
 'use client';
 
 // A day of the brief, the same component tree in both layouts (brief-view.tsx) and on the front door's demo brief
-// (app/about): the sticky dated header, the day's brief in short paragraphs, its decisions, and its updates and signals
-// as threads. On the timeline (a phone) each decision sits on a rail carrying its time; on the broadsheet the decisions
-// and the updates stand side by side.
+// (app/about): the sticky dated header, the day's brief in short paragraphs, its decisions, the day's schedule (the
+// cards with `at` on a time rail, RFC 0.8 §8), and its updates and signals as threads. On the timeline (a phone) they
+// follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on the
+// left, and the schedule above the updates and signals on the right.
 
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { composeParagraphs } from '../../../lib/brief/paragraph';
 import { useLocale, type MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
-import { clock, type Density } from './DecisionCard';
-import { addDays, type Day } from './days';
+import { clock } from './DecisionCard';
+import { addDays, anchors, type Day } from './days';
+import { TimeRail } from './TimeRail';
 import type { UpdateThread } from './UpdateRow';
 
 /** Updates are folded after this many, behind "More updates (N)". */
@@ -32,29 +34,31 @@ export const weekOf = (date: string): string[] => {
 };
 
 
-/** "Fri 31 Oct". */
-export const shortDay = (date: string) => {
-  const parts = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${date}T00:00:00Z`));
-  const part = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${part('weekday')} ${part('day')} ${part('month')}`;
-};
+export { shortDay } from './days';
 
-
-export function DaySection({ day, name, wide, density, tz, decision, update }: {
-  day: Day; name: string; wide: boolean; density: Density; tz: string;
+export function DaySection({ day, name, wide, tz, decision, update }: {
+  day: Day; name: string; wide: boolean; tz: string;
   decision: (c: MeCard, under: string) => ReactNode; update: (t: UpdateThread) => ReactNode;
 }) {
   // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
   const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'Morning brief' : '';
-  const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0;
+  const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0 && !day.rail?.length;
   // One short paragraph per part of the brief (lib/brief/paragraph.ts), filtered by the chosen labels; a paragraph the
   // head did not keep in parts is the one run of prose it was written as.
   const p = day.paragraph;
   const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
-  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} compact={density === 'ledger'} />;
+  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} />;
   const decisions = day.decisions.length > 0 && (
     <Group title="Decisions" count={day.decisions.length}>
-      <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap={density === 'ledger' ? 'gap-2' : 'gap-3'} />
+      <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap="gap-3" />
+    </Group>
+  );
+  // The day's cards with a time, every producer, `log` included; a card shown above or below is a marker linking to it.
+  const schedule = !!day.rail?.length && (
+    <Group title="Schedule">
+      <div className={cn(!wide && 'ml-[2.75rem] border-l pl-3')} data-schedule>
+        <TimeRail cards={day.rail} date={day.date} timezone={tz} anchors={anchors(day)} />
+      </div>
     </Group>
   );
   const updates = day.updates.length > 0 && <Updates title="Updates" threads={day.updates} wide={wide} update={update} />;
@@ -80,6 +84,7 @@ export function DaySection({ day, name, wide, density, tz, decision, update }: {
             {decisions}
           </div>
           <div className="min-w-0">
+            {schedule}
             {updates}
             {signals}
           </div>
@@ -88,6 +93,7 @@ export function DaySection({ day, name, wide, density, tz, decision, update }: {
         <div className="pt-1">
           {brief}
           {decisions}
+          {schedule}
           {updates}
           {signals}
         </div>

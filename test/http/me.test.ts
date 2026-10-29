@@ -161,6 +161,57 @@ describe('a card’s day (RFC 0.7 §8)', () => {
   });
 });
 
+describe('a card’s time (RFC 0.8 §4.1, §8)', () => {
+  it('rejects at and until that break §4.1 with 400 invalid_card and a §7.4 error body', async () => {
+    for (const extra of [{ at: '2026-10-07' }, { at: '2026-10-07T09:00:00+02:00' }, { until: '2026-10-07T10:00:00Z' }, { at: '2026-10-07T10:00:00Z', until: '2026-10-07T09:59:59Z' }]) {
+      const r = await put('hermes:gmail:bad-time', extra);
+      expect(r.status, JSON.stringify(extra)).toBe(400);
+      expect(r.body).toEqual({ error: 'invalid_card', message: expect.any(String) });
+    }
+  });
+
+  it('stores at and until unchanged and returns them; a changed at on an open card replaces it, on a decided one is 409', async () => {
+    const times = { at: '2026-10-07T13:00:00.500Z', until: '2026-10-07T14:00:00+00:00' };
+    const r = await put('hermes:gmail:meet', times);
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject(times);
+    const moved = await put('hermes:gmail:meet', { ...times, at: '2026-10-07T13:30:00Z' });
+    expect(moved.status).toBe(200);
+    expect(moved.body).toMatchObject({ at: '2026-10-07T13:30:00Z', change_seq: r.body.change_seq + 1 });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:meet')}/decision`, { decision: 'approve' });
+    const late = await put('hermes:gmail:meet', { at: '2026-10-07T15:00:00Z' });
+    expect(late.status).toBe(409);
+    expect(late.body).toMatchObject({ at: '2026-10-07T13:30:00Z', state: 'decided' });
+  });
+
+  it('places a card with at and no about on the day of at in the head’s timezone; about wins; the day is fixed when stored', async () => {
+    await me('PATCH', '/api/me/settings', { timezone: 'America/Denver' }); // 2026-10-07T09:00Z is the 7th, 03:00
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-08T05:00:00Z' }); // still the 7th in Denver (23:00)
+    await put('hermes:cal:next', { kind: 'artifact', at: '2026-10-08T07:00:00Z' }); // the 8th, 01:00
+    await put('hermes:cal:filed', { kind: 'artifact', at: '2026-10-08T07:00:00Z', about: '2026-10-09' });
+    const day = async (id: string) => (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card.day;
+    expect([await day('hermes:cal:early'), await day('hermes:cal:next'), await day('hermes:cal:filed')]).toEqual(['2026-10-07', '2026-10-08', '2026-10-09']);
+    // Acknowledged after the owner moved: the day stays where the content put it.
+    await me('PATCH', '/api/me/settings', { timezone: 'UTC' });
+    await me('POST', `/api/me/cards/${encodeURIComponent('hermes:cal:early')}/ack`);
+    expect(await day('hermes:cal:early')).toBe('2026-10-07');
+    // A re-PUT with a new time places it again.
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-09T12:00:00Z' });
+    expect(await day('hermes:cal:early')).toBe('2026-10-09');
+  });
+
+  it('orders a day’s cards by at, earliest first, then the cards without at by received_at', async () => {
+    await clock('2026-10-07T06:00:00Z');
+    await put('hermes:gmail:plain-1', { kind: 'artifact' });
+    await clock('2026-10-07T07:00:00Z');
+    await put('hermes:cal:late', { kind: 'artifact', at: '2026-10-07T16:00:00Z' });
+    await put('hermes:gmail:plain-2', { kind: 'signal' });
+    await put('hermes:cal:early', { kind: 'artifact', at: '2026-10-07T08:00:00Z', until: '2026-10-07T09:00:00Z' });
+    await put('hermes:cal:leap', { kind: 'artifact', at: '2016-12-31T23:59:60Z', about: '2026-10-07' }); // a leap second is a valid time
+    expect(ids((await me('GET', '/api/me/cards?date=2026-10-07')).body.cards)).toEqual(['hermes:cal:leap', 'hermes:cal:early', 'hermes:cal:late', 'hermes:gmail:plain-1', 'hermes:gmail:plain-2']);
+  });
+});
+
 describe('ceilings per label (RFC 0.7 §9)', () => {
   const delivered = async (id: string) => (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card.delivery;
 

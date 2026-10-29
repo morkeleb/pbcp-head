@@ -4,11 +4,14 @@
 // replays it in memory through @pbcp/core and shows the brief it makes, storing nothing.
 //
 // Every card's id has the namespace `demo` (`goalpath:demo:…`), and every order says DEMO_MARK in its body, so
-// `pnpm demo --remove` and `pnpm demo:purge` can find them. `at` is the local time the step happens, for a runner that
-// keeps time (the replay); the HTTP runner sends each step when it gets to it.
+// `pnpm demo --remove` and `pnpm demo:purge` can find them. A step's `at` is the local time the step happens, for a
+// runner that keeps time (the replay); the HTTP runner sends each step when it gets to it. A card's `at` and `until`
+// (RFC 0.8 §4.1) are the times of its subject, as instants in the head's timezone.
+
+
 
 import type { ProducerCard } from '@pbcp/core';
-import { addDays } from '../time';
+import { addDays, zonedInstant } from '../time';
 import { DEMO_MARK, type DemoRoot } from './data';
 
 /** A card as a demo producer sends it, without what every card carries (protocol, producer, to_person, emitted_at). */
@@ -34,8 +37,16 @@ function isoWeek(date: string): number {
 
 const mailBody = (from: string, date: string, quote: string) => `- **From:** ${from}\n- **Date:** ${date}\n\n${quote.split('\n').map((l) => `> ${l}`).join('\n')}`;
 
-/** The morning of `today` (YYYY-MM-DD, the head's local date). */
-export function demoScenario(today: string): DemoStep[] {
+/** The morning of `today` (YYYY-MM-DD, the head's local date in `timezone`). */
+export function demoScenario(today: string, timezone: string): DemoStep[] {
+  /** A local time on a day as a §2 timestamp. */
+  const time = (date: string, hhmm: string) => zonedInstant(date, hhmm, timezone).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  /** caldav's occurrence card (§4.1, §8): one `log` artifact per timed event, on the rail by its `at` and `until`. */
+  const occurrence = (key: string, title: string, start: string, end: string, where?: string): DemoStep => ({ at: '06:15', put: 'cal', card: {
+    id: `cal:demo:${key}-${today.replace(/-/g, '')}`, kind: 'artifact', urgency: 'log', thread: `day-${today}`, labels: ['calendar'],
+    at: time(today, start), until: time(today, end), references: [`cal:demo:${today}`],
+    title, body: `**${title}**, ${start}–${end}${where ? `\n\nWhere: ${where}` : ''}`,
+  } });
   const yesterday = addDays(today, -1);
   const tomorrow = addDays(today, 1);
   const friday = addDays(today, 3);
@@ -64,6 +75,9 @@ export function demoScenario(today: string): DemoStep[] {
         '  Standup :09:15, 09:30', '  Q4 review budget and plan :11:00, 12:00', '  Dentist :14:00, 14:45', '  Anna re invoice timing :16:30, 17:00', '```',
       ].join('\n'),
     } },
+    occurrence('standup', 'Standup', '09:15', '09:30'),
+    occurrence('q4-review', 'Q4 review: budget and plan', '11:00', '12:00', 'Room 3, 2nd floor'),
+    occurrence('dentist', 'Dentist', '14:00', '14:45', 'Nørrebrogade 12'),
     // Tomorrow's agenda, sent today: its day is tomorrow (§8), so it is in Tomorrow, not today.
     { at: '06:16', put: 'cal', card: {
       id: `cal:demo:${tomorrow}`, kind: 'artifact', urgency: 'brief', thread: `day-${tomorrow}`, about: tomorrow, labels: ['calendar'],
@@ -155,11 +169,12 @@ export function demoScenario(today: string): DemoStep[] {
     // --- caldav: a meeting moved; a decision about a later day (shown under today, marked for its day, §8 MAY) -------
     { at: '08:31', put: 'cal', card: {
       id: `cal:demo:3f9a0c1d2e4b5a69-${today.replace(/-/g, '')}T1600Z:moved`, kind: 'signal', urgency: 'immediate', thread: `day-${today}`, about: today, labels: ['calendar'],
+      at: time(today, '16:00'), until: time(today, '16:30'),
       title: 'Moved: Call with Anna now at 16:00',
       body: '**Call with Anna** now starts at 16:00–16:30 (was 16:30).\n\nWhere: Video',
     } },
     { at: '08:40', put: 'cal', card: {
-      id: `cal:demo:table-${friday}`, kind: 'decision', urgency: 'brief', about: friday, labels: ['calendar'],
+      id: `cal:demo:table-${friday}`, kind: 'decision', urgency: 'brief', about: friday, labels: ['calendar'], at: time(friday, '19:00'),
       title: `Keep the table for four on ${day(friday)} at 19:00?`,
       summary: 'The restaurant holds the table until tomorrow noon; keeping it confirms the booking.',
       body: 'The restaurant holds a table for four until tomorrow noon.\n\n## Proposal\n\nKeep the table.',

@@ -28,9 +28,9 @@ const HINT_KEY = 'pbcp.swipe-hint';
 const HINT_MS = 8000;
 
 export function BriefView() {
-  // The masthead is the layout's (app/(ui)/chrome.tsx): density and the layout come from it, the week strip goes into it.
-  const { wide, density } = useChrome();
-  const { brief, days, cachedAt, error, loadEarlier, loadedFrom, atStart, loadedBack, change } = useBrief();
+  // The masthead is the layout's (app/(ui)/chrome.tsx): the layout comes from it, the week strip goes into it.
+  const { wide } = useChrome();
+  const { brief, days, references, cachedAt, error, loadEarlier, loadedFrom, atStart, loadedBack, change } = useBrief();
   const [selected, setSelected] = useState<string | null>(null);
   const [todayOut, setTodayOut] = useState<'above' | 'below' | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -194,7 +194,7 @@ export function BriefView() {
   const counts = new Map<string, number>();
   for (const c of new Map(allCards.map((c) => [c.id, c])).values()) for (const l of c.labels ?? []) counts.set(l, (counts.get(l) ?? 0) + 1);
   const strip = <WeekStrip days={week} selected={shownDay} today={today} min={firstDay} max={lastDay} onSelect={(d) => void select(d)} />;
-  // Beside the density control in the masthead; nothing when no loaded card has a label and none is chosen.
+  // First among the masthead's tools; nothing when no loaded card has a label and none is chosen.
   const labelFilter = (counts.size > 0 || chosen.length > 0) && (
     <MastheadTools>
       <LabelFilter counts={counts} chosen={chosen} onChange={setChosen} compact={!wide} />
@@ -206,12 +206,13 @@ export function BriefView() {
   // §8: a decision whose day is later than the day it is listed under (an open one, under today) says which day it is for.
   const decision = (c: MeCard, under: string) => (
     <DecisionCard
-      key={c.id} card={c} timezone={tz} density={density} onChange={change} focused={focus === c.id} handle={register(c.id)} showTime={wide}
+      key={c.id} card={c} timezone={tz} onChange={change} focused={focus === c.id} handle={register(c.id)} showTime={wide}
+      paired={(references.get(c.id) ?? []).filter((r) => r.received_at >= c.received_at)}
       {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})}
     />
   );
   const update = (t: UpdateThread) => (
-    <UpdateRow key={t.latest.id} thread={t} timezone={tz} density={density} focused={focus === t.latest.id} handle={register(t.latest.id)} />
+    <UpdateRow key={t.latest.id} thread={t} timezone={tz} focused={focus === t.latest.id} handle={register(t.latest.id)} />
   );
 
   return (
@@ -224,7 +225,7 @@ export function BriefView() {
           // An earlier day with nothing on it is not shown (no header for an empty day), unless the person went to it.
           .filter((d) => d.kind !== 'past' || d.nothing || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
           .map((d) => (
-            <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} density={density} tz={tz} decision={decision} update={update} />
+            <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} tz={tz} decision={decision} update={update} />
           ))}
       </main>
       {todayOut && (

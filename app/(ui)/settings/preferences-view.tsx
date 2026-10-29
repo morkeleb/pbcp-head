@@ -1,12 +1,11 @@
 'use client';
 
-// Settings → Preferences: this device's density and theme, and the head's timezone override.
+// Settings → Preferences: this device's theme, and the head's timezone override.
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { Density } from '../brief/DecisionCard';
-import { PageRow, setTheme, useChrome, useThemeChoice, type ThemeChoice } from '../chrome';
+import { PageRow, setTheme, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, useOnline } from '../client';
 import { call, errorText, field, PageError, Section } from './shared';
 
@@ -26,7 +25,6 @@ export function PreferencesView() {
 }
 
 function Preferences({ onError }: { onError: (e: unknown) => void }) {
-  const { density, setDensity } = useChrome();
   const theme = useThemeChoice();
   const [head, setHead] = useState<HeadSettings | null>(null);
   const [zone, setZone] = useState('');
@@ -60,13 +58,6 @@ function Preferences({ onError }: { onError: (e: unknown) => void }) {
     <Section id="preferences" title="Preferences">
       <table className="w-full text-body" data-preferences>
         <tbody className="divide-y border-y">
-          {row(
-            'Density',
-            <select aria-label="Density" className={field} value={density} onChange={(e) => setDensity(e.target.value as Density)}>
-              <option value="comfortable">Comfortable</option>
-              <option value="ledger">Ledger</option>
-            </select>,
-          )}
           {row(
             'Theme',
             <select aria-label="Theme" className={field} value={theme} onChange={(e) => setTheme(e.target.value as ThemeChoice)}>

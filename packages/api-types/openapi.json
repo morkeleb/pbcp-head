@@ -2621,6 +2621,12 @@
           "about": {
             "type": "string"
           },
+          "at": {
+            "type": "string"
+          },
+          "until": {
+            "type": "string"
+          },
           "references": {
             "type": "array",
             "items": {
@@ -3029,6 +3035,12 @@
             }
           },
           "about": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "until": {
             "type": "string"
           },
           "references": {
@@ -3767,6 +3779,12 @@
             }
           },
           "about": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "until": {
             "type": "string"
           },
           "references": {

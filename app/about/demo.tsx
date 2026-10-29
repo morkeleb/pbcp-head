@@ -8,13 +8,12 @@
 
 import { Moon, Search } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { setSandbox } from '../(ui)/client';
 import { LocaleContext, type MeCard } from '../(ui)/components';
 import { DaySection, shortDay, weekOf } from '../(ui)/brief/day-section';
 import type { Day } from '../(ui)/brief/days';
-import { DecisionCard, type Density } from '../(ui)/brief/DecisionCard';
+import { DecisionCard } from '../(ui)/brief/DecisionCard';
 import { UpdateRow, type UpdateThread } from '../(ui)/brief/UpdateRow';
 import { WeekStrip } from '../(ui)/brief/WeekStrip';
 import { OrderBlock } from '../(ui)/orders/orders-view';
@@ -72,21 +71,13 @@ function changed(day: Day, card: MeCard): Day {
   return { ...day, decisions: day.decisions.map(swap).filter(awake) };
 }
 
-/** The masthead as the app draws it, inside the frame: the name, the dateline, the week, density, search, theme. */
-function FrameMasthead({ head, dateline, wide, density, onDensity }: { head: DemoHead; dateline: string; wide: boolean; density: Density; onDensity: (d: Density) => void }) {
+/** The masthead as the app draws it, inside the frame: the name, the dateline, the week, search, theme. */
+function FrameMasthead({ head, dateline, wide }: { head: DemoHead; dateline: string; wide: boolean }) {
   const open = new Set(head.today.decisions.map((c) => c.day));
   const week = weekOf(head.date).map((date) => ({ date, open: open.has(date), reachable: date >= head.date && date <= head.tomorrow.date }));
   const strip = <WeekStrip days={week} selected={head.date} today={head.date} min={head.date} max={head.tomorrow.date} onSelect={() => undefined} />;
   const tools = (
     <div className="flex items-center gap-1 text-muted-foreground" aria-hidden>
-      {wide && (
-        <Tabs value={density} onValueChange={(v) => onDensity(v as Density)}>
-          <TabsList className="h-6 p-0.5 group-data-[orientation=horizontal]/tabs:h-6">
-            <TabsTrigger value="comfortable" className="px-2 py-0 text-xs">Comfortable</TabsTrigger>
-            <TabsTrigger value="ledger" className="px-2 py-0 text-xs">Ledger</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
       <span className="grid size-8 place-items-center"><Search className="size-4" /></span>
       <span className="grid size-8 place-items-center"><Moon className="size-4" /></span>
     </div>
@@ -115,18 +106,18 @@ function FrameMasthead({ head, dateline, wide, density, onDensity }: { head: Dem
 export type DayNames = Record<string, string>;
 
 /** Today and tomorrow, in one layout, with the frame's own state: what this visitor did to the cards. */
-function DemoDays({ head, names, wide, density }: { head: DemoHead; names: DayNames; wide: boolean; density: Density }) {
+function DemoDays({ head, names, wide }: { head: DemoHead; names: DayNames; wide: boolean }) {
   const [today, setToday] = useState<Day>(head.today as Day);
   const tz = head.timezone;
   const change = (c: MeCard) => setToday((d) => changed(d, c));
   const decision = (c: MeCard, under: string) => (
-    <DecisionCard key={c.id} card={c} timezone={tz} density={density} onChange={change} showTime={wide} {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})} />
+    <DecisionCard key={c.id} card={c} timezone={tz} onChange={change} showTime={wide} {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})} />
   );
-  const update = (t: UpdateThread) => <UpdateRow key={t.latest.id} thread={t} timezone={tz} density={density} />;
+  const update = (t: UpdateThread) => <UpdateRow key={t.latest.id} thread={t} timezone={tz} />;
   return (
     <div className={cn('pb-6', wide ? 'px-6' : 'px-4')} style={{ ['--masthead-h' as string]: '0px' }}>
       {[today, head.tomorrow as Day].map((d) => (
-        <DaySection key={d.date} day={d} name={names[d.date] ?? d.date} wide={wide} density={density} tz={tz} decision={decision} update={update} />
+        <DaySection key={d.date} day={d} name={names[d.date] ?? d.date} wide={wide} tz={tz} decision={decision} update={update} />
       ))}
     </div>
   );
@@ -134,13 +125,12 @@ function DemoDays({ head, names, wide, density }: { head: DemoHead; names: DayNa
 
 /** A window onto the app: a hairline frame with its masthead, the content scrolling inside it. */
 function Frame({ head, dateline, wide, className, bodyClassName, children }: {
-  head: DemoHead; dateline: string; wide: boolean; className?: string; bodyClassName?: string; children: (density: Density) => ReactNode;
+  head: DemoHead; dateline: string; wide: boolean; className?: string; bodyClassName?: string; children: ReactNode;
 }) {
-  const [density, setDensity] = useState<Density>('comfortable');
   return (
     <div className={cn('flex flex-col overflow-hidden rounded-lg border bg-background text-left shadow-sm', className)} data-demo>
-      <FrameMasthead head={head} dateline={dateline} wide={wide} density={density} onDensity={setDensity} />
-      <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', bodyClassName)}>{children(density)}</div>
+      <FrameMasthead head={head} dateline={dateline} wide={wide} />
+      <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', bodyClassName)}>{children}</div>
     </div>
   );
 }
@@ -158,14 +148,14 @@ export function HeroBrief({ head, names, dateline }: { head: DemoHead; names: Da
       <div className="hidden min-[900px]:block" data-hero-layout="broadsheet">
         <div className="min-[1100px]:w-[960px] min-[1100px]:[zoom:0.6]">
           <Frame head={head} dateline={dateline} wide className="h-[640px] min-[1100px]:h-[900px]">
-            {(density) => <DemoDays head={head} names={names} wide density={density} />}
+            <DemoDays head={head} names={names} wide />
           </Frame>
         </div>
       </div>
       {/* On a phone the frame runs to the screen's edges, as the app does, so the week strip has the app's room. */}
       <div className="-mx-4 min-[560px]:mx-0 min-[900px]:hidden" data-hero-layout="timeline">
         <Frame head={head} dateline={dateline} wide={false} className="h-[640px] rounded-none border-x-0 min-[560px]:rounded-lg min-[560px]:border-x">
-          {(density) => <DemoDays head={head} names={names} wide={false} density={density} />}
+          <DemoDays head={head} names={names} wide={false} />
         </Frame>
       </div>
     </div>
@@ -192,11 +182,11 @@ export function SameCard({ head, names, dateline }: { head: DemoHead; names: Day
   const active = head.orders.filter((o) => o.exec_state === 'open' || o.exec_state === 'claimed');
   const done = head.orders.filter((o) => !(o.exec_state === 'open' || o.exec_state === 'claimed'));
   const outcome = (o: (typeof head.orders)[number]) =>
-    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest as MeCard, earlier: [] }} timezone={tz} density="comfortable" />;
+    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest as MeCard, earlier: [] }} timezone={tz} />;
   const stills = useMemo(
     () => [
-      { caption: 'Phone · timeline', width: 375, node: <Frame head={head} dateline={dateline} wide={false} className="h-[490px] rounded-none border-0">{(d) => <DemoDays head={head} names={names} wide={false} density={d} />}</Frame> },
-      { caption: 'Desktop · broadsheet', width: 1100, node: <Frame head={head} dateline={dateline} wide className="h-[1437px] rounded-none border-0">{(d) => <DemoDays head={head} names={names} wide density={d} />}</Frame> },
+      { caption: 'Phone · timeline', width: 375, node: <Frame head={head} dateline={dateline} wide={false} className="h-[490px] rounded-none border-0"><DemoDays head={head} names={names} wide={false} /></Frame> },
+      { caption: 'Desktop · broadsheet', width: 1100, node: <Frame head={head} dateline={dateline} wide className="h-[1437px] rounded-none border-0"><DemoDays head={head} names={names} wide /></Frame> },
       {
         caption: 'Orders',
         width: 560,
@@ -216,7 +206,7 @@ export function SameCard({ head, names, dateline }: { head: DemoHead; names: Day
           </div>
         ),
       },
-      { caption: 'Card detail', width: 560, node: <div className="p-4"><DecisionCard card={head.detail as MeCard} timezone={tz} density="comfortable" onChange={() => undefined} expanded /></div> },
+      { caption: 'Card detail', width: 560, node: <div className="p-4"><DecisionCard card={head.detail as MeCard} timezone={tz} onChange={() => undefined} expanded /></div> },
     ],
     [head, names, dateline, active, done, tz], // eslint-disable-line react-hooks/exhaustive-deps
   );

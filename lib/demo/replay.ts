@@ -15,7 +15,7 @@ import { composeParagraph, type ParagraphParts } from '../brief/paragraph';
 import type { MeCard } from '../me';
 import { renderCardContent, renderSource } from '../render';
 import { ownOrigin } from '../render/markdown';
-import { addDays, localDate, zonedInstant } from '../time';
+import { addDays, byTime, instant, localDate, zonedInstant } from '../time';
 import { DEMO_ROOTS, type DemoRoot } from './data';
 import { demoScenario, type DemoStep } from './scenario';
 
@@ -35,6 +35,8 @@ export interface DemoDay {
   decisions: MeCard[];
   updates: DemoThread[];
   signals: DemoThread[];
+  /** The day's cards with `at`, for its schedule (RFC 0.8 §8), `log` included. */
+  rail: MeCard[];
 }
 
 export type DemoOrder = MeCard & {
@@ -77,7 +79,7 @@ export function replay(today: string, timezone = DEMO_TIMEZONE): { cards: Map<st
   const persist = (c: Card) => {
     const stored = { ...c, change_seq: ++seq } as Card;
     cards.set(c.id, stored);
-    if (!days.has(c.id)) days.set(c.id, stored.about ?? localDate(new Date(stored.received_at), timezone));
+    if (!days.has(c.id)) days.set(c.id, stored.about ?? localDate(instant(stored.at ?? stored.received_at), timezone)); // §8
     return stored;
   };
   const at = (time: string) => iso(zonedInstant(today, time, timezone));
@@ -95,7 +97,7 @@ export function replay(today: string, timezone = DEMO_TIMEZONE): { cards: Map<st
     if (held) for (const c of applyOutcome(held, incoming, now).changed) persist(c as unknown as Card);
   };
 
-  for (const step of demoScenario(today) as DemoStep[]) {
+  for (const step of demoScenario(today, timezone) as DemoStep[]) {
     if ('put' in step) put(step.put, step.card, step.at);
     else if ('decide' in step) {
       const stored = cards.get(step.decide);
@@ -169,6 +171,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
   for (const c of all) me.set(c.id, await present(db, c, days.get(c.id)!));
   const shown = (pred: (c: MeCard) => boolean) => [...me.values()].filter(pred);
   const fromProducer = (c: MeCard) => c.producer !== 'head';
+  const rail = (day: string) => shown((c) => c.day === day && c.at !== undefined && c.state !== 'superseded').sort(byTime);
 
   // As GET /api/me/brief shows a head: every open decision, newest first; today's artifacts and signals delivered at
   // brief or immediate (a log card is only in the day view, §9), as threads.
@@ -196,6 +199,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       decisions,
       updates: todayUpdates.filter((t) => t.latest.kind === 'artifact'),
       signals: todayUpdates.filter((t) => t.latest.kind === 'signal'),
+      rail: rail(date),
     },
     tomorrow: {
       date: tomorrowDate,
@@ -204,6 +208,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       decisions: tomorrowCards.filter((c) => c.kind === 'decision'),
       updates: threads(tomorrowCards.filter((c) => c.kind === 'artifact')),
       signals: threads(tomorrowCards.filter((c) => c.kind === 'signal')),
+      rail: rail(tomorrowDate),
     },
     orders,
     detail: me.get('hermes:demo:gmail-19c3a8e05f72:reply')!,

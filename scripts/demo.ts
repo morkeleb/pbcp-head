@@ -81,14 +81,14 @@ async function seed() {
     // The scenario (lib/demo/scenario.ts), step by step, as each producer and the owner would.
     let cards = 0;
     let orders = 0;
-    for (const step of demoScenario(today)) {
+    for (const step of demoScenario(today, timezone)) {
       if ('put' in step) {
         await put(step.put, step.card);
         cards++;
       } else if ('decide' in step) {
         await http('POST', `/api/me/cards/${encodeURIComponent(step.decide)}/decision`, owner, { decision: step.decision });
       } else {
-        const order = await http('POST', '/api/me/orders', owner, step.order);
+        const order = await http('POST', '/api/me/orders', owner, { to_producer: step.order.to, title: step.order.title, body: step.order.body });
         orders++;
         const { root, steps, done } = step.work;
         const claim = await http('POST', `/api/cards/${encodeURIComponent(order.id)}/claim`, `Bearer ${tokens[root]}`, { lease_seconds: done ? 300 : 86_400 });

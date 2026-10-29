@@ -17,6 +17,10 @@ export interface MeCard {
   body: string;
   thread?: string;
   urgency?: string;
+  /** §4.2: where the card landed, `urgency` under the producer's ceiling (§9). */
+  delivery?: 'immediate' | 'brief' | 'log';
+  /** §8: ids of related cards, any producer. */
+  references?: string[];
   actions?: ActionEntry[];
   source?: { url: string; label?: string };
   state: 'open' | 'decided' | 'superseded';
@@ -53,7 +57,10 @@ export interface MeCard {
   labels?: string[];
   /** RFC 0.7 §4.1: the local day the card concerns. */
   about?: string;
-  /** §8 the card's day, from the head: `about`, else the day it was received in the head's timezone. */
+  /** RFC 0.8 §4.1: when the card's subject happens or begins, and when it ends. */
+  at?: string;
+  until?: string;
+  /** §8 the card's day, from the head: `about`, else the day of `at`, else the day it was received, in the head's timezone. */
   day?: string;
   /** On a `head:daily` card: its paragraph in parts, for the label filter. */
   paragraph?: ParagraphParts;
@@ -530,10 +537,9 @@ export function options(card: MeCard): { list: Option[]; edit: boolean; byDefaul
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
     .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
   const edit = actions.some((a) => (typeof a === 'string' ? a : a.id) === 'edit');
-  // §4.4: the default is the option marked so; on the plain string list it is `approve` (the bare approve
-  // gesture). With neither, there is no default, and no option is drawn above the others.
-  const plain = actions.every((a) => typeof a === 'string');
-  const byDefault = list.find((o) => o.isDefault) ?? (plain ? (list.find((o) => o.id === 'approve') ?? null) : null);
+  // §4.4, §4.5: the default is the option marked `default: true`, and only that one; a string entry cannot be marked, so
+  // the plain `[approve, reject]` has none. Without one there is no bare approve and no option is drawn above the others.
+  const byDefault = list.find((o) => o.isDefault) ?? null;
   return { list, edit, byDefault };
 }
 

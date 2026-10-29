@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { clock } from '../brief/DecisionCard';
 import { UpdateRow } from '../brief/UpdateRow';
-import { PageRow, useChrome, useChromeCards } from '../chrome';
+import { PageRow, useChromeCards } from '../chrome';
 import { api, cardHref, OfflineError, OFFLINE_REASON, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 
@@ -27,7 +27,6 @@ const ACTIVE = ['open', 'claimed'];
 const isActive = (o: Pick<Order, 'exec_state' | 'state'>) => ACTIVE.includes(o.exec_state) && o.state === 'open';
 
 export function OrdersView() {
-  const { density } = useChrome();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [timezone, setTimezone] = useState<string | undefined>();
   const [producers, setProducers] = useState<string[]>([]);
@@ -51,7 +50,7 @@ export function OrdersView() {
   const done = (orders ?? []).filter((o) => !isActive(o));
   const tz = timezone ?? 'UTC';
   const outcome = (o: Order) =>
-    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest, earlier: [] }} timezone={tz} density={density} />;
+    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest, earlier: [] }} timezone={tz} />;
 
   return (
     <>

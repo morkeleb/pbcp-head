@@ -90,6 +90,7 @@ describe('web brief', () => {
     await put('goalpath:report:2', { kind: 'artifact', title: 'Velocity', source: { url: 'https://reports.example/velocity' } });
     await put('goalpath:report:4', { kind: 'artifact', title: 'Same', source: { url: 'https://www.same.example/x', label: 'same.example' } });
     await put('goalpath:report:3', { kind: 'signal', title: 'Odd link', source: { url: 'javascript:alert(1)', label: 'Click me' } });
+    await page.setViewport({ width: 1280, height: 844 }); // room for the whole line; at 360 px see the next test
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
 
     const decision = (await decisionCard('Accept GP-2?'))!;
@@ -169,23 +170,32 @@ describe('web brief', () => {
     expect(errors).toEqual([]);
   });
 
-  it('lays out options with bodies as a radio group on the card, default pre-selected, and records the pick at once', async () => {
+  it('lays out options with bodies one under another, each its own control beside its body, the default the one primary; a tap records it at once', async () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const article = (await decisionCard('When should M4 ship?'))!;
-    expect(await article.$eval('[role="radio"][aria-checked="true"]', (e) => e.closest('label')!.textContent)).toContain('Ship Friday');
-    expect(await article.$eval('[role="radio"][aria-checked="true"]', (e) => e.closest('label')!.textContent)).toContain('Needs sign-off.');
-    expect(await page.$('xpath/.//button[.="Decide…"]')).toBeNull();
-    await (await article.$('xpath/.//label[contains(., "Ship next sprint")]'))!.click();
-    await (await article.$('xpath/.//button[@data-variant="default" and .="Ship next sprint"]'))!.click();
-    // In place, at once: the buttons become a state line, the card settles to 72 %, the unseen dot goes; announced.
+    // §4.5: every option a control on the row, in order, with no gesture first; the default the only primary.
+    expect(await article.$$eval('[data-options] li', (ls) => ls.map((l) => [l.querySelector('button')!.textContent, l.querySelector('button')!.getAttribute('data-variant'), l.textContent!.includes('Needs sign-off.')]))).toEqual([
+      ['Ship Friday', 'default', true], ['Ship next sprint', 'outline', false],
+    ]);
+    expect(await article.$$eval('[data-primary]', (bs) => bs.map((b) => b.textContent))).toEqual(['Ship Friday']);
+    expect(await article.$('[role="radio"]')).toBeNull();
+    expect(await article.$('xpath/.//button[contains(., "Decide") or contains(., "Choose") or contains(., "Pick")]')).toBeNull();
+    // Decided from the row, without opening the card or the rest of its body.
+    await (await article.$('xpath/.//button[.="Ship next sprint"]'))!.click();
+    // In place, at once: the controls give way to a state line (not merely disabled), the card settles, the unseen dot goes; announced.
     await article.waitForSelector('.state-line');
     expect(await article.$eval('.state-line', (e) => e.textContent)).toMatch(/^Ship next sprint · \d\d:\d\d$/);
-    await page.waitForFunction((e) => getComputedStyle(e as Element).opacity === '0.72', {}, article); // after its 150 ms fade
+    expect(await article.$('[data-options]')).toBeNull();
+    expect(await article.$('.decide-row')).toBeNull();
+    await page.waitForFunction((e) => getComputedStyle(e as Element).opacity === '0.8', {}, article); // after its 150 ms fade
     expect(await article.$('[aria-label="unseen"]')).toBeNull();
+    expect(await article.$('.more-body')).toBeNull();
+    expect(page.url()).toBe(`${headUrl()}/brief`);
     await page.waitForFunction(() => document.querySelector('[aria-live="polite"]')?.textContent?.startsWith('Ship next sprint'));
     await until(async () => (await row('goalpath:item:1:ship')).state === 'decided');
     const [log] = await testDb().select().from(decisionLog);
     expect(log).toMatchObject({ cardId: 'goalpath:item:1:ship', decision: 'ship-next' });
+    expect((await row('goalpath:item:1:ship')).seenAt).toBeNull(); // never opened
     expect(errors).toEqual([]);
   });
 
@@ -292,7 +302,9 @@ describe('the brief: lead, proposal, More', () => {
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     const buttons = async (title: string) => (await decisionCard(title))!.$$eval('.decide-row button', (bs) => bs.map((b) => [b.textContent, b.getAttribute('data-variant')]));
     expect(await buttons('Offsite on the 14th')).toEqual([['archive', 'outline'], ['keep', 'outline'], ['Dismiss', 'ghost']]); // no default: equal weight (§4.5)
-    expect(await buttons('Reply to Anna')).toEqual([['approve', 'default'], ['reject', 'outline'], ['Edit…', 'outline'], ['Dismiss', 'ghost']]);
+    // A string list marks no default (§4.4), `approve` included: no primary, and no bare approve.
+    expect(await buttons('Reply to Anna')).toEqual([['approve', 'outline'], ['reject', 'outline'], ['Edit…', 'outline'], ['Dismiss', 'ghost']]);
+    expect(await (await decisionCard('Reply to Anna'))!.$('[data-primary]')).toBeNull();
     const mail = (await decisionCard('Offsite on the 14th'))!;
     await (await mail.$('xpath/.//button[.="archive"]'))!.click();
     await mail.waitForSelector('.state-line');
@@ -340,17 +352,21 @@ describe('the brief: lead, proposal, More', () => {
       await page.touchscreen.touchEnd();
       return el;
     };
-    let reply = await swipe('Reply to Anna', 140);
-    await reply.waitForSelector('.toast');
-    expect(await reply.$eval('.toast', (t) => t.textContent)).toContain('approve: Reply to Anna re invoice timing');
-    await (await reply.$('xpath/.//div[contains(@class,"toast")]//button[.="Undo"]'))!.click();
+    // No default, no bare approve (§4.4): a right swipe on a card without one does nothing.
+    const reply = await swipe('Reply to Anna', 140);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await reply.$('.toast')).toBeNull();
+    let ship = await swipe('When should M4 ship?', 140);
+    await ship.waitForSelector('.toast');
+    expect(await ship.$eval('.toast', (t) => t.textContent)).toContain('Ship Friday: When should M4 ship?');
+    await (await ship.$('xpath/.//div[contains(@class,"toast")]//button[.="Undo"]'))!.click();
     await new Promise((r) => setTimeout(r, 4500));
-    expect((await row('hermes:gmail:anna:reply')).state).toBe('open');
-    reply = await swipe('Reply to Anna', 140);
-    await reply.waitForSelector('.toast');
-    expect((await row('hermes:gmail:anna:reply')).state).toBe('open'); // not yet
-    await until(async () => (await row('hermes:gmail:anna:reply')).decision === 'approve', 8000);
-    await reply.waitForSelector('.state-line');
+    expect((await row('goalpath:item:1:ship')).state).toBe('open');
+    ship = await swipe('When should M4 ship?', 140);
+    await ship.waitForSelector('.toast');
+    expect((await row('goalpath:item:1:ship')).state).toBe('open'); // not yet
+    await until(async () => (await row('goalpath:item:1:ship')).decision === 'ship-friday', 8000);
+    await ship.waitForSelector('.state-line');
     const mail = await swipe('Offsite on the 14th', -140);
     await mail.waitForSelector('.toast');
     expect(await mail.$eval('.toast', (t) => t.textContent)).toContain('Dismiss: Offsite on the 14th');
@@ -514,50 +530,6 @@ describe('the brief: days, week strip, layouts', () => {
     expect(await after.evaluate((e) => e.textContent)).toContain('When should M4 ship?');
   });
 
-  it('remembers Ledger density on the device: a decision folded to its title and actions, expandable', async () => {
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await (await page.$('xpath/.//button[starts-with(@aria-label, "Density")]'))!.click();
-    await (await page.waitForSelector('xpath/.//*[@role="menuitemradio" and contains(., "Ledger")]'))!.click();
-    await page.reload({ waitUntil: 'networkidle0' });
-    const article = (await decisionCard('When should M4 ship?'))!;
-    expect(await article.$('.lead')).toBeNull(); // folded
-    await (await article.$('button[aria-expanded="false"]'))!.click();
-    await article.waitForSelector('.lead');
-  });
-
-  it('ledger on a phone: the title whole on its own line, the actions on the next, choice lists inline with no "Choose…"', async () => {
-    const long = 'Approve the revised Q4 budget for the platform team, including the two new contractor positions';
-    const goalpath = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'goalpath' })}`;
-    await call('PUT', cardPath('goalpath:item:9:budget'), { auth: goalpath, body: card('goalpath:item:9:budget', { title: long }) });
-    await page.setViewport({ width: 360, height: 780 });
-    await page.goto(`${headUrl()}/signin`);
-    await page.evaluate(() => localStorage.setItem('pbcp.density', 'ledger'));
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-
-    const budget = (await decisionCard('Approve the revised Q4 budget'))!;
-    const layout = await budget.evaluate((e) => {
-      const title = e.querySelector('.ledger-title')!;
-      const text = [...title.querySelectorAll('span')].find((s) => s.textContent?.startsWith('Approve'))!;
-      const row = e.querySelector('.decide-row')!.getBoundingClientRect();
-      return {
-        shown: text.textContent,
-        clipped: text.scrollWidth > text.clientWidth + 1 || getComputedStyle(text).textOverflow === 'ellipsis' || !!title.querySelector('.truncate'),
-        below: row.top >= title.getBoundingClientRect().bottom - 1,
-      };
-    });
-    expect(layout).toEqual({ shown: long, clipped: false, below: true });
-
-    // A choice list with option bodies: its options inline, the default filled, no "Choose…" in front of them (§4.5).
-    const ship = (await decisionCard('When should M4 ship?'))!;
-    expect(await ship.$$eval('.decide-row button', (bs) => bs.map((b) => [b.textContent, b.getAttribute('data-variant')]))).toEqual([
-      ['Ship Friday', 'default'], ['Ship next sprint', 'outline'], ['Dismiss', 'ghost'],
-    ]);
-    expect(await ship.$('xpath/.//button[contains(., "Choose")]')).toBeNull();
-    await (await ship.$('xpath/.//button[.="Ship next sprint"]'))!.click();
-    await until(async () => (await row('goalpath:item:1:ship')).decision === 'ship-next');
-    expect(errors).toEqual([]);
-  });
-
   it('shows the swipe hint once per device, and takes it down after a few seconds', async () => {
     await page.goto(`${headUrl()}/signin`);
     await page.evaluate(() => localStorage.removeItem('pbcp.swipe-hint'));
@@ -585,6 +557,103 @@ describe('the brief: days, week strip, layouts', () => {
   });
 });
 
+describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
+  const owner = () => `Session ${session.access_token}`;
+  /** Today's local date (the test head and browser are on UTC) at HH:MM, as a §2 timestamp. */
+  const todayAt = (hhmm: string) => `${new Date().toISOString().slice(0, 10)}T${hhmm}:00Z`;
+  const put = async (root: string, id: string, extra: Record<string, unknown>) => {
+    const auth = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root, ceiling: 'immediate' })}`;
+    expect((await call('PUT', cardPath(id), { auth, body: card(id, { producer: root, ...extra }) })).status).toBeLessThan(300);
+  };
+  const today = () => `section[data-section]:has([data-day="${new Date().toISOString().slice(0, 10)}"])`;
+
+  it('shows a decision with `at` once, on its row with its controls, and once on the schedule as a marker that links to it', async () => {
+    await put('cal', 'cal:work:review', { title: 'Move the design review?', summary: 'It clashes with the offsite call.', at: todayAt('15:00'), until: todayAt('15:30'), actions: [{ id: 'move', label: 'Move it', default: true }, { id: 'keep', label: 'Keep it' }] });
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-schedule] [data-marker="cal:work:review"]`);
+    expect(await page.$$eval('article[data-card="cal:work:review"]', (as) => as.length)).toBe(1);
+    expect(await page.$eval('article[data-card="cal:work:review"] [data-card-time]', (t) => t.textContent)).toBe('15:00–15:30');
+    const marker = (await page.$('[data-marker="cal:work:review"]'))!;
+    expect(await marker.evaluate((a) => a.getAttribute('href'))).toBe('#brief-cal:work:review');
+    expect(await marker.evaluate((a) => a.textContent)).toBe('15:00–15:30calMove the design review?');
+    expect(await page.$$eval('[data-schedule] button, [data-schedule] article', (es) => es.length)).toBe(0);
+    expect(await page.$eval('[data-schedule]', (d) => d.textContent)).not.toContain('It clashes with the offsite call.');
+    await marker.click();
+    await page.waitForFunction(() => document.activeElement?.id === 'brief-cal:work:review');
+    expect(errors).toEqual([]);
+  });
+
+  it('lays the day’s timed cards on the schedule: every producer, log included, a bar to `until`, a point without, coloured by producer', async () => {
+    await put('cal', 'cal:work:long', { kind: 'artifact', urgency: 'log', title: 'Workshop', at: todayAt('10:00'), until: todayAt('12:00') });
+    await put('cal', 'cal:work:short', { kind: 'artifact', urgency: 'log', title: 'Call', at: todayAt('14:00'), until: todayAt('14:30') });
+    await put('todoist', 'todoist:task:due', { kind: 'signal', title: 'Invoice due', at: todayAt('17:00') });
+    await put('todoist', 'todoist:task:untimed', { kind: 'signal', title: 'No time on this one' });
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-rail-entry="todoist:task:due"]`);
+    const rail = await page.$$eval(`${today()} [data-rail-entry]`, (es) => es.map((e) => {
+      const bar = e.querySelector(':scope > span[aria-hidden]') as HTMLElement;
+      return { id: e.getAttribute('data-rail-entry'), span: e.hasAttribute('data-span'), height: Math.round(bar.getBoundingClientRect().height), colour: getComputedStyle(bar).backgroundColor };
+    }));
+    expect(rail.map((e) => e.id)).toEqual(['cal:work:long', 'cal:work:short', 'todoist:task:due']); // by `at`; none without one
+    expect(rail[0]!.height).toBe(rail[1]!.height * 4); // two hours against half an hour
+    expect(rail[2]!.span).toBe(false); // a point
+    expect(rail[0]!.colour).toBe(rail[1]!.colour);
+    expect(rail[0]!.colour).not.toBe(rail[2]!.colour);
+    expect(await page.$$eval(`${today()} [data-legend] [data-legend-producer]`, (ls) => ls.map((l) => l.getAttribute('data-legend-producer')))).toEqual(['cal', 'todoist']);
+    // The log card has no row of its own (§9): its entry links to its page; the signal's to its row.
+    expect(await page.$('article[data-card="cal:work:long"]')).toBeNull();
+    expect(await page.$eval('[data-rail-entry="cal:work:long"] a', (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent('cal:work:long')}`);
+    expect(await page.$('[data-marker="todoist:task:due"]')).not.toBeNull();
+  });
+
+  it('puts the schedule above the updates and signals: in the right column on a wide screen, after the decisions on a phone', async () => {
+    await put('cal', 'cal:work:standup', { kind: 'artifact', urgency: 'log', title: 'Standup', at: todayAt('09:15'), until: todayAt('09:30') });
+    const order = () => page.$eval(today(), (s) => {
+      const box = (sel: string) => s.querySelector(sel)!.getBoundingClientRect();
+      const d = box('article[data-kind="decision"]');
+      const r = box('[data-schedule]');
+      const u = box('article.update-row');
+      return { scheduleAboveUpdates: r.bottom <= u.top, besideDecisions: r.left >= d.right, belowDecisions: r.top >= d.bottom };
+    });
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-rail-entry="cal:work:standup"]`);
+    expect(await order()).toEqual({ scheduleAboveUpdates: true, besideDecisions: true, belowDecisions: false });
+    await page.setViewport({ width: 390, height: 844 });
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-rail-entry="cal:work:standup"]`);
+    expect(await order()).toEqual({ scheduleAboveUpdates: true, besideDecisions: false, belowDecisions: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  });
+
+  it('shows what a card wants, its producer, labels and time, and never the names of the kinds', async () => {
+    await put('hermes', 'hermes:x:labelled', { title: 'Labelled', summary: 'Two labels.', labels: ['alpha', 'zeta'] });
+    await page.setViewport({ width: 1280, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const metas = await page.$$eval('[data-meta]', (ms) => ms.map((m) => m.textContent ?? ''));
+    expect(metas.length).toBeGreaterThan(2);
+    for (const m of metas) expect(m).not.toMatch(/decision|signal|artifact/i);
+    expect(metas.find((m) => m.startsWith('hermes'))).toMatch(/^hermes·alpha · zeta·\d\d:\d\d·decide$/);
+    expect(await page.$eval('article[data-card="goalpath:report:1"] [data-wants]', (w) => w.textContent)).toBe('acknowledge');
+  });
+
+  it('pairs a decided card with the later card that references it: "Approved · 08:02 · Sent: … 08:11"', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await call('POST', '/api/test', { body: { clock: `${yesterday}T08:00:00Z` } });
+    await put('hermes', 'hermes:gmail:anna', { title: 'Reply to Anna', thread: 'anna' });
+    await call('POST', '/api/test', { body: { clock: `${yesterday}T08:02:00Z` } });
+    expect((await call('POST', `/api/me/cards/${encodeURIComponent('hermes:gmail:anna')}/decision`, { auth: owner(), body: { decision: 'approve' } })).status).toBe(200);
+    await call('POST', '/api/test', { body: { clock: `${yesterday}T08:11:00Z` } });
+    await put('hermes', 'hermes:gmail:anna:sent', { kind: 'artifact', urgency: 'log', thread: 'anna', references: ['hermes:gmail:anna'], title: 'Sent: Re: invoice timing' });
+    await call('POST', '/api/test', { body: { clock: null } });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('article[data-card="hermes:gmail:anna"] [data-paired]');
+    expect(await page.$eval('article[data-card="hermes:gmail:anna"] .state-line', (s) => s.textContent)).toBe('Approved · 08:02 · Sent: Re: invoice timing 08:11');
+  });
+});
+
 describe('labels and a card’s day (RFC 0.7)', () => {
   async function seed() {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', ceiling: 'immediate' })}`;
@@ -597,14 +666,11 @@ describe('labels and a card’s day (RFC 0.7)', () => {
   const titles = (sel: string) => page.$$eval(sel, (as) => as.map((a) => a.querySelector('h3, h4')?.textContent?.trim() ?? ''));
   const today = () => page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]');
 
-  it('shows labels on the card header in the producer’s order, the ledger the first only', async () => {
+  it('shows labels on the card header in the producer’s order', async () => {
     await seed();
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.textContent)).toBe('alpha · zeta');
     expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.parentElement!.textContent)).toMatch(/^hermes·alpha · zeta/i);
-    await page.evaluate(() => localStorage.setItem('pbcp.density', 'ledger'));
-    await page.reload({ waitUntil: 'networkidle0' });
-    expect(await page.$eval('article[data-card="hermes:x:alpha-d"] [data-labels]', (l) => l.textContent)).toBe(' · alpha');
   });
 
   it('filters by label: decisions, updates, signals and the daily paragraph all narrow; remembered on the device; cleared', async () => {
@@ -658,7 +724,7 @@ describe('labels and a card’s day (RFC 0.7)', () => {
     expect(errors).toEqual([]);
   });
 
-  it('puts the label filter right of the density toggle in the masthead, as an icon on a phone, and not at all with no labels', async () => {
+  it('puts the label filter first among the masthead’s tools, as an icon on a phone, and not at all with no labels', async () => {
     await page.setViewport({ width: 1280, height: 844 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-day]');
@@ -667,17 +733,16 @@ describe('labels and a card’s day (RFC 0.7)', () => {
     await page.reload({ waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-masthead-page-tools] [data-label-filter]');
     const place = await page.evaluate(() => {
-      const density = document.querySelector('[data-masthead] [role="tablist"]')!.getBoundingClientRect();
       const filter = document.querySelector('[data-label-filter]')!.getBoundingClientRect();
       const search = document.querySelector('[data-masthead] button[aria-label="Search"]')!.getBoundingClientRect();
       const button = document.querySelector('[data-label-filter] button')!.getBoundingClientRect();
       return {
-        afterDensity: filter.left >= density.right, beforeSearch: filter.right <= search.left, sameLine: Math.abs((filter.top + filter.bottom) / 2 - (density.top + density.bottom) / 2) < 4, inRow: !!document.querySelector('[data-masthead-row] [data-label-filter]'),
-        // The density toggle is the label filter's size: both the masthead's small controls.
-        sameHeight: Math.round(density.height) === Math.round(button.height),
+        beforeSearch: filter.right <= search.left, sameLine: Math.abs((filter.top + filter.bottom) / 2 - (search.top + search.bottom) / 2) < 4, inRow: !!document.querySelector('[data-masthead-row] [data-label-filter]'),
+        // The masthead's small control size: 24 px tall.
+        small: Math.round(button.height) === 24,
       };
     });
-    expect(place).toEqual({ afterDensity: true, beforeSearch: true, sameLine: true, inRow: false, sameHeight: true });
+    expect(place).toEqual({ beforeSearch: true, sameLine: true, inRow: false, small: true });
     await page.setViewport({ width: 360, height: 800, isMobile: true, hasTouch: true });
     await page.reload({ waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-label-filter] button[aria-label="Filter by label"]');
@@ -1146,7 +1211,7 @@ describe('settings', () => {
     expect(links).toEqual([
       ['/settings/producers', ['Producers', 'Tokens, pairing codes and ceilings.']],
       ['/settings/devices', ['Devices', 'Where you’re signed in, notifications, and assistants.']],
-      ['/settings/preferences', ['Preferences', 'Density, theme and timezone.']],
+      ['/settings/preferences', ['Preferences', 'Theme and timezone.']],
       ['/settings/invites', ['Invite requests', 'Who asked for an invite at the front door.']],
     ]);
     expect(await page.$eval('[data-connect-link] a', (a) => a.getAttribute('href'))).toBe('/connect#head');
@@ -1162,7 +1227,7 @@ describe('settings', () => {
     const pages: Array<[string, string, string[]]> = [
       ['/settings/producers', 'Producers', ['[data-producer-tokens], [data-new-producer]', '[data-new-producer] input', '[data-pairing] button', '[data-label-ceilings-title]']],
       ['/settings/devices', 'Devices', ['[data-devices]', '[data-this-device]', '[data-notifications]', 'xpath/.//button[.="Enrol another device"]', '[data-connect-assistant] [data-value="mcp"]']],
-      ['/settings/preferences', 'Preferences', ['select[aria-label="Density"]', 'select[aria-label="Theme"]', 'input[aria-label="Timezone override"]']],
+      ['/settings/preferences', 'Preferences', ['select[aria-label="Theme"]', 'input[aria-label="Timezone override"]']],
       ['/settings/invites', 'Invite requests', ['[data-section-settings="invites"]']],
     ];
     for (const [path, title, controls] of pages) {

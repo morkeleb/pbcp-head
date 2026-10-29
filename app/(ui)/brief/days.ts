@@ -5,6 +5,7 @@
 import type { MeCard } from '../components';
 import { hasParagraph } from '../../../lib/brief/fold-version';
 import type { ParagraphParts } from '../../../lib/brief/paragraph';
+import { byTime } from '../../../lib/time';
 import type { UpdateThread } from './UpdateRow';
 
 export interface BriefResponse {
@@ -34,6 +35,8 @@ export interface Day {
   signals: UpdateThread[];
   /** An earlier day the person jumped to on which nothing arrived: shown, with a line saying so. */
   nothing?: boolean;
+  /** The day's cards with `at`, for its rail (RFC 0.8 §8); undefined until they are loaded. */
+  rail?: MeCard[];
 }
 
 /** Earlier days are fetched this many at a time. */
@@ -55,6 +58,35 @@ export function threads(cards: MeCard[]): UpdateThread[] {
   return [...groups.values()]
     .map((cs) => ({ latest: cs.at(-1)!, earlier: cs.slice(0, -1).map(({ id, title, received_at, acknowledged_at }) => ({ id, title, received_at, ...(acknowledged_at ? { acknowledged_at } : {}) })) }))
     .sort((a, b) => b.latest.change_seq - a.latest.change_seq);
+}
+
+/** "Fri 31 Oct". */
+export const shortDay = (date: string) => {
+  const parts = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${date}T00:00:00Z`));
+  const part = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${part('weekday')} ${part('day')} ${part('month')}`;
+};
+
+/** The rail's cards: the day's cards that carry `at`, from every producer, `log` included, in the day's order (§8). */
+export const railCards = (cards: MeCard[]): MeCard[] => cards.filter((c) => c.at !== undefined && c.state !== 'superseded').sort(byTime);
+
+/** The element id of a card's row on the brief, which the rail's markers link to. */
+export const rowId = (id: string) => `brief-${id}`;
+
+/** Where each card of a day is presented (§4.5): a decision on its own row, a thread's cards on the thread's row. */
+export function anchors(day: Day): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const c of day.decisions) out.set(c.id, rowId(c.id));
+  for (const t of [...day.updates, ...day.signals]) for (const id of [t.latest.id, ...t.earlier.map((e) => e.id)]) out.set(id, rowId(t.latest.id));
+  return out;
+}
+
+/** The later cards that reference each card (§8: a decided card paired with what came of it), from what is loaded. */
+export function referencedBy(cards: Iterable<MeCard>): Map<string, MeCard[]> {
+  const out = new Map<string, MeCard[]>();
+  for (const c of cards) for (const ref of c.references ?? []) out.set(ref, [...(out.get(ref) ?? []), c]);
+  for (const list of out.values()) list.sort((a, b) => a.received_at.localeCompare(b.received_at));
+  return out;
 }
 
 /** The local day, YYYY-MM-DD, of an instant in the head's timezone. */
@@ -86,6 +118,7 @@ export function pastOf(date: string, cards: MeCard[]): Day {
     decisions: cards.filter((c) => c.kind === 'decision' && c.state !== 'open'),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head'))),
     ...(cards.length === 0 ? { nothing: true } : {}),
+    rail: railCards(cards),
   };
 }
 

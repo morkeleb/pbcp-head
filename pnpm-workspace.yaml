@@ -1,5 +1,5 @@
 # @pbcp/core and @pbcp/client come from the morkeleb/pbcp submodule at vendor/pbcp, pinned to
-# the commit CLAUDE.md names (5583c95 at the time of writing). They are workspace packages here so that @pbcp/client's own
+# the commit CLAUDE.md names (d9b9c1f at the time of writing). They are workspace packages here so that @pbcp/client's own
 # `workspace:*` dependency on @pbcp/core resolves; `pnpm install` builds their dist via `prepare`.
 # When the packages are on npm, drop these entries and depend on the published versions.
 packages:

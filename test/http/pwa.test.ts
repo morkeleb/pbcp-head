@@ -250,17 +250,17 @@ describe('offline', () => {
     await page.waitForFunction(() => document.body.innerText.includes('When should M4 ship?'));
 
     // Offline: the controls are disabled and say why.
-    const controls = await page.$$eval('.decide-row button', (bs) => bs.map((b) => ({ text: b.textContent, disabled: (b as HTMLButtonElement).disabled })));
+    const controls = await page.$$eval('.decide-row button, [data-options] button', (bs) => bs.map((b) => ({ text: b.textContent, disabled: (b as HTMLButtonElement).disabled })));
     expect(controls.length).toBeGreaterThan(0);
     expect(controls.every((c) => c.disabled)).toBe(true);
     expect(await page.$eval('.offline', (e) => e.textContent)).toContain('nothing is saved to send later');
-    await page.click('.decide-row button[data-variant="default"]').catch(() => undefined);
+    await page.click('.decide-row button[data-action="approve"]').catch(() => undefined);
     await page.click('.decide-row button[data-variant="ghost"]').catch(() => undefined); // Dismiss too
     expect(await page.$('.state-line')).toBeNull();
 
     // Back online, nothing goes out on its own: there is no queue to send it from.
     await setOffline(false, worker);
-    await page.waitForFunction(() => !(document.querySelector('.decide-row button[data-variant="default"]') as HTMLButtonElement).disabled);
+    await page.waitForFunction(() => !(document.querySelector('.decide-row button[data-action="approve"]') as HTMLButtonElement).disabled);
     await wait(5000);
     expect((await row(DECISION)).state).toBe('open');
     expect(await testDb().select().from(decisionLog)).toEqual([]);
