@@ -1,17 +1,17 @@
 'use client';
 
-// The masthead every (ui) route shares (app/(ui)/layout.tsx): the name in the serif, the dateline, the density toggle,
-// search, theme and the menu, in the same places on every route. Under the name sits one row that is the page's own:
+// The masthead every (ui) route shares (app/(ui)/layout.tsx): the name in the serif, the dateline, search, theme and
+// the menu, in the same places on every route. Under the name sits one row that is the page's own:
 // the week strip on the brief; "← Brief" and the page's title everywhere else. The row has one height on every route, so
 // nothing in the masthead moves between them. A page fills its row through `MastheadRow` (a portal) and tells search
 // which cards it has on screen through `useChromeCards`.
 //
 //   phone                                        broadsheet (≥ 900 px)
-//   Brief                    [Density] ⌕ ☾ ☰     Brief                  [row: strip, or ← Brief  Title]   [Density] ⌕ ☾ ☰
+//   Brief                              ⌕ ☾ ☰     Brief                  [row: strip, or ← Brief  Title]             ⌕ ☾ ☰
 //   Tue 27 Oct · morning                         Tue 27 Oct · morning
 //   [row: strip, or ← Brief  Title]
 
-import { ChevronDown, Menu, Moon, Search, Sun } from 'lucide-react';
+import { Menu, Moon, Search, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,26 +20,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import type { Density } from './brief/DecisionCard';
 import { dateline, NAME } from '../../lib/masthead';
 import { api, cardHref, loadTokens, saveTokens } from './client';
 import { AsOf, useDark, type MeCard } from './components';
 
-const DENSITY_KEY = 'pbcp.density';
 const THEME_KEY = 'pbcp.theme';
 const WIDE = '(min-width: 900px)';
 
 
 interface Chrome {
-  density: Density;
-  setDensity: (d: Density) => void;
-  /** The broadsheet layout (≥ 900 px); null until known on the client. */
+  /** A wide screen (≥ 900 px): the masthead on one line, keys on the brief; null until known on the client. */
   wide: boolean | null;
   row: HTMLElement | null;
-  /** The page's own tool beside the density control (the brief's label filter); empty elsewhere. */
-  pageTools: HTMLElement | null;
   setCards: (cards: MeCard[]) => void;
   setAsOf: (asOf: { at: string | null; timezone?: string }) => void;
 }
@@ -71,12 +64,6 @@ export function MastheadRow({ children }: { children: ReactNode }) {
   return row ? createPortal(children, row) : null;
 }
 
-/** Puts the page's own tool into the masthead, right of the density control (the brief's label filter). */
-export function MastheadTools({ children }: { children: ReactNode }) {
-  const { pageTools } = useChrome();
-  return pageTools ? createPortal(children, pageTools) : null;
-}
-
 /** "← Brief" (or `back`, a settings page's "← Settings") and the page's own title: the row of every route but the brief. */
 export function PageRow({ title, back = { href: '/brief', label: 'Brief' } }: { title: string; back?: { href: string; label: string } }) {
   return (
@@ -87,26 +74,6 @@ export function PageRow({ title, back = { href: '/brief', label: 'Brief' } }: { 
       </div>
     </MastheadRow>
   );
-}
-
-function useDensityState(): [Density, (d: Density) => void] {
-  const [density, setDensity] = useState<Density>('comfortable');
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(DENSITY_KEY) === 'ledger') setDensity('ledger');
-    } catch {
-      // storage unavailable: comfortable
-    }
-  }, []);
-  const set = (d: Density) => {
-    setDensity(d);
-    try {
-      localStorage.setItem(DENSITY_KEY, d);
-    } catch {
-      // the choice lasts as long as the page
-    }
-  };
-  return [density, set];
 }
 
 function useWide(): boolean | null {
@@ -134,17 +101,14 @@ function useDateline(): string | null {
 }
 
 export function ChromeProvider({ children }: { children: ReactNode }) {
-  const [density, setDensity] = useDensityState();
   const wide = useWide();
   const [row, setRow] = useState<HTMLElement | null>(null);
-  const [pageTools, setPageTools] = useState<HTMLElement | null>(null);
   const [cards, setCards] = useState<MeCard[]>([]);
   const [asOf, setAsOf] = useState<{ at: string | null; timezone?: string }>({ at: null });
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- setDensity is stable in effect (it only sets state and storage)
-  const value = useMemo<Chrome>(() => ({ density, setDensity, wide, row, pageTools, setCards, setAsOf }), [density, wide, row, pageTools]);
+  const value = useMemo<Chrome>(() => ({ wide, row, setCards, setAsOf }), [wide, row]);
   return (
     <ChromeContext.Provider value={value}>
-      <Masthead density={density} onDensity={setDensity} wide={wide} cards={cards} asOf={asOf} rowRef={setRow} pageToolsRef={setPageTools} />
+      <Masthead wide={wide} cards={cards} asOf={asOf} rowRef={setRow} />
       {children}
     </ChromeContext.Provider>
   );
@@ -283,46 +247,17 @@ function PagesMenu() {
 }
 
 interface MastheadProps {
-  density: Density;
-  onDensity: (d: Density) => void;
   wide: boolean | null;
   cards: MeCard[];
   asOf: { at: string | null; timezone?: string };
   rowRef: (el: HTMLElement | null) => void;
-  pageToolsRef: (el: HTMLElement | null) => void;
 }
 
-function Masthead({ density, onDensity, wide, cards, asOf, rowRef, pageToolsRef }: MastheadProps) {
+function Masthead({ wide, cards, asOf, rowRef }: MastheadProps) {
   const date = useDateline();
-  const label = { comfortable: 'Comfortable', ledger: 'Ledger' } as const;
   // `data-masthead-shared`: the parts that are the same on every route (the UI tests compare them).
   const tools = (
     <div className="flex items-center gap-1" data-masthead-shared="tools">
-      {wide ? (
-        <Tabs value={density} onValueChange={(v) => onDensity(v as Density)}>
-          {/* The size of the masthead's small buttons (the label filter's): 24 px tall, 12 px text. */}
-          <TabsList className="h-6 p-0.5 group-data-[orientation=horizontal]/tabs:h-6">
-            <TabsTrigger value="comfortable" className="px-2 py-0 text-xs">Comfortable</TabsTrigger>
-            <TabsTrigger value="ledger" className="px-2 py-0 text-xs">Ledger</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="xs" aria-label={`Density: ${label[density]}`}>
-              {label[density]} <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup value={density} onValueChange={(v) => onDensity(v as Density)}>
-              <DropdownMenuRadioItem value="comfortable">Comfortable</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="ledger">Ledger</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-      {/* The page's own tool, if it has one (MastheadTools); takes no room when empty. */}
-      <span ref={pageToolsRef} className="contents" data-masthead-page-tools />
       <SearchDialog cards={cards} />
       <ThemeMenu />
       <PagesMenu />

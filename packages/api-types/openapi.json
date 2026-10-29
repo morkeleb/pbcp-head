@@ -3655,11 +3655,12 @@
             "items": {
               "$ref": "#/components/schemas/Fold"
             },
-            "description": "Today’s artifacts and signals, folded by thread; immediate first"
+            "description": "Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8)"
           },
           "snoozed": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "How many open decisions are snoozed: counted, never listed (§8)"
           },
           "late_outcomes": {
             "type": "array",

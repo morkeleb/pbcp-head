@@ -1,17 +1,16 @@
 'use client';
 
-// The brief's data for both layouts: today (GET /api/me/brief), earlier days loaded a week at a time as the person
-// scrolls up (GET /api/me/cards?from=&to=), as far back as the head has cards (§8: every card stays reachable), and
-// tomorrow (from the brief). Days are shaped once here, the same for the timeline and
-// the broadsheet: the day's paragraph, its decisions, its updates (artifacts) and signals as threads.
+// The brief page's data: today's brief (GET /api/me/brief) and the selected day's cards (GET /api/me/cards?date=, every
+// page), from which days.ts shapes the brief column and the day view's rail. Today's column is the live brief; any
+// other day's is that day's cards. Cards the person decided or acknowledged here stay where they were, showing their
+// new state, when the brief is loaded again (§4.5: the row confirms in place); the next visit no longer lists them.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
+import { dayColumn, isUpdate, railCards, referencedBy, threads, todayColumn, type BriefColumn, type BriefResponse } from './days';
 
-import { addDays, localDay, pastOf, todayOf, tomorrowOf, WEEK, type BriefResponse, type Day } from './days';
-
-export { addDays, type BriefResponse, type Day };
+export { type BriefResponse };
 
 /** How often an open brief asks whether it changed, and the least time between two asks (focus and visibility fire together). */
 const LIVE_EVERY_MS = 60_000;
@@ -21,14 +20,13 @@ export function useBrief() {
   const [brief, setBrief] = useState<BriefResponse | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [past, setPast] = useState<Map<string, MeCard[]>>(new Map());
-  // Earlier days are loaded without gaps from today back to `from`; `before` is the latest day before that with a
-  // card (null: the head has none earlier, the timeline has reached its start).
-  const [reach, setReach] = useState<{ from: string | null; before: string | null | undefined }>({ from: null, before: undefined });
-  const reachRef = useRef(reach);
-  reachRef.current = reach;
-  const loading = useRef<Promise<boolean> | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [days, setDays] = useState<Map<string, MeCard[]>>(new Map());
+  // Cards changed on this page (decided, acknowledged): kept in place, in their new state, through a reload.
+  const [settled, setSettled] = useState<Map<string, MeCard>>(new Map());
   const seq = useRef<number | null>(null);
+  const today = brief?.date ?? null;
+  const date = selected ?? today;
 
   const load = useCallback(async (network = false, quiet = false) => {
     const r = await api<BriefResponse>('/api/me/brief', { network });
@@ -47,24 +45,42 @@ export function useBrief() {
   const stale = useCallback(() => void load(true), [load]);
   useFresh('/api/me/brief', fresh, stale);
 
-  // Live: whatever the device's notification settings, the brief looks for changes when the app comes back to the
+  /** Every card of a day, all pages, in the day's order (the head sorts one day's page by §8). */
+  const loadDay = useCallback(async (day: string, network = false) => {
+    const cards: MeCard[] = [];
+    for (let after: number | null = 0; after !== null; ) {
+      const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?date=${day}&limit=200${after ? `&after=${after}` : ''}`, { network });
+      if (r.status !== 200) return;
+      cards.push(...r.body.cards);
+      after = r.body.next;
+    }
+    setDays((m) => new Map(m).set(day, cards));
+  }, []);
+  useEffect(() => {
+    if (date && !days.has(date)) void loadDay(date);
+  }, [date, days, loadDay]);
+
+  // Live: whatever the device's notification settings, the page looks for changes when the app comes back to the
   // foreground and once a minute while it is on screen, and at once when a push arrives (the service worker says so;
   // only a device with notifications on gets pushes). It asks the head's change counter and date (GET /api/me/seq), and
-  // loads the brief again only when one has moved: what is on screen (scroll, open cards, the label filter) stays.
-  const current = useRef<BriefResponse | null>(null);
-  current.current = brief;
+  // loads the brief and the day on screen again only when one has moved.
+  const current = useRef<{ brief: BriefResponse | null; date: string | null }>({ brief: null, date: null });
+  current.current = { brief, date };
   useEffect(() => {
     let last = 0;
     let busy = false;
     const check = async (now = false) => {
-      if (document.visibilityState !== 'visible' || busy || !current.current) return;
+      const { brief: b, date: d } = current.current;
+      if (document.visibilityState !== 'visible' || busy || !b) return;
       if (!now && Date.now() - last < LIVE_MIN_GAP_MS) return;
       last = Date.now();
       busy = true;
       try {
         const r = await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
-        const b = current.current;
-        if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) await load(true, true);
+        if (r.status === 200 && (r.body.seq !== b.seq || r.body.date !== b.date)) {
+          setDays(new Map()); // every day loads afresh when it is shown again
+          await Promise.all([load(true, true), d ? loadDay(d, true) : undefined]);
+        }
       } catch {
         // offline, or signed out: the next check tries again
       } finally {
@@ -83,7 +99,7 @@ export function useBrief() {
       navigator.serviceWorker?.removeEventListener('message', onMessage);
       clearInterval(timer);
     };
-  }, [load]);
+  }, [load, loadDay]);
 
   // Leaving the brief advances the global last-visit cursor to what was on screen (mobile PRD: on close).
   useEffect(() => {
@@ -103,92 +119,97 @@ export function useBrief() {
     };
   }, []);
 
-  /**
-   * Loads earlier days: with `date`, every day from it up to those already loaded (a day jumped to is shown even if
-   * nothing came that day); without, the next week back that has cards. Resolves when they are in; false when nothing
-   * was loaded (at the start, a scroll's load already running, or the request failed).
-   */
-  const loadEarlier = useCallback(
-    async (date?: string): Promise<boolean> => {
-      const today = brief?.date;
-      const tz = brief?.timezone;
-      if (!today || !tz) return false;
-      // One load at a time: a scroll's load already running is the same load again; a jump waits for it, then goes.
-      if (loading.current) {
-        if (!date) return false;
-        await loading.current;
-      }
-      const { from: loadedFrom, before } = reachRef.current;
-      const to = addDays(loadedFrom ?? today, -1);
-      // Scrolling: the week ending at the latest day with cards (yesterday on the first load). Jumping: back to `date`.
-      if (date && date > to) {
-        // Already loaded: a day with nothing on it is not on the timeline until the person asks for it.
-        setPast((p) => (date >= today || p.has(date) ? p : new Map(p).set(date, [])));
-        return true;
-      }
-      const end = date ? to : before === undefined ? to : before;
-      if (end === null) return false;
-      const from = date ?? addDays(end, -(WEEK - 1));
-      const load = (async () => {
-        const cards: MeCard[] = [];
-        let earlier: string | null = null;
-        for (let after: number | null = 0; after !== null; ) {
-          const r: { status: number; body: { cards: MeCard[]; next: number | null; before?: string | null } } = await api(
-            `/api/me/cards?from=${from}&to=${to}&limit=200${after ? `&after=${after}` : ''}`,
-          );
-          if (r.status !== 200) return false;
-          cards.push(...r.body.cards);
-          earlier = r.body.before ?? null;
-          after = r.body.next;
-        }
-        setPast((p) => {
-          const next = new Map(p);
-          for (const c of cards) {
-            const day = c.day ?? localDay(c.received_at, tz); // §8: the head's day for the card
-            next.set(day, [...(next.get(day) ?? []), c]);
-          }
-          if (date && !next.has(date)) next.set(date, []); // a day jumped to is shown even when nothing came that day
-          return next;
-        });
-        const next = { from, before: earlier };
-        reachRef.current = next; // the next load starts from here even before React re-renders
-        setReach(next);
-        return true;
-      })();
-      loading.current = load;
-      try {
-        return await load;
-      } finally {
-        loading.current = null;
-      }
-    },
-    [brief?.date, brief?.timezone],
-  );
-
-  /** A card changed on screen (decided, seen, snoozed, or rolled back): the same card everywhere it is shown. */
+  /** A card changed on screen (decided, seen, snoozed, acknowledged, or rolled back): the same card everywhere it is shown. */
   const change = useCallback((c: MeCard) => {
+    const hidden = !!c.snoozed_until && c.snoozed_until > new Date().toISOString();
     setBrief((b) => {
       if (!b) return b;
-      const hidden = !!c.snoozed_until && c.snoozed_until > new Date().toISOString();
+      const was = b.decisions.some((d) => d.id === c.id);
       const decisions = hidden ? b.decisions.filter((d) => d.id !== c.id) : b.decisions.map((d) => (d.id === c.id ? c : d));
-      const intoTomorrow = hidden && c.snoozed_until!.slice(0, 10) <= b.tomorrow.date && !b.tomorrow.cards.some((t) => t.id === c.id);
-      const tomorrowCards = intoTomorrow ? [...b.tomorrow.cards, c] : b.tomorrow.cards.map((t) => (t.id === c.id ? c : t));
-      return { ...b, decisions, tomorrow: { ...b.tomorrow, cards: tomorrowCards } };
+      // A decision snoozed here leaves the list and joins the count (§8).
+      return { ...b, decisions, snoozed: b.snoozed + (hidden && was && c.kind === 'decision' ? 1 : 0), threads: b.threads.map((t) => swapThread(t, c)) };
     });
-    setPast((p) => {
+    setDays((m) => {
       let touched = false;
-      const next = new Map(p);
-      for (const [date, cards] of p) {
-        if (cards.some((x) => x.id === c.id)) {
-          next.set(date, cards.map((x) => (x.id === c.id ? c : x)));
-          touched = true;
-        }
+      const next = new Map(m);
+      for (const [day, cards] of m) {
+        if (!cards.some((x) => x.id === c.id)) continue;
+        next.set(day, cards.map((x) => (x.id === c.id ? c : x)));
+        touched = true;
       }
-      return touched ? next : p;
+      return touched ? next : m;
     });
+    setSettled((s) => (hidden ? s : new Map(s).set(c.id, c)));
   }, []);
 
-  const pastDays = [...past.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => pastOf(date, cards));
-  const days: Day[] = brief ? [...pastDays, todayOf(brief), tomorrowOf(brief)] : [];
-  return { brief, days, cachedAt, error, loadEarlier, loadedFrom: reach.from, atStart: reach.before === null, loadedBack: past, change };
+  /** A thread acknowledged on screen (UpdateRow): each of its cards, at `at`, or put back with null when the head refused. */
+  const acknowledged = useCallback(
+    (ids: string[], at: string | null) => {
+      const set = <T extends { id: string; acknowledged_at?: string }>(x: T): T => {
+        if (!ids.includes(x.id)) return x;
+        const { acknowledged_at: _, ...rest } = x;
+        return (at ? { ...x, acknowledged_at: at } : rest) as T;
+      };
+      const known = new Map<string, MeCard>();
+      setBrief((b) => {
+        if (!b) return b;
+        for (const t of b.threads) if (ids.includes(t.latest.id)) known.set(t.latest.id, set(t.latest));
+        return { ...b, threads: b.threads.map((t) => ({ ...t, latest: set(t.latest), cards: t.cards.map(set) })) };
+      });
+      setDays((m) => {
+        const next = new Map<string, MeCard[]>();
+        for (const [day, cards] of m) {
+          next.set(day, cards.map(set));
+          for (const c of cards) if (ids.includes(c.id)) known.set(c.id, set(c));
+        }
+        return next;
+      });
+      setSettled((s) => {
+        const next = new Map(s);
+        for (const c of known.values()) next.set(c.id, c);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const select = useCallback((d: string) => setSelected(d === today ? null : d), [today]);
+
+  const dayCards = date ? days.get(date) : undefined;
+  const column = useMemo<BriefColumn | null>(() => {
+    if (!brief || !date) return null;
+    if (date === brief.date) return keepSettled(todayColumn(brief), settled);
+    return dayCards ? dayColumn(date, dayCards) : null;
+  }, [brief, date, dayCards, settled]);
+  const rail = useMemo(() => (dayCards ? railCards(dayCards) : null), [dayCards]);
+  // §8 pairing: what the loaded cards reference, from every loaded day and today's brief.
+  const references = useMemo(() => {
+    const all = new Map<string, MeCard>();
+    for (const cards of days.values()) for (const c of cards) all.set(c.id, c);
+    for (const c of brief?.threads.map((t) => t.latest) ?? []) all.set(c.id, c);
+    return referencedBy(all.values());
+  }, [days, brief]);
+
+  return { brief, today, date, select, column, rail, references, cachedAt, error, change, acknowledged };
+}
+
+/** A thread with one card changed: its newest, or one of the earlier ones (by what the row lists of them). */
+function swapThread(t: BriefResponse['threads'][number], c: MeCard): BriefResponse['threads'][number] {
+  if (t.latest.id === c.id) return { ...t, latest: c };
+  if (!t.cards.some((e) => e.id === c.id)) return t;
+  return { ...t, cards: t.cards.map((e) => (e.id === c.id ? { ...e, ...(c.acknowledged_at ? { acknowledged_at: c.acknowledged_at } : {}) } : e)) };
+}
+
+/**
+ * Today's column with what the person settled here kept in it: a decision decided, or a thread acknowledged, that a
+ * reload of the brief no longer lists stays, in its new state, at the end of its list. Open decisions newest first.
+ */
+function keepSettled(column: BriefColumn, settled: Map<string, MeCard>): BriefColumn {
+  const shown = new Set([...column.decisions.map((c) => c.id), ...column.threads.flatMap((t) => [t.latest.id, ...t.earlier.map((e) => e.id)])]);
+  const gone = [...settled.values()].filter((c) => !shown.has(c.id));
+  return {
+    ...column,
+    decisions: [...column.decisions, ...gone.filter((c) => c.kind === 'decision' && c.state === 'decided')],
+    threads: [...column.threads, ...threads(gone.filter((c) => isUpdate(c) && c.acknowledged_at))],
+  };
 }

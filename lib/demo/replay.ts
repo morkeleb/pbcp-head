@@ -15,7 +15,7 @@ import { composeParagraph, type ParagraphParts } from '../brief/paragraph';
 import type { MeCard } from '../me';
 import { renderCardContent, renderSource } from '../render';
 import { ownOrigin } from '../render/markdown';
-import { addDays, localDate, zonedInstant } from '../time';
+import { addDays, instant, localDate, zonedInstant } from '../time';
 import { DEMO_ROOTS, type DemoRoot } from './data';
 import { demoScenario, type DemoStep } from './scenario';
 
@@ -28,13 +28,14 @@ export interface DemoThread {
   earlier: Array<{ id: string; title: string; received_at: string; acknowledged_at?: string }>;
 }
 
-export interface DemoDay {
+/** Today's brief column, as app/(ui)/brief/days.ts shapes it for the page. */
+export interface DemoColumn {
   date: string;
-  kind: 'today' | 'tomorrow';
+  today: true;
   paragraph: { html: string; soFar: boolean; parts: ParagraphParts } | null;
   decisions: MeCard[];
-  updates: DemoThread[];
-  signals: DemoThread[];
+  threads: DemoThread[];
+  snoozed: number;
 }
 
 export type DemoOrder = MeCard & {
@@ -49,8 +50,10 @@ export type DemoOrder = MeCard & {
 export interface DemoHead {
   date: string;
   timezone: string;
-  today: DemoDay;
-  tomorrow: DemoDay;
+  /** The brief column: as GET /api/me/brief shows it. */
+  column: DemoColumn;
+  /** Today's cards, for the day view (§8): the page keeps those with `at`. */
+  cards: MeCard[];
   orders: DemoOrder[];
   /** The card the "card detail" frame opens: the decision with an editable proposal. */
   detail: MeCard;
@@ -77,7 +80,7 @@ export function replay(today: string, timezone = DEMO_TIMEZONE): { cards: Map<st
   const persist = (c: Card) => {
     const stored = { ...c, change_seq: ++seq } as Card;
     cards.set(c.id, stored);
-    if (!days.has(c.id)) days.set(c.id, stored.about ?? localDate(new Date(stored.received_at), timezone));
+    if (!days.has(c.id)) days.set(c.id, stored.about ?? localDate(instant(stored.at ?? stored.received_at), timezone)); // §8
     return stored;
   };
   const at = (time: string) => iso(zonedInstant(today, time, timezone));
@@ -95,7 +98,7 @@ export function replay(today: string, timezone = DEMO_TIMEZONE): { cards: Map<st
     if (held) for (const c of applyOutcome(held, incoming, now).changed) persist(c as unknown as Card);
   };
 
-  for (const step of demoScenario(today) as DemoStep[]) {
+  for (const step of demoScenario(today, timezone) as DemoStep[]) {
     if ('put' in step) put(step.put, step.card, step.at);
     else if ('decide' in step) {
       const stored = cards.get(step.decide);
@@ -151,7 +154,7 @@ function threads(cs: MeCard[]): DemoThread[] {
 
 const cache = new Map<string, Promise<DemoHead>>();
 
-/** The demo head as of `now`: today's brief, tomorrow, the orders and a card to open. */
+/** The demo head as of `now`: today's brief, the day's cards, the orders and a card to open. */
 export function demoHead(db: Db, now = new Date()): Promise<DemoHead> {
   const date = localDate(now, DEMO_TIMEZONE);
   if (!cache.has(date)) {
@@ -163,18 +166,17 @@ export function demoHead(db: Db, now = new Date()): Promise<DemoHead> {
 
 async function build(db: Db, date: string): Promise<DemoHead> {
   const { cards, days } = replay(date);
-  const tomorrowDate = addDays(date, 1);
   const all = [...cards.values()];
   const me = new Map<string, MeCard>();
   for (const c of all) me.set(c.id, await present(db, c, days.get(c.id)!));
   const shown = (pred: (c: MeCard) => boolean) => [...me.values()].filter(pred);
   const fromProducer = (c: MeCard) => c.producer !== 'head';
 
-  // As GET /api/me/brief shows a head: every open decision, newest first; today's artifacts and signals delivered at
-  // brief or immediate (a log card is only in the day view, §9), as threads.
+  // As GET /api/me/brief shows a head: every open decision, newest first; yesterday's and today's artifacts and signals
+  // delivered at brief or immediate and not yet acknowledged (a log card is only in the day view, §9), as threads.
   const decisions = shown((c) => c.kind === 'decision' && c.state === 'open').sort((a, b) => b.received_at.localeCompare(a.received_at));
-  const todayUpdates = threads(shown((c) => fromProducer(c) && c.state === 'open' && (c.kind === 'artifact' || c.kind === 'signal') && c.delivery !== 'log' && c.day === date));
-  const tomorrowCards = shown((c) => fromProducer(c) && c.state === 'open' && c.day === tomorrowDate);
+  const briefDays = new Set([addDays(date, -1), date]);
+  const updates = threads(shown((c) => fromProducer(c) && c.state === 'open' && (c.kind === 'artifact' || c.kind === 'signal') && c.delivery !== 'log' && !c.acknowledged_at && briefDays.has(c.day!)));
 
   // The day's paragraph, as the live "so far today" fold makes it (lib/brief/nightly.ts dailyParagraphNow).
   const cardUrl = (id: string) => `${ownOrigin()}/card/${encodeURIComponent(id)}`;
@@ -189,22 +191,8 @@ async function build(db: Db, date: string): Promise<DemoHead> {
   return {
     date,
     timezone: DEMO_TIMEZONE,
-    today: {
-      date,
-      kind: 'today',
-      paragraph: { html: composeParagraph(parts), soFar: true, parts },
-      decisions,
-      updates: todayUpdates.filter((t) => t.latest.kind === 'artifact'),
-      signals: todayUpdates.filter((t) => t.latest.kind === 'signal'),
-    },
-    tomorrow: {
-      date: tomorrowDate,
-      kind: 'tomorrow',
-      paragraph: null,
-      decisions: tomorrowCards.filter((c) => c.kind === 'decision'),
-      updates: threads(tomorrowCards.filter((c) => c.kind === 'artifact')),
-      signals: threads(tomorrowCards.filter((c) => c.kind === 'signal')),
-    },
+    column: { date, today: true, paragraph: { html: composeParagraph(parts), soFar: true, parts }, decisions, threads: updates, snoozed: 0 },
+    cards: shown((c) => c.day === date),
     orders,
     detail: me.get('hermes:demo:gmail-19c3a8e05f72:reply')!,
   };

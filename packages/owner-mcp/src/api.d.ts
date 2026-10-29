@@ -989,8 +989,9 @@ export interface components {
             };
             /** @description Open decisions, newest first, snoozed ones left out */
             decisions: components["schemas"]["MeCard"][];
-            /** @description Today’s artifacts and signals, folded by thread; immediate first */
+            /** @description Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8) */
             threads: components["schemas"]["Fold"][];
+            /** @description How many open decisions are snoozed: counted, never listed (§8) */
             snoozed: number;
             /** @description Order outcomes that came late or from an earlier claim (A.3) */
             late_outcomes: components["schemas"]["MeCard"][];

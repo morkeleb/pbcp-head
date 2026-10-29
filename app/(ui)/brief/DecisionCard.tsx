@@ -1,17 +1,20 @@
 'use client';
 
-// DecisionCard: one open (or just decided) decision card, as the reference UI presents it (RFC 0.6 §4.5). The iOS app
-// mirrors this component; it is self-contained: a card in, changes out.
+// DecisionCard: one decision card as the reference UI presents it (RFC 0.8 §4.5), wherever it is presented: a row of the
+// brief, and the card page. The iOS app mirrors this component; it is self-contained: a card in, changes out.
 //
-//   producer · label · time · source ↗   (an accent dot while unseen)               ⋮ snooze or unsnooze, open card, delegate
+//   producer · labels · 09:15–09:30 · decide · source host ↗   (an accent dot while unseen)       ⋮ snooze, open card
 //   Title, in the serif
 //   lead (rendered_lead: the summary as text, else the first paragraph)
 //   ┌ Proposal (the first heading beginning "Proposal"/"Proposed", any level) ┐
-//   More (the rest of the body; opening it sets seen_at)
+//   [first visual]  More (the rest of the body; opening it sets seen_at)
 //   [Default]  [Other]  [Edit…]  Dismiss          Add a comment
 //
-// A tap commits at once and the buttons give way to a state line ("Approved · 09:14"). A swipe (touch or pen) or a
-// key (via `handle`) waits behind a 4 s undo. Ledger density folds the card to one line that expands.
+// Every action is a control on the row, in the card's order, with no gesture before it; the default is the one primary
+// control, and with no default none is. Options that carry a body are laid out one under another, each with its own
+// control beside its body. A tap commits at once and the controls give way to a state line ("Approved · 09:14"), with
+// the later cards that reference the card beside it (§8: "Sent: Re: invoice timing · 08:11"). A swipe (touch or pen)
+// or a key (via `handle`) waits behind a 4 s undo.
 
 import { ChevronDown, EllipsisVertical } from 'lucide-react';
 import Link from 'next/link';
@@ -21,39 +24,41 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, CardLabels, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
+  announce, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
   type MeCard,
 } from '../components';
+import { CardMeta, clock, Thumbnail, wants } from './card-parts';
+import { rowId } from './days';
 
-export type Density = 'comfortable' | 'ledger';
+export { clock };
 
-/** What the composition can do to a card from the keyboard (j/k/enter/d) or elsewhere. */
+/** What the page can do to a card from the keyboard (j/k/enter/d) or elsewhere. */
 export interface DecisionCardHandle {
   /** `d`: dismiss, after the same undo window as a swipe. */
   dismiss(): void;
-  /** `enter`: open the rest of the body (or, folded in ledger, the card). */
+  /** `enter`: open the rest of the body. */
   expand(): void;
 }
 
 export interface DecisionCardProps {
   card: MeCard;
-  /** The day's timezone, for times. */
+  /** The head's timezone, for times. */
   timezone: string;
-  density: Density;
   /** Every change to the card: optimistic, confirmed, or rolled back. */
   onChange: (card: MeCard) => void;
-  /** Shown as the keyboard's current card (broadsheet). */
+  /** Shown as the keyboard's current card. */
   focused?: boolean;
-  /** The time in the header; off on the timeline, whose rail carries it. */
+  /** The time in the header. */
   showTime?: boolean;
   /** The card page: the whole body open (lead, proposal and the rest), decided or not; no "More". */
   expanded?: boolean;
-  /** A decision whose day (§8) is later than the day it is shown under: "for Fri 31 Oct" in the header. */
+  /** A decision whose day (§8) is not the day it is shown under: "for Fri 31 Oct" in the header. */
   forDay?: string;
+  /** The later cards that reference this one, paired with its decision (§8). */
+  paired?: MeCard[];
   handle?: Ref<DecisionCardHandle>;
 }
 
@@ -63,21 +68,16 @@ const SNOOZES = [
   { preset: 'next-week', label: 'Next week' },
 ] as const;
 
-/** A time on the brief: 24-hour in every locale ("Approved · 09:14"), in the head's timezone. */
-export const clock = (iso: string, timeZone?: string, locale?: string) => new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(iso));
-
-export function DecisionCard({ card, timezone, density, onChange, focused, handle, showTime = true, expanded = false, forDay }: DecisionCardProps) {
+export function DecisionCard({ card, timezone, onChange, focused, handle, showTime = true, expanded = false, forDay, paired = [] }: DecisionCardProps) {
   const { list, edit, byDefault } = options(card);
-  const grouped = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
+  const withBodies = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
   const locale = useLocale();
   const decided = card.state === 'decided';
-  const [selected, setSelected] = useState<string>(byDefault?.id ?? '');
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState('');
   const [comment, setComment] = useState('');
   const [more, setMore] = useState(false);
-  const [open, setOpen] = useState(expanded || density === 'comfortable');
   const [snoozeError, setSnoozeError] = useState<string | null>(null);
   const { decide: post, error } = useDecide(card, onChange);
   const decide = (decision: string, extra: { edited_proposal?: string } = {}) =>
@@ -87,7 +87,6 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
     const choice = decided || !online || deferred.pending ? null : swipeChoice(card, direction);
     if (choice) deferred.schedule(`${choice.label}: ${card.title}`, () => void decide(choice.decision));
   });
-  useEffect(() => setOpen(expanded || density === 'comfortable'), [density, expanded]);
 
   // The proposal and the rest, from the body the head rendered (the lead is the head's: rendered_lead).
   const [parts, setParts] = useState<{ proposal: string; rest: string } | null>(null);
@@ -109,7 +108,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
     dismiss: () => {
       if (!decided && online && !deferred.pending) deferred.schedule(`Dismiss: ${card.title}`, () => void decide('dismissed'));
     },
-    expand: () => (open ? expandMore(!more) : setOpen(true)),
+    expand: () => expandMore(!more),
   }));
 
   // `preset` null: unsnooze.
@@ -124,25 +123,6 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
       setSnoozeError(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
     }
   };
-
-  const meta = (
-    <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
-      {/* One line: producer · labels · time · source. The source's label goes first, then the labels truncate; the
-          producer and time keep their room (§4.1 `labels`, `source`). */}
-      <span className="max-w-[45%] flex-none truncate">{card.producer}</span>
-      <CardLabels labels={card.labels} />
-      {forDay && <span className="flex-none normal-case tracking-normal" data-for-day>· for {forDay}</span>}
-      {showTime && <span aria-hidden>·</span>}
-      {!card.seen_at && !decided && <span className="size-1.5 flex-none rounded-full bg-primary" aria-label="unseen" />}
-      {showTime && <time className="flex-none" dateTime={card.received_at}>{clock(card.received_at, timezone, locale)}</time>}
-      {sourceLink(card.source) && (
-        <>
-          <span aria-hidden>·</span>
-          <SourceLink source={card.source} />
-        </>
-      )}
-    </div>
-  );
 
   const kebab = (
     <DropdownMenu>
@@ -163,37 +143,45 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
         <DropdownMenuItem asChild>
           <Link href={cardHref(card.id)}>Open card</Link>
         </DropdownMenuItem>
-        {/* §4.5: `delegated` is offered only by a head that implements Appendix B; this head does not yet. */}
-        <DropdownMenuItem disabled>Delegate… (not on this head)</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 
+  // §4.5 confirmation: the decision recorded, in words and time, in place of the controls; §8 the later cards that
+  // reference the card, beside it.
   const stateLine = decided && (
-    <p className="state-line mt-3 text-lead text-muted-foreground" role="status">
-      {decidedLine(card)}
-      {card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}
-    </p>
+    <div className="state-line mt-3 text-lead text-muted-foreground" role="status">
+      <span>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</span>
+      {paired.length > 0 && (
+        <ul className="contents" data-paired>
+          {paired.map((p) => (
+            <li key={p.id} className="inline">
+              {' · '}
+              <Link href={cardHref(p.id)} className="text-foreground hover:underline">{p.title}</Link> {clock(p.received_at, timezone, locale)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 
-  const chosen = list.find((o) => o.id === selected);
+  const control = (o: (typeof list)[number]) => (
+    <Button key={o.id} size="sm" variant={o === byDefault ? 'default' : 'outline'} disabled={!online} onClick={() => void decide(o.id)} data-action={o.id} {...(o === byDefault ? { 'data-primary': '' } : {})}>
+      {o.label}
+    </Button>
+  );
   const controls = !decided && (
     <div className="mt-3 space-y-2">
-      {grouped && (
-        <RadioGroup value={selected} onValueChange={setSelected} disabled={!online} aria-label="Options" className="gap-2">
+      {withBodies && !editing && (
+        // Options that carry a body: one under another, each its own control beside what it costs (§4.4, §4.5).
+        <ul className="space-y-2" aria-label="Options" data-options>
           {list.map((o) => (
-            <label key={o.id} className={cn('flex cursor-pointer gap-3 rounded-md border p-3', selected === o.id && 'border-ring')}>
-              <RadioGroupItem value={o.id} className="mt-0.5" />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline justify-between gap-2 text-body font-medium">
-                  {o.label}
-                  {o.isDefault && <span className="text-meta font-normal uppercase tracking-meta text-muted-foreground">default</span>}
-                </span>
-                {card.rendered_actions?.[o.id] && <Rendered className="mt-1 text-lead text-muted-foreground" html={card.rendered_actions[o.id]!} />}
-              </span>
-            </label>
+            <li key={o.id} className="flex items-start gap-3 rounded-md border p-2.5">
+              <span className="flex-none">{control(o)}</span>
+              {card.rendered_actions?.[o.id] && <Rendered className="min-w-0 flex-1 pt-1 text-lead text-muted-foreground" html={card.rendered_actions[o.id]!} />}
+            </li>
           ))}
-        </RadioGroup>
+        </ul>
       )}
       {editing && (
         <div className="space-y-1">
@@ -208,21 +196,12 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
             <Button size="sm" disabled={!online || !edited.trim()} onClick={() => void decide('edited', { edited_proposal: edited.trim() })}>Send edit</Button>
             <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Back</Button>
           </>
-        ) : grouped ? (
-          // One primary button records the choice; filled only when the card has a default (§4.5).
-          <Button size="sm" variant={byDefault ? 'default' : 'outline'} disabled={!online || !chosen} onClick={() => chosen && void decide(chosen.id)}>
-            {chosen ? chosen.label : 'Pick an option'}
-          </Button>
         ) : (
-          list.map((o) => (
-            <Button key={o.id} size="sm" variant={o === byDefault ? 'default' : 'outline'} disabled={!online} onClick={() => void decide(o.id)}>
-              {o.label}
-            </Button>
-          ))
-        )}
-        {!editing && edit && <Button size="sm" variant="outline" disabled={!online} onClick={() => setEditing(true)}>Edit…</Button>}
-        {!editing && (
-          <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void decide('dismissed')}>Dismiss</Button>
+          <>
+            {!withBodies && list.map(control)}
+            {edit && <Button size="sm" variant="outline" disabled={!online} onClick={() => setEditing(true)} data-action="edit">Edit…</Button>}
+            <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
+          </>
         )}
       </div>
       <Collapsible className="comment">
@@ -239,11 +218,34 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
     </div>
   );
 
-  const body = (
-    <>
+  return (
+    <article
+      id={expanded ? undefined : rowId(card.id)}
+      data-card={card.id}
+      data-kind="decision"
+      tabIndex={-1}
+      className={cn(
+        'decision-card relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] touch-pan-y rounded-lg border bg-card p-4 text-card-foreground outline-none transition-[opacity,transform] duration-150 max-[899px]:p-3',
+        decided && !expanded && 'opacity-80',
+        focused && 'ring-2 ring-ring',
+      )}
+      style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
+      ref={swipe.ref}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <CardMeta
+          card={card} timezone={timezone} showTime={showTime} want={wants(card)} unseen={!card.seen_at && !decided}
+          extra={forDay && <span className="flex-none normal-case tracking-normal" data-for-day>· for {forDay}</span>}
+        />
+        {kebab}
+      </div>
+      <h3 className="font-serif text-title font-semibold tracking-editorial text-card-foreground">
+        <Link href={cardHref(card.id)} className="hover:underline">{card.title}</Link>
+      </h3>
       {card.rendered_lead && <p className="lead mt-1 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
       {(expanded || !decided) && parts?.proposal && <Rendered className="proposal mt-3 rounded-md bg-inset px-3 py-2 text-body" html={parts.proposal} />}
       {expanded && parts?.rest.trim() && <Rendered className="more-body mt-3 text-body" html={parts.rest} />}
+      {!expanded && !decided && !more && card.first_visual && <Thumbnail visual={card.first_visual} />}
       {!expanded && !decided && parts?.rest.trim() && (
         <Collapsible open={more} onOpenChange={expandMore}>
           <CollapsibleTrigger className="more-trigger group mt-2 flex items-center gap-1 text-lead text-muted-foreground">
@@ -256,68 +258,7 @@ export function DecisionCard({ card, timezone, density, onChange, focused, handl
       )}
       {stateLine}
       {controls}
-    </>
-  );
-
-  return (
-    <article
-      data-card={card.id}
-      data-kind="decision"
-      tabIndex={-1}
-      className={cn(
-        'decision-card relative touch-pan-y rounded-lg border bg-card text-card-foreground outline-none transition-[opacity,transform] duration-150',
-        density === 'ledger' ? 'px-3 py-2' : 'p-4 max-[899px]:p-3',
-        decided && !expanded && 'opacity-72',
-        focused && 'ring-2 ring-ring',
-      )}
-      style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
-      ref={swipe.ref}
-    >
-      {density === 'ledger' && !open ? (
-        // Ledger: the title (never cut short) and the actions. On a phone the title has its own line and the actions the
-        // next; on the broadsheet they share one. Every option is a control in place, choice lists included (§4.5): no
-        // "Choose…" in front of them. Tapping the title opens the card.
-        <div className="ledger-line flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <button className="ledger-title min-w-0 basis-full text-left min-[900px]:flex-1 min-[900px]:basis-0" onClick={() => setOpen(true)} aria-expanded={false}>
-            <span className="mr-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
-              {card.producer}
-              {card.labels?.[0] && <span data-labels> · {card.labels[0]}</span>}
-            </span>
-            <span className="font-serif text-body font-semibold break-words">{card.title}</span>
-            {card.rendered_lead && (
-              <span className="hidden text-lead text-muted-foreground min-[900px]:inline">
-                {' '}— <span dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />
-              </span>
-            )}
-          </button>
-          {decided ? (
-            <span className="text-lead text-muted-foreground">{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</span>
-          ) : (
-            <div className="decide-row flex flex-wrap items-center gap-1">
-              {list.map((o) => (
-                <Button key={o.id} size="xs" variant={o === byDefault ? 'default' : 'outline'} disabled={!online} onClick={() => void decide(o.id)}>{o.label}</Button>
-              ))}
-              <Button size="xs" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void decide('dismissed')}>Dismiss</Button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="flex items-start justify-between gap-2">
-            {meta}
-            {kebab}
-          </div>
-          <h3 className={cn('font-serif font-semibold tracking-editorial text-card-foreground', density === 'ledger' ? 'text-body' : 'text-title')}>
-            <Link href={cardHref(card.id)} className="hover:underline">{card.title}</Link>
-          </h3>
-          {body}
-          {density === 'ledger' && !expanded && (
-            <button className="mt-2 text-lead text-muted-foreground" onClick={() => setOpen(false)}>Fold</button>
-          )}
-        </>
-      )}
       {deferred.toast}
     </article>
   );
 }
-

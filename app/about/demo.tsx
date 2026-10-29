@@ -1,20 +1,19 @@
 'use client';
 
-// The front door's demo brief: the brief's own components (the day layout, DecisionCard, UpdateRow, WeekStrip,
-// OrderBlock, DailyBrief) on the demo head the server replayed (lib/demo/replay.ts), rendered on the server, so the page
+// The front door's demo brief: the brief's own components (the two columns, DecisionCard, UpdateRow, the time rail,
+// WeekStrip, OrderBlock, DailyBrief) on the demo head the server replayed (lib/demo/replay.ts), rendered on the server, so the page
 // shows them without JavaScript. With it, they work but keep nothing: a sandbox (app/(ui)/client.ts) answers every
 // call, so deciding or acknowledging settles the card for this visitor only and nothing is sent. Links to a card stay
 // on the page: they scroll to the card in its frame.
 
 import { Moon, Search } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { setSandbox } from '../(ui)/client';
 import { LocaleContext, type MeCard } from '../(ui)/components';
-import { DaySection, shortDay, weekOf } from '../(ui)/brief/day-section';
-import type { Day } from '../(ui)/brief/days';
-import { DecisionCard, type Density } from '../(ui)/brief/DecisionCard';
+import { BriefColumns } from '../(ui)/brief/columns';
+import { railCards, shortDay, wanting, weekOf, type BriefColumn } from '../(ui)/brief/days';
+import { DecisionCard } from '../(ui)/brief/DecisionCard';
 import { UpdateRow, type UpdateThread } from '../(ui)/brief/UpdateRow';
 import { WeekStrip } from '../(ui)/brief/WeekStrip';
 import { OrderBlock } from '../(ui)/orders/orders-view';
@@ -65,28 +64,25 @@ export function DemoSandbox() {
   return null;
 }
 
-/** The day with one card changed, as the brief does: a snoozed decision leaves the list until it wakes. */
-function changed(day: Day, card: MeCard): Day {
-  const swap = (c: MeCard) => (c.id === card.id ? card : c);
-  const awake = (c: MeCard) => !c.snoozed_until || Date.parse(c.snoozed_until) <= Date.now();
-  return { ...day, decisions: day.decisions.map(swap).filter(awake) };
+/** The column with one card changed, as the brief does: a snoozed decision leaves the list until it wakes, and is counted. */
+function changed(column: BriefColumn, card: MeCard): BriefColumn {
+  const asleep = !!card.snoozed_until && Date.parse(card.snoozed_until) > Date.now();
+  const was = column.decisions.some((c) => c.id === card.id);
+  return {
+    ...column,
+    decisions: column.decisions.map((c) => (c.id === card.id ? card : c)).filter((c) => !(asleep && c.id === card.id)),
+    snoozed: column.snoozed + (asleep && was ? 1 : 0),
+  };
 }
 
-/** The masthead as the app draws it, inside the frame: the name, the dateline, the week, density, search, theme. */
-function FrameMasthead({ head, dateline, wide, density, onDensity }: { head: DemoHead; dateline: string; wide: boolean; density: Density; onDensity: (d: Density) => void }) {
-  const open = new Set(head.today.decisions.map((c) => c.day));
-  const week = weekOf(head.date).map((date) => ({ date, open: open.has(date), reachable: date >= head.date && date <= head.tomorrow.date }));
-  const strip = <WeekStrip days={week} selected={head.date} today={head.date} min={head.date} max={head.tomorrow.date} onSelect={() => undefined} />;
+/** The masthead as the app draws it, inside the frame: the name, the dateline, the day navigation, search, theme. */
+function FrameMasthead({ head, dateline, wide, asks }: { head: DemoHead; dateline: string; wide: boolean; asks: number }) {
+  const open = new Set(head.column.decisions.map((c) => c.day));
+  const week = weekOf(head.date).map((date) => ({ date, open: open.has(date), reachable: date === head.date }));
+  const status = <span className="ml-2 min-w-12 text-right text-meta font-semibold text-foreground tabular-nums" data-new-count={asks}>{asks > 0 ? `${asks} new` : ''}</span>;
+  const strip = <WeekStrip days={week} selected={head.date} today={head.date} min={head.date} max={head.date} onSelect={() => undefined} status={status} />;
   const tools = (
     <div className="flex items-center gap-1 text-muted-foreground" aria-hidden>
-      {wide && (
-        <Tabs value={density} onValueChange={(v) => onDensity(v as Density)}>
-          <TabsList className="h-6 p-0.5 group-data-[orientation=horizontal]/tabs:h-6">
-            <TabsTrigger value="comfortable" className="px-2 py-0 text-xs">Comfortable</TabsTrigger>
-            <TabsTrigger value="ledger" className="px-2 py-0 text-xs">Ledger</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
       <span className="grid size-8 place-items-center"><Search className="size-4" /></span>
       <span className="grid size-8 place-items-center"><Moon className="size-4" /></span>
     </div>
@@ -111,62 +107,52 @@ function FrameMasthead({ head, dateline, wide, density, onDensity }: { head: Dem
   );
 }
 
-/** The day headers, named on the server so the page reads the same before and after it hydrates, whatever the locale. */
-export type DayNames = Record<string, string>;
-
-/** Today and tomorrow, in one layout, with the frame's own state: what this visitor did to the cards. */
-function DemoDays({ head, names, wide, density }: { head: DemoHead; names: DayNames; wide: boolean; density: Density }) {
-  const [today, setToday] = useState<Day>(head.today as Day);
+/** Today's brief and day view, with the frame's own state: what this visitor did to the cards. */
+function DemoBrief({ head, column, onChange }: { head: DemoHead; column: BriefColumn; onChange: (c: MeCard) => void }) {
   const tz = head.timezone;
-  const change = (c: MeCard) => setToday((d) => changed(d, c));
-  const decision = (c: MeCard, under: string) => (
-    <DecisionCard key={c.id} card={c} timezone={tz} density={density} onChange={change} showTime={wide} {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})} />
+  const rail = useMemo(() => railCards(head.cards), [head.cards]);
+  const decision = (c: MeCard) => (
+    <DecisionCard key={c.id} card={c} timezone={tz} onChange={onChange} {...(c.day && c.day !== head.date ? { forDay: shortDay(c.day) } : {})} />
   );
-  const update = (t: UpdateThread) => <UpdateRow key={t.latest.id} thread={t} timezone={tz} density={density} />;
+  const thread = (t: UpdateThread) => <UpdateRow key={t.latest.id} thread={t} timezone={tz} />;
   return (
-    <div className={cn('pb-6', wide ? 'px-6' : 'px-4')} style={{ ['--masthead-h' as string]: '0px' }}>
-      {[today, head.tomorrow as Day].map((d) => (
-        <DaySection key={d.date} day={d} name={names[d.date] ?? d.date} wide={wide} density={density} tz={tz} decision={decision} update={update} />
-      ))}
+    <div className="px-4 pt-3 pb-6 min-[900px]:px-6" style={{ ['--masthead-h' as string]: '0px' }}>
+      <BriefColumns column={column} rail={rail} date={head.date} timezone={tz} decision={decision} thread={thread} />
     </div>
   );
 }
 
-/** A window onto the app: a hairline frame with its masthead, the content scrolling inside it. */
-function Frame({ head, dateline, wide, className, bodyClassName, children }: {
-  head: DemoHead; dateline: string; wide: boolean; className?: string; bodyClassName?: string; children: (density: Density) => ReactNode;
-}) {
-  const [density, setDensity] = useState<Density>('comfortable');
+/** A window onto the app: a hairline frame with its masthead, the content scrolling inside it, its own state. */
+function Frame({ head, dateline, wide, className, bodyClassName }: { head: DemoHead; dateline: string; wide: boolean; className?: string; bodyClassName?: string }) {
+  const [column, setColumn] = useState<BriefColumn>(head.column as BriefColumn);
   return (
     <div className={cn('flex flex-col overflow-hidden rounded-lg border bg-background text-left shadow-sm', className)} data-demo>
-      <FrameMasthead head={head} dateline={dateline} wide={wide} density={density} onDensity={setDensity} />
-      <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', bodyClassName)}>{children(density)}</div>
+      <FrameMasthead head={head} dateline={dateline} wide={wide} asks={wanting(column)} />
+      <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', bodyClassName)}>
+        <DemoBrief head={head} column={column} onChange={(c) => setColumn((col) => changed(col, c))} />
+      </div>
     </div>
   );
 }
 
 /**
- * The hero: the brief as it opens on the demo head. A broadsheet from 900 px, drawn at 960 px and scaled to its column
- * from 1100 px; the timeline below 900 px. Each is a live component tree with its own state.
+ * The hero: the brief as it opens on the demo head, its two columns side by side from 900 px (drawn at 960 px and
+ * scaled to its column from 1100 px), stacked below. Each is a live component tree with its own state.
  */
-export function HeroBrief({ head, names, dateline }: { head: DemoHead; names: DayNames; dateline: string }) {
+export function HeroBrief({ head, dateline }: { head: DemoHead; dateline: string }) {
   return (
     // One locale for its times, on the server and in the browser alike, so the page reads the same before and after it hydrates.
     <LocaleContext value={DEMO_LOCALE}>
     <div data-hero-brief>
       <DemoSandbox />
-      <div className="hidden min-[900px]:block" data-hero-layout="broadsheet">
+      <div className="hidden min-[900px]:block" data-hero-layout="wide">
         <div className="min-[1100px]:w-[960px] min-[1100px]:[zoom:0.6]">
-          <Frame head={head} dateline={dateline} wide className="h-[640px] min-[1100px]:h-[900px]">
-            {(density) => <DemoDays head={head} names={names} wide density={density} />}
-          </Frame>
+          <Frame head={head} dateline={dateline} wide className="h-[640px] min-[1100px]:h-[900px]" />
         </div>
       </div>
       {/* On a phone the frame runs to the screen's edges, as the app does, so the week strip has the app's room. */}
-      <div className="-mx-4 min-[560px]:mx-0 min-[900px]:hidden" data-hero-layout="timeline">
-        <Frame head={head} dateline={dateline} wide={false} className="h-[640px] rounded-none border-x-0 min-[560px]:rounded-lg min-[560px]:border-x">
-          {(density) => <DemoDays head={head} names={names} wide={false} density={density} />}
-        </Frame>
+      <div className="-mx-4 min-[560px]:mx-0 min-[900px]:hidden" data-hero-layout="narrow">
+        <Frame head={head} dateline={dateline} wide={false} className="h-[640px] rounded-none border-x-0 min-[560px]:rounded-lg min-[560px]:border-x" />
       </div>
     </div>
     </LocaleContext>
@@ -186,17 +172,17 @@ function Still({ width, caption, children }: { width: number; caption: string; c
   );
 }
 
-/** "The same card. Any device. Any view.": the timeline, the broadsheet, orders and a card, each the real tree. */
-export function SameCard({ head, names, dateline }: { head: DemoHead; names: DayNames; dateline: string }) {
+/** "The same card. Any device. Any view.": the brief on a phone and on a desk, orders and a card, each the real tree. */
+export function SameCard({ head, dateline }: { head: DemoHead; dateline: string }) {
   const tz = head.timezone;
   const active = head.orders.filter((o) => o.exec_state === 'open' || o.exec_state === 'claimed');
   const done = head.orders.filter((o) => !(o.exec_state === 'open' || o.exec_state === 'claimed'));
   const outcome = (o: (typeof head.orders)[number]) =>
-    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest as MeCard, earlier: [] }} timezone={tz} density="comfortable" />;
+    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest as MeCard, earlier: [] }} timezone={tz} />;
   const stills = useMemo(
     () => [
-      { caption: 'Phone · timeline', width: 375, node: <Frame head={head} dateline={dateline} wide={false} className="h-[490px] rounded-none border-0">{(d) => <DemoDays head={head} names={names} wide={false} density={d} />}</Frame> },
-      { caption: 'Desktop · broadsheet', width: 1100, node: <Frame head={head} dateline={dateline} wide className="h-[1437px] rounded-none border-0">{(d) => <DemoDays head={head} names={names} wide density={d} />}</Frame> },
+      { caption: 'Phone', width: 375, node: <Frame head={head} dateline={dateline} wide={false} className="h-[490px] rounded-none border-0" /> },
+      { caption: 'Desktop', width: 1100, node: <Frame head={head} dateline={dateline} wide className="h-[1437px] rounded-none border-0" /> },
       {
         caption: 'Orders',
         width: 560,
@@ -216,9 +202,9 @@ export function SameCard({ head, names, dateline }: { head: DemoHead; names: Day
           </div>
         ),
       },
-      { caption: 'Card detail', width: 560, node: <div className="p-4"><DecisionCard card={head.detail as MeCard} timezone={tz} density="comfortable" onChange={() => undefined} expanded /></div> },
+      { caption: 'Card detail', width: 560, node: <div className="p-4"><DecisionCard card={head.detail as MeCard} timezone={tz} onChange={() => undefined} expanded /></div> },
     ],
-    [head, names, dateline, active, done, tz], // eslint-disable-line react-hooks/exhaustive-deps
+    [head, dateline, active, done, tz], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return (
     <LocaleContext value={DEMO_LOCALE}>

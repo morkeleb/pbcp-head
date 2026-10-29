@@ -160,8 +160,8 @@ export const Brief = z.object({
     .object({ date: z.string().describe('YYYY-MM-DD in `timezone`'), cards: z.array(MeCard).describe('Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)') })
     .describe('What is already set for tomorrow'),
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
-  threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
-  snoozed: z.number().int().nonnegative(),
+  threads: z.array(Fold).describe('Yesterday’s and today’s artifacts and signals not yet acknowledged, folded by thread; immediate first (§8)'),
+  snoozed: z.number().int().nonnegative().describe('How many open decisions are snoozed: counted, never listed (§8)'),
   late_outcomes: z.array(MeCard).describe('Order outcomes that came late or from an earlier claim (A.3)'),
   lapsed_orders: z.array(MeCard).describe('Orders whose lease lapsed with no outcome (A.2)'),
   new: z.array(z.string()).describe('Ids changed since the last visit'),

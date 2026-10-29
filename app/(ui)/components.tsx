@@ -17,6 +17,10 @@ export interface MeCard {
   body: string;
   thread?: string;
   urgency?: string;
+  /** §4.2: where the card landed, `urgency` under the producer's ceiling (§9). */
+  delivery?: 'immediate' | 'brief' | 'log';
+  /** §8: ids of related cards, any producer. */
+  references?: string[];
   actions?: ActionEntry[];
   source?: { url: string; label?: string };
   state: 'open' | 'decided' | 'superseded';

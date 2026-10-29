@@ -3,29 +3,30 @@
 // UpdateRow: an artifact or signal, or a thread of them (cards sharing producer and thread, newest last, §8), as a
 // row of the reference UI. The iOS app mirrors this component; it is self-contained: a thread in, acknowledgement out.
 //
-//   ▢ PRODUCER · LABEL · 09:14 · source ↗                                   Acknowledge
-//   Title
-//   lead (rendered_lead)
-//   [first diagram or image, fitted to the row, captioned; opens full-screen at native size or larger]
-//   2 earlier: Title · Title
+//   PRODUCER · LABEL · 09:15–09:30 · acknowledge · source host ↗                          Acknowledge
+//   Title                     (the newest card's)
+//   lead                      (the newest card's rendered_lead)
+//   [first diagram or image, fitted to the row, captioned; opens full-screen at native size]
+//   2 earlier in this thread ⌄   → each earlier card by time and title, then the newest, newest last
 //
-// Acknowledging (a tap now; a swipe after the undo window) acknowledges every card in the thread (§4.2) and turns the
-// control into "Acknowledged · 09:14". Ledger density drops the lead line.
+// The row says what the card wants (acknowledge) and never what kind it is (§4.1a). Acknowledging (a tap now; a swipe
+// after the undo window) acknowledges every card in the thread (§4.2) and turns the control into "Acknowledged · 09:14".
 
-import { Bell, ChevronDown, FileText } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useImperativeHandle, useState, type Ref } from 'react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, CardLabels, NOT_SENT, Rendered, SourceLink, sourceLink, themedSrc, useDark, useDeferred, useLocale, useSwipe, Viewer, type MeCard } from '../components';
-import { clock, type Density } from './DecisionCard';
+import { announce, NOT_SENT, Rendered, useDeferred, useLocale, useSwipe, type MeCard } from '../components';
+import { CardMeta, clock, Thumbnail, wants } from './card-parts';
+import { rowId } from './days';
 
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
 export interface UpdateThread {
   latest: MeCard;
-  earlier: Array<{ id: string; title: string; received_at: string; acknowledged_at?: string }>;
+  earlier: Array<{ id: string; title: string; received_at: string; kind?: string; acknowledged_at?: string }>;
 }
 
 export interface UpdateRowHandle {
@@ -36,7 +37,6 @@ export interface UpdateRowHandle {
 export interface UpdateRowProps {
   thread: UpdateThread;
   timezone: string;
-  density: Density;
   /** After the head acknowledged (`at`), or with null when it refused and the row is back as it was. */
   onAcknowledged?: (ids: string[], at: string | null) => void;
   focused?: boolean;
@@ -45,7 +45,7 @@ export interface UpdateRowProps {
   expanded?: boolean;
 }
 
-export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, handle, expanded = false }: UpdateRowProps) {
+export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, expanded = false }: UpdateRowProps) {
   const c = thread.latest;
   const locale = useLocale();
   const cards = [c, ...thread.earlier];
@@ -54,9 +54,7 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
   const last = cards.map((x) => x.acknowledged_at).filter(Boolean).sort().at(-1);
   const [acked, setAcked] = useState<string | null>(done ? (last ?? null) : null);
   const [error, setError] = useState<string | null>(null);
-  const [viewing, setViewing] = useState(false);
   const online = useOnline();
-  const dark = useDark();
   const deferred = useDeferred();
   const swipe = useSwipe(() => {
     if (!acked && online && !deferred.pending) deferred.schedule(`Acknowledge: ${c.title}`, () => void ack());
@@ -77,7 +75,10 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
         if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
         at = r.body.acknowledged_at ?? at;
       }
-      if (at) setAcked(at);
+      if (at) {
+        setAcked(at);
+        onAcknowledged?.(ids, at);
+      }
     } catch (e) {
       setAcked(null);
       onAcknowledged?.(ids, null);
@@ -87,38 +88,25 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
     }
   };
 
-  const Icon = c.kind === 'signal' ? Bell : FileText;
-  const ledger = density === 'ledger';
+  // What the row still wants: the newest card's, or an earlier one's not yet acknowledged.
+  const want = acked ? null : (wants(c) ?? (thread.earlier.some((e) => !e.acknowledged_at) ? 'acknowledge' : null));
   return (
     <article
+      id={expanded ? undefined : rowId(c.id)}
       data-card={c.id}
       data-kind={c.kind}
       tabIndex={-1}
-      className={cn('update-row relative touch-pan-y outline-none transition-transform duration-150', ledger ? 'py-2' : 'py-3', focused && 'ring-2 ring-ring rounded-md')}
+      className={cn('update-row relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] touch-pan-y py-3 outline-none transition-transform duration-150', focused && 'ring-2 ring-ring rounded-md')}
       style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
       ref={swipe.ref}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
-            {/* One line: producer · labels · time · source. The source's label goes first, then the labels truncate; the
-                producer and time keep their room (§4.1 `labels`, `source`). */}
-            <Icon className="size-3.5 flex-none" aria-label={c.kind} />
-            <span className="max-w-[45%] flex-none truncate">{c.producer}</span>
-            <CardLabels labels={ledger ? c.labels?.slice(0, 1) : c.labels} />
-            <span aria-hidden>·</span>
-            <time className="flex-none" dateTime={c.received_at}>{clock(c.received_at, timezone, locale)}</time>
-            {sourceLink(c.source) && (
-              <>
-                <span aria-hidden>·</span>
-                <SourceLink source={c.source} />
-              </>
-            )}
-          </div>
-          <h4 className={cn('mt-0.5 font-serif font-semibold tracking-editorial', ledger ? 'text-body' : 'text-title')}>
+          <CardMeta card={c} timezone={timezone} want={want} />
+          <h4 className="mt-0.5 font-serif text-title font-semibold tracking-editorial">
             <Link href={cardHref(c.id)} className="hover:underline">{c.title}</Link>
           </h4>
-          {!expanded && !ledger && c.rendered_lead && <p className="lead mt-0.5 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: c.rendered_lead }} />}
+          {!expanded && c.rendered_lead && <p className="lead mt-0.5 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: c.rendered_lead }} />}
         </div>
         <div className="flex-none pt-3">
           {acked ? (
@@ -129,36 +117,22 @@ export function UpdateRow({ thread, timezone, density, onAcknowledged, focused, 
         </div>
       </div>
       {expanded && <Rendered className="mt-2 text-body" html={c.rendered_html} />}
-      {!expanded && !ledger && !acked && c.first_visual && (
-        // §3.1: in a fold, at most the first visual, fitted to the width, never cropped, captioned.
-        <figure className="mt-2">
-          <button className="block w-full cursor-zoom-in" onClick={() => setViewing(true)} aria-label={`Open ${c.first_visual.caption || 'the visual'} full-screen`}>
-            {/* A fixed box, so the page does not move when the image arrives; contained, so it is never cropped. */}
-            <img
-              src={themedSrc(c.first_visual.src, dark)}
-              alt={c.first_visual.caption}
-              loading="lazy"
-              // A light drawing gets white behind it; a dark one carries its own ground (the dark card colour).
-              className={cn('block h-44 w-full rounded-sm border object-contain', dark && c.first_visual.kind === 'diagram' ? 'bg-card' : 'bg-white')}
-            />
-          </button>
-          {c.first_visual.caption && <figcaption className="mt-1 text-meta text-muted-foreground">{c.first_visual.caption}</figcaption>}
-          {viewing && <Viewer visual={{ src: c.first_visual.src, caption: c.first_visual.caption }} onClose={() => setViewing(false)} />}
-        </figure>
-      )}
+      {!expanded && c.first_visual && <Thumbnail visual={c.first_visual} />}
       {!expanded && thread.earlier.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className="group mt-1 flex items-center gap-1 text-lead text-muted-foreground">
             {thread.earlier.length} earlier in this thread <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ul className="mt-1 space-y-0.5 text-lead">
-              {thread.earlier.map((e) => (
+            {/* The thread, newest last (§8): the earlier cards, then the newest, which the row shows above. */}
+            <ol className="mt-1 space-y-0.5 text-lead" data-thread>
+              {[...thread.earlier, c].map((e) => (
                 <li key={e.id} className="truncate">
-                  <span className="text-muted-foreground">{clock(e.received_at, timezone, locale)}</span> <Link href={cardHref(e.id)} className="hover:underline">{e.title}</Link>
+                  <span className="tabular-nums text-muted-foreground">{clock(e.received_at, timezone, locale)}</span>{' '}
+                  <Link href={cardHref(e.id)} className="hover:underline">{e.title}</Link>
                 </li>
               ))}
-            </ul>
+            </ol>
           </CollapsibleContent>
         </Collapsible>
       )}

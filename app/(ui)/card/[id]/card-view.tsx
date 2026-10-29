@@ -115,7 +115,7 @@ export function CardView() {
       <PageRow title={title} />
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-4 min-[900px]:px-6" data-card-page>
         {card.kind === 'decision' ? (
-          <DecisionCard card={card} timezone={timezone} density="comfortable" onChange={update} expanded />
+          <DecisionCard card={card} timezone={timezone} onChange={update} expanded />
         ) : card.kind === 'order' ? (
           <OrderBlock order={card} timezone={timezone} onChanged={(c) => (c ? update(c) : reload())} />
         ) : (
@@ -123,7 +123,6 @@ export function CardView() {
             <UpdateRow
               thread={{ latest: card, earlier: [] }}
               timezone={timezone}
-              density="comfortable"
               expanded
               onAcknowledged={(_, at) => update({ ...card, ...(at ? { acknowledged_at: at } : { acknowledged_at: undefined }) })}
             />

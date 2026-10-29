@@ -138,9 +138,10 @@ export interface Fold {
  * signals folded by thread, and the last-visit cursor. One call paints the Brief screen.
  *
  * - Open decisions are listed whatever their urgency (§9: a decision stays reachable until decided).
- * - Artifacts and signals are today's (the effective timezone), open, delivered at `brief` or `immediate` after the
- *   ceiling; `log` cards are only in a day's cards (GET /api/me/cards, the timeline's earlier days; §9). Immediate threads come first.
- * - Snoozed cards are left out until their time; `snoozed` counts them.
+ * - Artifacts and signals are yesterday's and today's (§8, the effective timezone), open and not yet acknowledged,
+ *   delivered at `brief` or `immediate` after the ceiling; `log` cards are only in a day's cards (GET /api/me/cards, the
+ *   day view; §9). Immediate threads come first.
+ * - Snoozed cards are left out until their time; `snoozed` counts the snoozed open decisions (§8).
  * - `new` lists the ids changed since the last visit; `seq` is the head's counter now, which the client
  *   posts to /api/me/visit when the owner leaves.
  */
@@ -175,7 +176,9 @@ export async function brief(db: Db, headId: string) {
         sql`${cards.producerDoc}->>'kind' in ('artifact', 'signal')`,
         inArray(cards.delivery, ['brief', 'immediate']),
         ne(cards.producer, 'head'),
-        eq(cards.day, today), // §8: today's cards are those whose day is today, `about`, `at` or received
+        // §8: the previous day's threads and today's (a card's day: `about`, `at` or received), until acknowledged.
+        inArray(cards.day, [addDays(today, -1), today]),
+        isNull(cards.acknowledgedAt),
         notSnoozed(at),
       ),
     )
@@ -184,7 +187,8 @@ export async function brief(db: Db, headId: string) {
   const [{ snoozed }] = (await db
     .select({ snoozed: sql<number>`count(*)::int` })
     .from(cards)
-    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), gt(cards.snoozedUntil, at)))) as [{ snoozed: number }];
+    // §8: the snoozed open decisions are counted, never listed.
+    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'decision'`, gt(cards.snoozedUntil, at)))) as [{ snoozed: number }];
 
   // Fold by producer and thread; a card without a thread is its own fold.
   const groups = new Map<string, Row[]>();
