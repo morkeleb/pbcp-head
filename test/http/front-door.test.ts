@@ -33,7 +33,7 @@ describe('the front door', () => {
     await call('PUT', cardPath('hermes:mail:secret'), { auth: hermes, body: card('hermes:mail:secret', { title: 'A private card on this head' }) });
     const html = await page();
     // Every decision the demo leaves open (one the owner decides in it is not in today's list).
-    const steps = demoScenario(localDate(new Date(), DEMO_TIMEZONE)); // the page's day: the demo head's, by the wall clock
+    const steps = demoScenario(localDate(new Date(), DEMO_TIMEZONE), DEMO_TIMEZONE); // the page's day: the demo head's, by the wall clock
     const decided = new Set(steps.flatMap((s) => ('decide' in s ? [s.decide] : [])));
     const titles = steps.flatMap((s) => ('put' in s && s.card.kind === 'decision' && !decided.has(s.card.id) ? [s.card.title] : []));
     expect(titles.length).toBeGreaterThan(4);
@@ -41,6 +41,11 @@ describe('the front door', () => {
     expect(html).toContain('data-hero-brief');
     // Leads as the head renders them, in the markup itself.
     expect(shown(html)).toContain('Anna wants to pay the September invoice on the 20th instead of the 15th');
+    // The day view beside it: the calendar's timed cards on the rail, and the moved call, which the brief presents, as a
+    // marker that links to its row there (§4.5, §8).
+    expect(shown(html)).toContain('data-day-view');
+    expect(shown(html)).toMatch(/data-rail-entry="cal:demo:standup-\d{8}"/);
+    expect(shown(html)).toMatch(/href="#brief-cal:demo:3f9a0c1d2e4b5a69-\d{8}T1600Z:moved"[^>]*data-marker=/);
     expect(html).not.toContain('A private card on this head');
     expect(html).not.toContain(`>${OWNER}<`);
     // Replaying the demo stores nothing: no card rows but the one PUT above.
