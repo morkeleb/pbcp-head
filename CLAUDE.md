@@ -14,7 +14,7 @@ This repo is the **product**: the reference head (Next.js on Vercel, Postgres). 
 
 ## Where this is
 
-H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (orders) are done, and the gate passes all 59 cases of the Draft 0.7 suite over HTTP. Since then these have shipped:
+H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (orders) are done, and the gate passes all 62 cases of the Draft 0.8 suite over HTTP. Since then these have shipped:
 - the brief: the nightly `head:daily` card, and a live `/brief` laid out by day;
 - Settings: producers with ceilings, pairing codes, devices and preferences, plus the `/connect` reference page;
 - the owner's MCP server at `/api/mcp`, with OAuth;
