@@ -7,7 +7,7 @@
 // paragraph of its own in a view, one run of prose in the card's lead:
 //
 //   "2 decisions, 1 snoozed: <entry>; <entry>."                     (or "Nothing waiting for you.")
-//   "Yesterday you decided: <title> — decided <value>; …."
+//   "Yesterday you decided: <title> — decided <value>; …; and your orders came back: <order> — done: <lead>."
 //   "What mattered yesterday: <entry>; …; and 3 more."              (at most MATTERED_SHOWN entries)
 //   "And 9 updates from mail, goalpath, hermes and obsidian."        (counted, no titles)
 //
@@ -38,6 +38,8 @@ export interface ParagraphParts {
   mattered?: ParagraphEntry[];
   /** Every other thread of the day before (log delivery, or an artifact from a producer that sent many): counted. */
   rest?: CountedThread[];
+  /** Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3). */
+  orders?: ParagraphEntry[];
   /** Fold 5 and earlier: the previous day's threads, one list. */
   yesterday?: ParagraphEntry[];
 }
@@ -77,7 +79,11 @@ export function composeParagraphs(parts: ParagraphParts, chosen: readonly string
   if (before.length > 0) out.push(`Yesterday: ${before.map((e) => e.text).join('; ')}.`);
 
   const decided = keep(parts.decided);
-  if (decided.length > 0) out.push(`Yesterday you decided: ${decided.map((e) => e.text).join('; ')}.`);
+  const orders = keep(parts.orders);
+  const told = (xs: ParagraphEntry[]) => xs.map((e) => e.text).join('; ');
+  if (decided.length > 0 && orders.length > 0) out.push(`Yesterday you decided: ${told(decided)}; and your orders came back: ${told(orders)}.`);
+  else if (decided.length > 0) out.push(`Yesterday you decided: ${told(decided)}.`);
+  else if (orders.length > 0) out.push(`Yesterday your orders came back: ${told(orders)}.`);
   const mattered = keep(parts.mattered);
   if (mattered.length > 0) {
     const shown = mattered.slice(0, MATTERED_SHOWN).map((e) => e.text);
@@ -85,7 +91,7 @@ export function composeParagraphs(parts: ParagraphParts, chosen: readonly string
     out.push(`What mattered yesterday: ${[...shown, ...(more > 0 ? [`and ${more} more`] : [])].join('; ')}.`);
   }
   const rest = keep(parts.rest);
-  if (rest.length > 0) out.push(decided.length + mattered.length > 0 ? `And ${counted(rest)}.` : `Yesterday: ${counted(rest)}.`);
+  if (rest.length > 0) out.push(decided.length + orders.length + mattered.length > 0 ? `And ${counted(rest)}.` : `Yesterday: ${counted(rest)}.`);
   return out;
 }
 

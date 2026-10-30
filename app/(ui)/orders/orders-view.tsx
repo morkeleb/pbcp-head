@@ -1,17 +1,21 @@
 'use client';
 
-// Orders (Appendix A; mobile PRD), built from the brief's parts: each open order as a block styled like a DecisionCard,
-// with its exec_state, who holds it and the lease in a small table; and what came back (the outcome, or the latest
-// progress) as the brief's UpdateRows. Grouped open, then done. A new order is given from the form at the top.
+// Orders (Appendix A; mobile PRD), built from the brief's parts: each order as a block styled like a DecisionCard, with
+// its exec_state and where it went in a small table and its lease as one line ("claimed by hermes at 09:02, lease until
+// 09:12, renewed twice", "waiting for an executor", "lease lapsed at 09:12"); under it what came back (A.3): the outcome
+// as the brief's UpdateRow, then the progress notes newest first, one line each, the latest shown and the rest behind
+// "N earlier". Grouped open, then done. A new order is given from the form at the top.
 
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { clock } from '../brief/DecisionCard';
 import { UpdateRow } from '../brief/UpdateRow';
 import { PageRow, useChromeCards } from '../chrome';
-import { api, cardHref, OfflineError, OFFLINE_REASON, useOnline, when } from '../client';
+import { api, cardHref, OfflineError, OFFLINE_REASON, useLiveChanges, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 
 export interface Order extends MeCard {
@@ -20,7 +24,37 @@ export interface Order extends MeCard {
   claimed_by?: string;
   claim_expires_at?: string;
   claim_seq?: number;
-  progress: { count: number; latest: MeCard | null };
+  /** The lease as the owner sees it (head-private, A.2). */
+  lease?: { claimed_at: string | null; renewals: number; lapsed_at: string | null };
+  progress: {
+    count: number;
+    latest: MeCard | null;
+    /** Every progress card, newest first (A.3). */
+    notes?: Array<{ id: string; title: string; received_at: string }>;
+    /** The latest outcome card, in full. */
+    outcome?: MeCard | null;
+  };
+}
+
+/**
+ * The lease as one line (A.2): who holds it, since when, until when and how often it was renewed; or that the order
+ * waits for an executor; or when the last lease lapsed with no outcome. Nothing once the order has ended.
+ */
+export function leaseLine(o: Pick<Order, 'exec_state' | 'claimed_by' | 'claim_expires_at' | 'lease'>, timezone: string, locale?: string): string | null {
+  const t = (iso: string) => {
+    const day = (x: string) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date(x));
+    return day(iso) === day(new Date().toISOString()) ? clock(iso, timezone, locale) : when(iso, timezone, locale);
+  };
+  if (o.exec_state === 'claimed' && o.claimed_by) {
+    const n = o.lease?.renewals ?? 0;
+    return [
+      `claimed by ${o.claimed_by}${o.lease?.claimed_at ? ` at ${t(o.lease.claimed_at)}` : ''}`,
+      ...(o.claim_expires_at ? [`lease until ${t(o.claim_expires_at)}`] : []),
+      ...(n > 0 ? [`renewed ${n} ${n === 1 ? 'time' : 'times'}`] : []),
+    ].join(', ');
+  }
+  if (o.exec_state === 'open') return o.lease?.lapsed_at ? `lease lapsed at ${t(o.lease.lapsed_at)}` : 'waiting for an executor';
+  return null;
 }
 
 const ACTIVE = ['open', 'claimed'];
@@ -32,25 +66,41 @@ export function OrdersView() {
   const [producers, setProducers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders');
+  const fetchOrders = useCallback(async (network: boolean) => {
+    const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders', { network });
     if (r.status !== 200) return setError(`Could not load orders (${r.status}).`);
     setOrders(r.body.orders);
     setTimezone(r.body.timezone);
   }, []);
+  const load = useCallback(() => fetchOrders(false), [fetchOrders]);
   useEffect(() => {
     void load();
     void api<{ producers: Array<{ root: string; revoked: boolean }> }>('/api/me/producers').then((r) => {
       if (r.status === 200) setProducers(r.body.producers.filter((p) => !p.revoked).map((p) => p.root));
     });
   }, [load]);
+  // Live: an order claimed, progressing or done shows so without a reload; while one is open or claimed, the page looks
+  // every ten seconds, since an executor usually picks an order up soon after it is given.
+  const working = (orders ?? []).some(isActive);
+  const reload = useCallback(() => fetchOrders(true), [fetchOrders]);
+  useLiveChanges(reload, working ? 10_000 : 60_000);
   useChromeCards([...(orders ?? []), ...(orders ?? []).flatMap((o) => (o.progress.latest ? [o.progress.latest] : []))]);
 
   const open = (orders ?? []).filter(isActive);
   const done = (orders ?? []).filter((o) => !isActive(o));
   const tz = timezone ?? 'UTC';
-  const outcome = (o: Order) =>
-    o.progress.latest && <UpdateRow thread={{ latest: o.progress.latest, earlier: [] }} timezone={tz} />;
+  // What came back: the outcome first, as the brief shows an update; then the progress notes.
+  const outcome = (o: Order) => {
+    const card = o.progress.outcome ?? (o.progress.notes ? null : o.progress.latest);
+    return card && <UpdateRow thread={{ latest: card, earlier: [] }} timezone={tz} />;
+  };
+  const back = (o: Order) =>
+    (o.progress.outcome || o.progress.notes?.length || (!o.progress.notes && o.progress.latest)) && (
+      <div className="ml-4 border-l pl-3" data-order-progress={o.id}>
+        {outcome(o)}
+        <ProgressNotes notes={o.progress.notes ?? []} timezone={tz} />
+      </div>
+    );
 
   return (
     <>
@@ -66,7 +116,7 @@ export function OrdersView() {
             {open.map((o) => (
               <div key={o.id}>
                 <OrderBlock order={o} timezone={tz} onChanged={load} />
-                {o.progress.latest && <div className="ml-4 border-l pl-3">{outcome(o)}</div>}
+                {back(o)}
               </div>
             ))}
           </div>
@@ -76,12 +126,45 @@ export function OrdersView() {
           <Group title="Done" count={done.length}>
             {/* What came back from each: the outcome as the brief shows an update; an order with none, as its block. */}
             <div className="divide-y border-y">
-              {done.map((o) => (o.progress.latest ? <div key={o.id}>{outcome(o)}</div> : <div key={o.id} className="py-3"><OrderBlock order={o} timezone={tz} onChanged={load} /></div>))}
+              {done.map((o) => (
+                <div key={o.id} className="py-3">
+                  <OrderBlock order={o} timezone={tz} onChanged={load} />
+                  {back(o)}
+                </div>
+              ))}
             </div>
           </Group>
         )}
       </main>
     </>
+  );
+}
+
+/** The progress notes, newest first, one line each (time · note): the latest, then the rest behind "N earlier". */
+function ProgressNotes({ notes, timezone }: { notes: Array<{ id: string; title: string; received_at: string }>; timezone: string }) {
+  const locale = useLocale();
+  if (notes.length === 0) return null;
+  const row = (n: (typeof notes)[number]) => (
+    <li key={n.id} className="flex min-w-0 items-baseline gap-2" data-progress-note={n.id}>
+      <time className="flex-none text-meta tabular-nums text-muted-foreground" dateTime={n.received_at}>{clock(n.received_at, timezone, locale)}</time>
+      <Link href={cardHref(n.id)} className="min-w-0 truncate text-lead hover:underline">{n.title}</Link>
+    </li>
+  );
+  const [latest, ...earlier] = notes;
+  return (
+    <div className="py-2" data-progress>
+      <ol className="space-y-1">{row(latest!)}</ol>
+      {earlier.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger className="group mt-1 flex items-center gap-1 text-lead text-muted-foreground">
+            {earlier.length} earlier <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ol className="mt-1 space-y-1">{earlier.map(row)}</ol>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+    </div>
   );
 }
 
@@ -165,9 +248,8 @@ export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; time
   const rows: Array<[string, React.ReactNode]> = [
     ['State', <span key="s" data-exec-state>{order.exec_state}</span>],
     ['To', to],
-    ['Held by', order.claimed_by ?? '—'],
-    ['Lease', order.claim_expires_at ? `until ${when(order.claim_expires_at, timezone, locale)}${order.claim_seq ? ` (claim ${order.claim_seq})` : ''}` : '—'],
   ];
+  const lease = leaseLine(order as Order, timezone, locale);
   return (
     <article data-card={order.id} data-kind="order" className={cn('rounded-lg border bg-card p-4 text-card-foreground max-[899px]:p-3', !isActive(order as Order) && 'opacity-72')}>
       <div className="flex items-center gap-2 whitespace-nowrap text-meta font-medium uppercase tracking-meta text-muted-foreground">
@@ -188,6 +270,7 @@ export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; time
           ))}
         </tbody>
       </table>
+      {lease && <p className="mt-2 text-lead text-muted-foreground" data-lease-line>{lease}</p>}
       {isActive(order as Order) && (
         <div className="mt-3">
           <Button size="sm" variant="outline" className="text-destructive" disabled={!online || deferred.pending}

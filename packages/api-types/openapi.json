@@ -2886,6 +2886,36 @@
               "additionalProperties": false
             }
           },
+          "orders": {
+            "description": "Orders whose outcome arrived the day before: \"<order title> — done: <outcome lead>\" (A.3)",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
           "mattered": {
             "description": "The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then \"and N more\"",
             "type": "array",
@@ -3331,7 +3361,318 @@
             "description": "An IANA timezone, e.g. `Europe/Copenhagen`"
           },
           "card": {
-            "$ref": "#/components/schemas/MeCard"
+            "type": "object",
+            "properties": {
+              "protocol": {
+                "type": "string",
+                "const": "pbcp/1"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "decision",
+                  "artifact",
+                  "signal",
+                  "order"
+                ]
+              },
+              "to_person": {
+                "description": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)",
+                "type": "string",
+                "minLength": 1
+              },
+              "producer": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "body": {
+                "type": "string"
+              },
+              "urgency": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "brief",
+                  "log"
+                ]
+              },
+              "thread": {
+                "type": "string",
+                "minLength": 1
+              },
+              "labels": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "about": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "until": {
+                "type": "string"
+              },
+              "references": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supersedes": {
+                "type": "string"
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "default": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
+              },
+              "emitted_at": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url"
+                ],
+                "additionalProperties": {}
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "decided",
+                  "superseded"
+                ]
+              },
+              "change_seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "received_at": {
+                "type": "string"
+              },
+              "changed_at": {
+                "type": "string"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "brief",
+                  "log"
+                ]
+              },
+              "seen_at": {
+                "type": "string"
+              },
+              "acknowledged_at": {
+                "type": "string"
+              },
+              "snoozed_until": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "edited_proposal": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "string"
+              },
+              "decided_at": {
+                "type": "string"
+              },
+              "delegated_to": {
+                "type": "string"
+              },
+              "to_producer": {
+                "type": "string"
+              },
+              "exec_state": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "claimed",
+                  "done",
+                  "failed",
+                  "cancelled"
+                ]
+              },
+              "claimed_by": {
+                "type": "string"
+              },
+              "claim_expires_at": {
+                "type": "string"
+              },
+              "claim_seq": {
+                "type": "integer"
+              },
+              "orders.claim_seq": {
+                "description": "On an executor’s outcome card: the claim it reports on (A.3)",
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "orders.result": {
+                "description": "On an executor’s outcome card: how the run ended (A.3)",
+                "type": "string",
+                "enum": [
+                  "done",
+                  "failed"
+                ]
+              },
+              "rendered_html": {
+                "type": "string",
+                "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
+              },
+              "lead": {
+                "type": "string",
+                "description": "The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none."
+              },
+              "lead_source": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "body"
+                ],
+                "description": "Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown"
+              },
+              "rendered_lead": {
+                "type": "string",
+                "description": "The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself."
+              },
+              "rendered_actions": {
+                "description": "Rendered bodies of choice options (§4.4), by action id",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "first_visual": {
+                "description": "The first diagram or image in the body, for a thumbnail",
+                "$ref": "#/components/schemas/Visual"
+              },
+              "order_outcome": {
+                "description": "On an outcome card: whether it moved its order, or came late or from an earlier claim",
+                "type": "string",
+                "enum": [
+                  "applied",
+                  "stale"
+                ]
+              },
+              "day": {
+                "type": "string",
+                "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+              },
+              "paragraph": {
+                "description": "On a `head:daily` card: its paragraph in parts",
+                "$ref": "#/components/schemas/ParagraphParts"
+              },
+              "lease": {
+                "description": "On an order: its lease as the owner sees it",
+                "type": "object",
+                "properties": {
+                  "claimed_at": {
+                    "description": "When the current claim began",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "renewals": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "How many times its holder has renewed the current claim"
+                  },
+                  "lapsed_at": {
+                    "description": "When the last lease lapsed with no outcome (A.2), until the order is claimed again",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "claimed_at",
+                  "renewals",
+                  "lapsed_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "protocol",
+              "id",
+              "kind",
+              "producer",
+              "title",
+              "body",
+              "emitted_at",
+              "state",
+              "change_seq",
+              "received_at",
+              "changed_at",
+              "delivery",
+              "rendered_html",
+              "lead",
+              "lead_source",
+              "rendered_lead",
+              "day"
+            ],
+            "additionalProperties": {}
           },
           "predecessors": {
             "type": "array",
@@ -3668,6 +4009,38 @@
             },
             "description": "Order outcomes that came late or from an earlier claim (A.3)"
           },
+          "order_updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The order"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Its progress and outcome cards since the last visit"
+                },
+                "latest": {
+                  "description": "The newest of them",
+                  "$ref": "#/components/schemas/MeCard"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "count",
+                "latest"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Open orders with progress or an outcome since the last visit (A.3), newest first: one row each"
+          },
           "lapsed_orders": {
             "type": "array",
             "items": {
@@ -3696,6 +4069,7 @@
           "threads",
           "snoozed",
           "late_outcomes",
+          "order_updates",
           "lapsed_orders",
           "new"
         ],
@@ -3981,6 +4355,37 @@
             "description": "On a `head:daily` card: its paragraph in parts",
             "$ref": "#/components/schemas/ParagraphParts"
           },
+          "lease": {
+            "type": "object",
+            "properties": {
+              "claimed_at": {
+                "description": "When the current claim began",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "renewals": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "How many times its holder has renewed the current claim"
+              },
+              "lapsed_at": {
+                "description": "When the last lease lapsed with no outcome (A.2), until the order is claimed again",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "claimed_at",
+              "renewals",
+              "lapsed_at"
+            ],
+            "additionalProperties": false,
+            "description": "The lease as the owner sees it: head-private, never synced"
+          },
           "progress": {
             "type": "object",
             "properties": {
@@ -3997,11 +4402,48 @@
                     "type": "null"
                   }
                 ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "received_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "received_at"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Every progress card of the thread, newest first (A.3)"
+              },
+              "outcome": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MeCard"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The latest outcome card, in full"
               }
             },
             "required": [
               "count",
-              "latest"
+              "latest",
+              "notes",
+              "outcome"
             ],
             "additionalProperties": false
           }
@@ -4024,6 +4466,7 @@
           "lead_source",
           "rendered_lead",
           "day",
+          "lease",
           "progress"
         ],
         "additionalProperties": {}

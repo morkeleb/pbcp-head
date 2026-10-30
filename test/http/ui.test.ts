@@ -1503,6 +1503,97 @@ describe('OAuth consent', () => {
 });
 
 describe('web orders', () => {
+  const giveOrder = async (title: string) => {
+    const r = await call('POST', '/api/me/orders', { auth: `Session ${session.access_token}`, body: { to_producer: '*', title, body: 'Any weekday morning.' } });
+    return r.body as { id: string };
+  };
+  const note = (auth: string, order: string, n: number, title: string) => {
+    const id = `hermes:order:${order.split(':')[2]}:progress-1-${n}`;
+    return call('PUT', cardPath(id), { auth, body: card(id, { kind: 'signal', urgency: 'log', thread: order, references: [order], title, body: title }) });
+  };
+  const lease = (id: string) => page.$eval(`article[data-card="${id}"] [data-lease-line]`, (l) => l.textContent);
+
+  it('says where the lease stands: waiting, claimed (since, until, renewals), lapsed', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    const o = await giveOrder('Book the dentist');
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    expect(await lease(o.id)).toBe('waiting for an executor');
+    await call('POST', `${cardPath(o.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    await page.reload({ waitUntil: 'networkidle0' });
+    expect(await lease(o.id)).toMatch(/^claimed by hermes at \d\d:\d\d, lease until \d\d:\d\d$/);
+    await call('POST', `${cardPath(o.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    await call('POST', `${cardPath(o.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    await page.reload({ waitUntil: 'networkidle0' });
+    expect(await lease(o.id)).toMatch(/^claimed by hermes at \d\d:\d\d, lease until \d\d:\d\d, renewed 2 times$/);
+    // The head's clock runs past the lease, with no outcome.
+    const expires = (await row(o.id)).claimExpiresAt!;
+    await call('POST', '/api/test', { body: { clock: new Date(expires.getTime() + 60_000).toISOString().replace(/\.\d+Z$/, 'Z') } });
+    await page.reload({ waitUntil: 'networkidle0' });
+    const at = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(expires);
+    expect(await lease(o.id)).toBe(`lease lapsed at ${at}`);
+    expect(await page.$eval(`article[data-card="${o.id}"] [data-exec-state]`, (e) => e.textContent)).toBe('open');
+  });
+
+  it('lists the progress newest first, the latest shown and the rest behind "N earlier", the outcome above them', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    const o = await giveOrder('Book the dentist');
+    await call('POST', `${cardPath(o.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    for (const [n, title] of [[1, 'Found two free slots'], [2, 'Picked Tuesday 09:00'], [3, 'Booking with the clinic']] as const) await note(hermes, o.id, n, title);
+    await page.setViewport({ width: 360, height: 800 });
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    const block = `[data-order-progress="${o.id}"]`;
+    const visible = () => page.$$eval(`${block} [data-progress-note]`, (ls) => ls.filter((l) => (l as HTMLElement).offsetParent !== null).map((l) => l.querySelector('a')!.textContent));
+    expect(await visible()).toEqual(['Booking with the clinic']);
+    await (await page.$(`xpath/.//*[@data-order-progress="${o.id}"]//button[contains(., "2 earlier")]`))!.click();
+    await page.waitForFunction((b) => document.querySelectorAll(`${b} [data-progress-note]`).length === 3, {}, block);
+    expect(await visible()).toEqual(['Booking with the clinic', 'Picked Tuesday 09:00', 'Found two free slots']);
+    expect(await page.$eval(`${block} [data-progress-note]`, (l) => Math.round(l.getBoundingClientRect().height))).toBeLessThan(30); // one line
+    // The outcome, when it comes, above the notes.
+    const id = `hermes:order:${o.id.split(':')[2]}:outcome-1`;
+    await call('PUT', cardPath(id), { auth: hermes, body: card(id, { kind: 'signal', title: 'Booked the dentist for Tuesday 09:00', thread: o.id, references: [o.id], 'orders.claim_seq': 1, 'orders.result': 'done' }) });
+    await page.reload({ waitUntil: 'networkidle0' });
+    const order = await page.$eval(`${block}`, (b) => [...b.querySelectorAll('article.update-row, [data-progress-note]')].map((e) => e.getAttribute('data-card') ?? e.getAttribute('data-progress-note')));
+    expect(order[0]).toBe(id);
+    expect(order.slice(1)).toHaveLength(1); // the latest note; the rest behind "2 earlier"
+    expect(errors).toEqual([]);
+  });
+
+  it('puts an order with news since the last visit in the brief’s Updates, linking to the orders page; a quiet order is not there', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    const busy = await giveOrder('Book the dentist');
+    const quiet = await giveOrder('Renew the parking permit');
+    for (const o of [busy, quiet]) await call('POST', `${cardPath(o.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    await note(hermes, quiet.id, 1, 'Opened the council site');
+    const seq = (await call('GET', '/api/me/seq', { auth: `Session ${session.access_token}` })).body.seq;
+    await call('POST', '/api/me/visit', { auth: `Session ${session.access_token}`, body: { seq } });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    expect(await page.$('[data-order-update]')).toBeNull();
+    await note(hermes, busy.id, 1, 'Found two free slots');
+    await page.reload({ waitUntil: 'networkidle0' });
+    const rows = await page.$$eval('[data-order-update]', (rs) => rs.map((r) => [r.getAttribute('data-order-update'), r.querySelector('a')!.getAttribute('href'), r.querySelector('a')!.textContent]));
+    expect(rows).toEqual([[busy.id, '/orders', 'Book the dentist — Found two free slots']]);
+  });
+
+  it('shows an order claimed and its progress without a reload', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    await page.type('textarea[aria-label="Order"]', 'Book the dentist\nAny weekday morning.');
+    await (await page.$('xpath/.//button[.="Give order"]'))!.click();
+    await page.waitForSelector('xpath/.//article//a[.="Book the dentist"]');
+    const state = () => page.$$eval('[data-order-table] tr', (rs) => Object.fromEntries(rs.map((r) => [r.querySelector('th')!.textContent, r.querySelector('td')!.textContent])));
+    expect((await state()).State).toBe('open');
+    // The executor picks it up and reports a step; the page is left alone.
+    const [order] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.toProducer, '*')));
+    await call('POST', `${cardPath(order!.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    const k = order!.id.split(':')[2]!;
+    await call('PUT', cardPath(`hermes:order:${k}:progress-1-1`), { auth: hermes, body: card(`hermes:order:${k}:progress-1-1`, { kind: 'signal', urgency: 'log', thread: order!.id, title: 'Found two free slots' }) });
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-order-table] tr')].some((r) => r.textContent === 'Stateclaimed'), { timeout: 15_000 });
+    expect(await state()).toMatchObject({ State: 'claimed' });
+    expect(await page.$eval('[data-lease-line]', (l) => l.textContent)).toMatch(/^claimed by hermes at /);
+    await page.waitForSelector('xpath/.//*[contains(., "Found two free slots")]', { timeout: 5_000 });
+    expect(errors).toEqual([]);
+  }, 40_000);
+
   it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
     await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
@@ -1522,8 +1613,9 @@ describe('web orders', () => {
     await page.goto(`${headUrl()}/card/${encodeURIComponent(order!.id)}`, { waitUntil: 'networkidle0' });
     const text = await page.$eval('main', (m) => m.textContent);
     expect(await page.$$eval('[data-order-table] tr', (rs) => rs.map((r) => [r.querySelector('th')!.textContent, r.querySelector('td')!.textContent]))).toEqual(
-      expect.arrayContaining([['State', 'claimed'], ['Held by', 'hermes']]),
+      expect.arrayContaining([['State', 'claimed']]),
     );
+    expect(await page.$eval('[data-lease-line]', (l) => l.textContent)).toMatch(/^claimed by hermes at \d\d:\d\d, lease until /);
     expect(text).toContain('Order and progress');
     expect(text).toContain('1 earlier updates'); // four updates: one folded, the latest three shown
     await (await page.$('xpath/.//button[.="Cancel order"]'))!.click();

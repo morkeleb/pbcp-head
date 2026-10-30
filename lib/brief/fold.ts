@@ -7,6 +7,8 @@
 //   mattered  each thread whose newest card is a signal delivered immediate or brief, and each artifact delivered
 //             brief (or immediate) from a producer that sent at most QUIET_PRODUCER cards that day: "<title> — <lead>"
 //   rest      every other thread (log delivery, or an artifact from a busy producer): counted by producer, no titles
+//   orders    each order whose outcome arrived the day before, "<order title> — done: <outcome lead>" (A.3); an order
+//             whose thread only progressed is counted among the rest, as its executor's
 //
 // The body opens with the daily paragraph, prose made of those parts (lib/brief/paragraph.ts), which is therefore the
 // card's own lead (§3.1); then every open decision, and every one of the previous day's threads with its title and
@@ -29,6 +31,8 @@ export interface FoldInput {
   yesterday: Card[];
   /** Decisions the owner made on the day before `date` (by `decided_at`), whatever day the cards are on. */
   decidedYesterday?: Card[];
+  /** The orders whose threads have cards among `yesterday` (A.3): those cards are told as the order's, not as threads. */
+  orders?: Card[];
   /** The head's own page for a card: an absolute https URL to this head (lib/render keeps it an in-app link). */
   cardUrl: (id: string) => string;
 }
@@ -61,6 +65,8 @@ export interface FoldLines {
   mattered: FoldLine[];
   /** The previous day's other threads, counted. */
   rest: FoldLine[];
+  /** Orders whose outcome arrived the day before, each with it ("done: Booked Tuesday 09:00"); the line is the order's. */
+  orders: Array<FoldLine & { result: string }>;
   /** "2 open decisions, 1 snoozed · 14 cards yesterday from 5 producers" */
   counts: string;
 }
@@ -151,10 +157,23 @@ function matters(l: FoldLine, sentByProducer: Map<string, number>): boolean {
 }
 
 /** `at` is now: a decision whose `snoozed_until` is later is snoozed. */
-export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' | 'decidedYesterday'> & { at: string }): FoldLines {
+export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' | 'decidedYesterday' | 'orders'> & { at: string }): FoldLines {
   const producers = new Set(input.yesterday.map((c) => c.producer));
   const decisions = input.openDecisions.map((c) => line(c, input.at));
-  const threads = foldThreads(input.yesterday, input.at);
+  // A.3: an order's progress and outcome are the order's story, told once per order, not as the executor's threads.
+  const orderById = new Map((input.orders ?? []).map((o) => [o.id, o]));
+  const ofOrder = (c: Card) => c.thread !== undefined && orderById.has(c.thread);
+  const byOrder = new Map<string, Card[]>();
+  for (const c of [...input.yesterday].sort((a, b) => a.change_seq - b.change_seq)) if (ofOrder(c)) byOrder.set(c.thread!, [...(byOrder.get(c.thread!) ?? []), c]);
+  const orders: Array<FoldLine & { result: string }> = [];
+  const quietOrders: FoldLine[] = [];
+  for (const [id, cs] of byOrder) {
+    const order = orderById.get(id)!;
+    const outcome = cs.filter((c) => (c as Record<string, unknown>)['orders.result'] !== undefined).at(-1);
+    if (outcome) orders.push({ ...line(outcome, input.at, cs.length), id: order.id, title: order.title, labels: [...(order.labels ?? [])], result: String((outcome as Record<string, unknown>)['orders.result']) });
+    else quietOrders.push(line(cs.at(-1)!, input.at, cs.length));
+  }
+  const threads = foldThreads(input.yesterday.filter((c) => !ofOrder(c)), input.at);
   const sent = new Map<string, number>();
   for (const c of input.yesterday) sent.set(c.producer, (sent.get(c.producer) ?? 0) + 1);
   const others = threads.filter((l) => l.kind !== 'decision');
@@ -166,7 +185,8 @@ export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' 
     threads,
     decided,
     mattered: others.filter((l) => matters(l, sent)),
-    rest: others.filter((l) => !matters(l, sent)),
+    rest: [...others.filter((l) => !matters(l, sent)), ...quietOrders],
+    orders,
     counts: `${decisionCount(decisions, 'open decision')} · ${plural(input.yesterday.length, 'card')} yesterday from ${plural(producers.size, 'producer')}`,
   };
 }
@@ -191,12 +211,12 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
  * every open decision is snoozed, "0 decisions, 2 snoozed." Empty when nothing is open and nothing arrived the day
  * before: no sentence for its own sake.
  */
-export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'>, cardUrl: (id: string) => string): string {
+export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders'>>, cardUrl: (id: string) => string): string {
   return composeParagraph(paragraphParts(lines, cardUrl));
 }
 
 /** The paragraph's entries as markdown, each with its card's id and labels (lib/brief/paragraph.ts composes them). */
-export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'>, cardUrl: (id: string) => string): ParagraphParts {
+export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders'>>, cardUrl: (id: string) => string): ParagraphParts {
   const title = (l: FoldLine) => `[${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)`;
   const entry = (l: FoldLine) => ({ id: l.id, labels: l.labels, text: `${title(l)}${l.phrase ? ` — ${l.phrase}` : ''}` });
   return {
@@ -205,6 +225,7 @@ export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 
     decided: lines.decided.map((l) => ({ id: l.id, labels: l.labels, text: `${title(l)} — decided ${escapeMarkdown(l.value, Infinity)}` })),
     mattered: lines.mattered.slice(0, MAX_THREADS).map(entry),
     rest: lines.rest.map((l) => ({ producer: l.producer, labels: l.labels })),
+    orders: (lines.orders ?? []).map((l) => ({ id: l.id, labels: l.labels, text: `${title(l)} — ${escapeMarkdown(l.result)}${l.phrase ? `: ${l.phrase}` : ''}` })),
   };
 }
 
@@ -212,7 +233,7 @@ export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 
 export function foldDaily(input: FoldInput): ProducerCard {
   // The fold is as of when it is emitted: a decision snoozed past then is snoozed in it.
   const folded = dailyLines({ ...input, at: input.emittedAt });
-  const { decisions, threads, decided, counts } = folded;
+  const { decisions, threads, decided, orders, counts } = folded;
   const paragraph = dailyParagraph(folded, input.cardUrl);
   const lines: string[] = [paragraph, ''];
 
@@ -226,6 +247,12 @@ export function foldDaily(input: FoldInput): ProducerCard {
   if (decided.length > 0) {
     lines.push('**Decided yesterday**', '');
     for (const l of decided) lines.push(`- [${escapeMarkdown(l.title)}](<${input.cardUrl(l.id)}>) — decided ${escapeMarkdown(l.value, Infinity)}`);
+    lines.push('');
+  }
+
+  if (orders.length > 0) {
+    lines.push('**Orders**', '');
+    for (const l of orders) lines.push(`- [${escapeMarkdown(l.title)}](<${input.cardUrl(l.id)}>) — ${escapeMarkdown(l.result)}${l.lead ? `: ${l.lead}` : ''}`);
     lines.push('');
   }
 

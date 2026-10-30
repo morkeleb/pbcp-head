@@ -1,3 +1,4 @@
+import { FOLD_VERSION } from '../../lib/brief/fold-version';
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cards } from '../../db/schema';
@@ -108,7 +109,7 @@ describe('GET /api/cron/brief', () => {
     await testDb().delete(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, old.id)));
     expect((await cron()).body.minted).toEqual([{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }]);
     b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
-    expect(b.daily['x-pbcp-fold']).toBe(6);
+    expect(b.daily['x-pbcp-fold']).toBe(FOLD_VERSION);
     expect(b.daily_paragraph).toMatchObject({ so_far: false, html: b.daily.rendered_lead });
   });
 

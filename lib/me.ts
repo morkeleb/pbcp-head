@@ -85,17 +85,39 @@ async function orderThread(db: Db, headId: string, orderId: string): Promise<Row
     .limit(200);
 }
 
-/** /api/me/orders: each order with its progress folded: a count, and the latest card in full. */
+/** An order's lease as the owner sees it (head-private, A.2). */
+const leaseOf = (r: Row) => ({
+  claimed_at: r.leaseClaimedAt ? iso(r.leaseClaimedAt) : null,
+  renewals: r.leaseRenewals,
+  lapsed_at: r.leaseLapsedAt ? iso(r.leaseLapsedAt) : null,
+});
+
+const isOutcome = (r: Row) => (r.producerDoc as Record<string, unknown>)['orders.result'] !== undefined;
+
+/**
+ * /api/me/orders: each order with its lease as the owner sees it (when the current claim began, how often it was
+ * renewed, when the last lease lapsed: head-private, A.2) and its thread (A.3): a count, the latest card in full, every
+ * progress note newest first, and the latest outcome in full.
+ */
 export async function orderProgress(db: Db, headId: string, orders: Card[]) {
   const rows = await rowsFor(db, headId, orders.map((o) => o.id));
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const presented = new Map((await presentCards(db, rows)).map((c) => [c.id, c]));
   return Promise.all(
     orders.map(async (o) => {
       const thread = await orderThread(db, headId, o.id);
       const latest = thread.at(-1);
+      const outcome = thread.filter(isOutcome).at(-1);
+      const row = byId.get(o.id);
       return {
         ...presented.get(o.id)!,
-        progress: { count: thread.length, latest: latest ? (await presentCards(db, [latest]))[0]! : null },
+        lease: row ? leaseOf(row) : { claimed_at: null, renewals: 0, lapsed_at: null },
+        progress: {
+          count: thread.length,
+          latest: latest ? (await presentCards(db, [latest]))[0]! : null,
+          notes: thread.filter((r) => !isOutcome(r)).reverse().map((r) => ({ id: r.id, title: (r.producerDoc as { title: string }).title, received_at: iso(r.receivedAt) })),
+          outcome: outcome ? (await presentCards(db, [outcome]))[0]! : null,
+        },
       };
     }),
   );
@@ -181,6 +203,30 @@ export async function brief(db: Db, headId: string) {
     )
     .orderBy(asc(cards.changeSeq));
 
+  // Orders with progress or an outcome since the last visit (A.3): one row each in the brief, "<order> — <newest
+  // card's lead>", which stands for those cards; an open order that has been quiet since has none. An outcome that
+  // asks a decision is a decision card, and stays one.
+  const news = await db
+    .select()
+    .from(cards)
+    .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' like 'head:order:%'`, sql`${cards.producerDoc}->>'kind' <> 'decision'`, gt(cards.changeSeq, head.lastVisitSeq)))
+    .orderBy(asc(cards.changeSeq))
+    .limit(500);
+  const newsByOrder = new Map<string, Row[]>();
+  for (const r of news) {
+    const order = (r.producerDoc as { thread: string }).thread;
+    newsByOrder.set(order, [...(newsByOrder.get(order) ?? []), r]);
+  }
+  const openOrders = (await rowsFor(db, headId, [...newsByOrder.keys()])).filter((o) => o.toProducer !== null && o.state === 'open');
+  const orderUpdates = await Promise.all(
+    openOrders
+      .map((o) => ({ o, rows: newsByOrder.get(o.id)! }))
+      .sort((a, b) => b.rows.at(-1)!.changeSeq - a.rows.at(-1)!.changeSeq)
+      .map(async ({ o, rows }) => ({ id: o.id, title: (o.producerDoc as { title: string }).title, count: rows.length, latest: (await presentCards(db, [rows.at(-1)!]))[0]! })),
+  );
+  const folded = new Set(orderUpdates.map((u) => u.id));
+  const loose = attention.filter((r) => !folded.has((r.producerDoc as { thread?: string }).thread ?? ''));
+
   const [{ snoozed }] = (await db
     .select({ snoozed: sql<number>`count(*)::int` })
     .from(cards)
@@ -188,7 +234,7 @@ export async function brief(db: Db, headId: string) {
 
   // Fold by producer and thread; a card without a thread is its own fold.
   const groups = new Map<string, Row[]>();
-  for (const row of attention) {
+  for (const row of loose) {
     const thread = (row.producerDoc as { thread?: string }).thread;
     const key = `${row.producer}\u0000${thread ?? `\u0001${row.id}`}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
@@ -263,7 +309,7 @@ export async function brief(db: Db, headId: string) {
 
   const [oldest] = await db.select({ day: cards.day }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.day)).limit(1);
 
-  const shown = [...decisions, ...attention, ...late, ...(daily ? [daily] : [])];
+  const shown = [...decisions, ...loose, ...late, ...(daily ? [daily] : [])];
   return {
     date: today,
     timezone: head.timezone,
@@ -277,6 +323,7 @@ export async function brief(db: Db, headId: string) {
     threads: folds.map(({ immediate: _i, order: _o, ...f }) => f),
     snoozed,
     late_outcomes: await presentCards(db, late),
+    order_updates: orderUpdates,
     lapsed_orders: await presentCards(db, lapsed),
     new: shown.filter((r) => r.changeSeq > head.lastVisitSeq).map((r) => r.id),
   };
@@ -424,7 +471,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
   const head = await headSettings(db, headId);
   return {
     timezone: head.timezone,
-    card: (await presentCards(db, [row]))[0]!,
+    card: { ...(await presentCards(db, [row]))[0]!, ...(row.toProducer !== null ? { lease: leaseOf(row) } : {}) },
     predecessors: await presentCards(db, predecessors),
     successors: successors.map(summary),
     references: await Promise.all(refs.map(async (ref) => ({ id: ref, card: referenced.has(ref) ? summary(referenced.get(ref)!) : null }))),
