@@ -1503,6 +1503,25 @@ describe('OAuth consent', () => {
 });
 
 describe('web orders', () => {
+  it('shows an order claimed and its progress without a reload', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    await page.type('textarea[aria-label="Order"]', 'Book the dentist\nAny weekday morning.');
+    await (await page.$('xpath/.//button[.="Give order"]'))!.click();
+    await page.waitForSelector('xpath/.//article//a[.="Book the dentist"]');
+    const state = () => page.$$eval('[data-order-table] tr', (rs) => Object.fromEntries(rs.map((r) => [r.querySelector('th')!.textContent, r.querySelector('td')!.textContent])));
+    expect((await state()).State).toBe('open');
+    // The executor picks it up and reports a step; the page is left alone.
+    const [order] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.toProducer, '*')));
+    await call('POST', `${cardPath(order!.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });
+    const k = order!.id.split(':')[2]!;
+    await call('PUT', cardPath(`hermes:order:${k}:progress-1-1`), { auth: hermes, body: card(`hermes:order:${k}:progress-1-1`, { kind: 'signal', urgency: 'log', thread: order!.id, title: 'Found two free slots' }) });
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-order-table] tr')].some((r) => r.textContent === 'Stateclaimed'), { timeout: 15_000 });
+    expect(await state()).toMatchObject({ State: 'claimed', 'Held by': 'hermes' });
+    await page.waitForSelector('xpath/.//*[contains(., "Found two free slots")]', { timeout: 5_000 });
+    expect(errors).toEqual([]);
+  }, 40_000);
+
   it('gives an order from the text field, shows its progress on the card, and cancels it after the undo window', async () => {
     const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes', executor: true })}`;
     await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });

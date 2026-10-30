@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { clock } from '../brief/DecisionCard';
 import { UpdateRow } from '../brief/UpdateRow';
 import { PageRow, useChromeCards } from '../chrome';
-import { api, cardHref, OfflineError, OFFLINE_REASON, useOnline, when } from '../client';
+import { api, cardHref, OfflineError, OFFLINE_REASON, useLiveChanges, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 
 export interface Order extends MeCard {
@@ -32,18 +32,24 @@ export function OrdersView() {
   const [producers, setProducers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders');
+  const fetchOrders = useCallback(async (network: boolean) => {
+    const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders', { network });
     if (r.status !== 200) return setError(`Could not load orders (${r.status}).`);
     setOrders(r.body.orders);
     setTimezone(r.body.timezone);
   }, []);
+  const load = useCallback(() => fetchOrders(false), [fetchOrders]);
   useEffect(() => {
     void load();
     void api<{ producers: Array<{ root: string; revoked: boolean }> }>('/api/me/producers').then((r) => {
       if (r.status === 200) setProducers(r.body.producers.filter((p) => !p.revoked).map((p) => p.root));
     });
   }, [load]);
+  // Live: an order claimed, progressing or done shows so without a reload; while one is open or claimed, the page looks
+  // every ten seconds, since an executor usually picks an order up soon after it is given.
+  const working = (orders ?? []).some(isActive);
+  const reload = useCallback(() => fetchOrders(true), [fetchOrders]);
+  useLiveChanges(reload, working ? 10_000 : 60_000);
   useChromeCards([...(orders ?? []), ...(orders ?? []).flatMap((o) => (o.progress.latest ? [o.progress.latest] : []))]);
 
   const open = (orders ?? []).filter(isActive);

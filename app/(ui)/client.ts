@@ -9,7 +9,7 @@
 // orders) are never sent without a network and never queued: api() refuses them with OfflineError, and the
 // controls are disabled while offline.
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 export interface Tokens {
   access_token: string;
@@ -82,6 +82,51 @@ export function useOnline(): boolean {
     () => !offline,
     () => true,
   );
+}
+
+/**
+ * Live: calls `reload` when the head has changed since the page last looked. It asks the head's change counter
+ * (GET /api/me/seq) when the page comes back into view, every `everyMs` while it is on screen, and at once when a push
+ * arrives (the service worker says so), and reloads only when the counter has moved. The brief keeps its own check
+ * (brief/use-brief.ts), which also follows the date.
+ */
+export function useLiveChanges(reload: () => Promise<void> | void, everyMs = 60_000): void {
+  const latest = useRef(reload);
+  latest.current = reload;
+  useEffect(() => {
+    let seq: number | null = null;
+    let last = 0;
+    let busy = false;
+    const check = async (now = false) => {
+      if (document.visibilityState !== 'visible' || busy) return;
+      if (!now && Date.now() - last < Math.min(everyMs, 15_000)) return;
+      last = Date.now();
+      busy = true;
+      try {
+        const r = await api<{ seq: number }>('/api/me/seq', { network: true });
+        if (r.status !== 200) return;
+        if (seq !== null && r.body.seq !== seq) await latest.current();
+        seq = r.body.seq;
+      } catch {
+        // offline, or signed out: the next check tries again
+      } finally {
+        busy = false;
+      }
+    };
+    const onVisible = () => void check();
+    const onMessage = (e: MessageEvent) => void ((e.data as { type?: string } | null)?.type === 'pbcp-push' && check(true));
+    void check(true); // where the counter is now: changes are counted from here
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    const timer = setInterval(() => void check(true), everyMs);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+      clearInterval(timer);
+    };
+  }, [everyMs]);
 }
 
 /**
