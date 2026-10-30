@@ -59,7 +59,7 @@ export function BriefView() {
 
   // Earlier days load above the view; the pin keeps what is on screen where it is (on load: today under the masthead).
   const loadAbove = useCallback(async () => void (await loadEarlier()), [loadEarlier]);
-  useLayoutEffect(() => {
+  const hold = useCallback(() => {
     const p = pin.current;
     // Moved by the page, not by the person: the scroll position is where it was, and the card is not.
     if (p && p.el.isConnected && scrollY === p.y) {
@@ -67,7 +67,18 @@ export function BriefView() {
       if (Math.abs(moved) > 1) scrollBy({ top: moved, behavior: 'instant' });
     }
     remember();
-  });
+  }, [remember]);
+  // After every render of the page, and whenever anything in it changes size on its own (a card that lays out its body
+  // after it first renders, an image that arrives, a card decided elsewhere on the page).
+  useLayoutEffect(hold);
+  const main = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = main.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => hold());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hold, brief === null]); // eslint-disable-line react-hooks/exhaustive-deps -- the <main> exists once the brief is in
 
   // The sentinel above the first day loads the week before it, until the head has no earlier cards (§8: every card
   // stays reachable). Observed afresh after each load, so a sentinel still in view loads the next week too.
@@ -86,7 +97,9 @@ export function BriefView() {
     let frame = 0;
     const update = () => {
       frame = 0;
-      remember();
+      // The person scrolled: pin what is under the masthead now. The page scrolled itself to hold the pin: keep holding
+      // it (whatever grew meanwhile still counts).
+      hold();
       const mast = document.querySelector('[data-masthead]')?.getBoundingClientRect().bottom ?? 0;
       let current = today;
       for (const h of document.querySelectorAll<HTMLElement>('[data-day]')) if (h.getBoundingClientRect().top <= mast + 8) current = h.dataset.day!;
@@ -103,7 +116,7 @@ export function BriefView() {
       removeEventListener('resize', onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [today, days.length]);
+  }, [today, days.length, hold]);
 
   const scrollToDay = useCallback((date: string) => {
     const section = () => document.querySelector<HTMLElement>(`[data-day="${date}"]`)?.closest('section');
@@ -141,6 +154,12 @@ export function BriefView() {
     const next = list[direction === 'left' ? i + 1 : i - 1];
     if (next) void select(next);
   });
+  // One ref for <main>, stable across renders: a new one each render would detach the swipe's listeners mid-gesture.
+  const swipeRef = daySwipe.ref;
+  const mainRef = useCallback((el: HTMLElement | null) => {
+    main.current = el;
+    swipeRef(el);
+  }, [swipeRef]);
 
   // The swipe hint: shown once per device, then never again. Once shown it also leaves the screen (after a few
   // seconds, or when the person first scrolls): a home-screen app on iOS is resumed rather than reloaded, so a hint that only
@@ -245,7 +264,7 @@ export function BriefView() {
     <div className="min-h-dvh pb-24">
       <MastheadRow>{strip}</MastheadRow>
       {labelFilter}
-      <main className={cn('mx-auto max-w-[1440px] touch-pan-y', wide ? 'px-6' : 'px-4')} ref={daySwipe.ref}>
+      <main className={cn('mx-auto max-w-[1440px] touch-pan-y', wide ? 'px-6' : 'px-4')} ref={mainRef}>
         <div ref={top} aria-hidden className="h-px" />
         {visible.map((d) => (
             <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} tz={tz} decision={decision} update={update} />
