@@ -16,7 +16,7 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
-| **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow below), each opening with its paragraph; open decisions, then the day's schedule (its cards with `at` on a time rail, RFC 0.8 §8), then artifacts (Updates) and signals folded by thread. Built from the components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
+| **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow and the days ahead that have cards below, two weeks), each opening with its paragraph; open decisions, then the day's schedule (its cards with `at` on a time rail, RFC 0.8 §8), then artifacts (Updates) and signals folded by thread. Built from the components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
 | **Card** | The card as the Brief shows it (`DecisionCard`, or `UpdateRow` for an artifact or signal) with its body fully open; then its thread as the Brief lists threads; then its decision log entries as a small table | Decide, snooze, open source, see thread |
 | **Orders** | Open orders, each a block styled like a `DecisionCard` with `exec_state`, who holds it and the lease in a small table, its latest progress as an `UpdateRow` beneath; then done orders as `UpdateRow`s of their outcomes | Dictate a new order (text or voice); cancel |
 
@@ -24,7 +24,7 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 
 | Component | Shows | Does |
 | --- | --- | --- |
-| `DecisionCard` | Producer · labels · time (`at`–`until` when the card has them) · decide (from 900 px; on a phone its options say it) · label · host ↗ (an accent dot while unseen; links to `source.url` in a new tab, http(s) and mailto only; the host always shows, RFC §12, the label once only when it is not the host, and the label is dropped first when the line is too narrow; the card's labels, RFC 0.7 §4.1, in the producer's order and the producer's type, truncate next) and a menu (snooze, open card); title; `rendered_lead`; the proposal in an inset; the first visual while the rest is closed; the rest behind "More"; the actions in order (only an option marked `default` filled, none filled without one, RFC §4.5), Dismiss as quiet text, Edit… only when `edit` is offered, a comment behind a disclosure; options with a body one under another, each its own button beside its body | Decides on a tap at once (the buttons become "Approved · 09:14", with the later cards that reference it beside that, §8); on a swipe or a key after a 4 s undo, a right swipe only with a default; sets `seen_at` when "More" opens |
+| `DecisionCard` | Producer · labels · time (`at`–`until` when the card has them) · decide (from 900 px; on a phone its options say it) · label · host ↗ (an accent dot while unseen; links to `source.url` in a new tab, http(s) and mailto only; the host always shows, RFC §12, the label once only when it is not the host, and the label is dropped first when the line is too narrow; the card's labels, RFC 0.7 §4.1, in the producer's order and the producer's type, truncate next) and a menu (snooze, open card); title; `rendered_lead`; the proposal in an inset; the first visual while the rest is closed; the rest behind "More"; the actions in order (only an option marked `default` filled, none filled without one, RFC §4.5), Dismiss as quiet text, Edit… only when `edit` is offered, a comment behind a disclosure; options with a body one under another, each its own button beside its body | Decides on a tap at once (the buttons become "Approved · 09:14", with the later cards that reference it beside that, §8); on the `d` key after a 4 s undo; sets `seen_at` when "More" opens |
 | `UpdateRow` | An artifact or signal thread: producer · labels · time · acknowledge · label · host ↗ (as on `DecisionCard`; never the kind's name, RFC §4.1a), the newest card's title and `rendered_lead`, its first visual fitted to the row, the thread behind one line, newest last | Acknowledges the thread (the control becomes "Acknowledged · 09:14") |
 | `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists), "Morning brief" on an earlier day and the day's paragraph: its decisions as title — lead, then one sentence of yesterday's threads the same way, each title linked to its card (`daily_paragraph`) | — |
 | `TimeRail` | A day's schedule: its cards with `at`, every producer, `log` included, as an agenda (in time order, nothing between them) or, toggled, a timeline that shows the free time (a bar to `until`, a point without; length is `until`); colour is the producer; the producer legend under it. The choice is remembered per device and is the same for every day. A card shown on the brief is a marker (time, producer, title) linking to its row | — |
@@ -48,18 +48,17 @@ The RFC's decision semantics map one to one onto touch, and the mapping is the p
 | Gesture on a decision card | Records | When | RFC |
 | --- | --- | --- | --- |
 | Tap an action button | That option's `id` as `decision` | At once | §4.4, §4.5 |
-| Tap a choice, then its button (options with a `body`) | That option's `id`; the default is pre-selected | At once | §4.4 |
 | Tap "Edit…" (only when `actions` lists `edit`), write, send | `edited` + `edited_proposal` | At once | §4.3, §4.4 |
 | Tap "Dismiss" | `dismissed` | At once | §4.3 |
 | "Add a comment" (a disclosure, never a required field) | `comment` alongside the decision | With it | §4.2, §4.5 |
-| Swipe right | The `default` option; `approve` when `actions` is a plain list with `approve`. Nothing when there is no default | After a 4 s undo window | §4.4 |
-| Swipe left | `dismissed`, on every decision card; never `reject`, which is a producer action and taken by tapping it | After a 4 s undo window | §4.3, §4.5 |
+| `d` (keyboard, wide screens) | `dismissed` on the focused card | After a 4 s undo window | §4.3, §4.5 |
+| Swipe left or right, anywhere on the brief | Nothing on a card: the next day on the timeline, or the one before | — | — |
 | Tap the title | Opens the card | — | — |
 | Long-press | Snooze picker: tonight, tomorrow's brief, next week | At once | `snoozed_until`, not a state |
 
 The actions are the controls (§4.5): they sit on the card, in the card's order, with the lead and the proposal above them, and nothing gathers them behind a "decide" control. Only a default is drawn as the primary control; a card without a default shows its options with equal weight, so a closed choice is never nudged.
 
-**Taps commit; swipes wait.** A tap is a deliberate choice and is recorded at once: the card shows the decision in place ("Decided: approve · 09:14") and dims, and the protocol's one-way state follows. A swipe is easy to do by accident, so it waits 4 s behind an undo toast; Undo cancels it before anything is sent. Neither is queued offline: with no network the controls are disabled and say why. Artifacts and signals are acknowledged by a button (at once) or by a swipe either way (after the same undo window), which sets `acknowledged_at` and nothing else.
+**Taps commit; swipes move days.** A tap is a deliberate choice and is recorded at once: the card shows the decision in place ("Decided: approve · 09:14") and dims, and the protocol's one-way state follows. Nothing is decided or acknowledged by a swipe: a sideways swipe anywhere on the brief goes to the next or previous day. A decided card stays where it was, in its new state, until the brief is opened again, and nothing the person is looking at moves when cards arrive or the brief reloads. Nothing is queued offline: with no network the controls are disabled and say why. Artifacts and signals are acknowledged by a button, which sets `acknowledged_at` and nothing else.
 
 **Orders** are dictated: a text field with a microphone, posted as `head:order:<ulid>` to the producer the person names or to `*`. The app does not try to parse the order; the executor does, and asks back with a decision card if it cannot.
 
@@ -137,7 +136,7 @@ The head needs one addition for this: an outbox row written in the same transact
 
 **App milestones.**
 
-1. Sign in, Brief, Card, actions on the card with choice lists, swipe-to-default with undo. Usable for the morning in the first build.
+1. Sign in, Brief, Card, actions on the card with choice lists, swipe between days. Usable for the morning in the first build.
 2. Earlier days in the timeline, snooze, acknowledgement, settings (devices, producers).
 3. Orders: dictation with voice, open-orders list, cancel.
 4. Push on `immediate`; quiet hours.

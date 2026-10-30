@@ -1,7 +1,7 @@
 'use client';
 
 // DatePicker: a month of days, Monday first, in a dialog opened from the week strip's month label. Days from the
-// head's first card to tomorrow can be picked; picking one jumps the timeline there. The iOS app mirrors this component.
+// past year (or the head's first card, if earlier) to two weeks ahead can be picked; picking one jumps the timeline there. The iOS app mirrors this component.
 //
 //   ‹  October 2026  ›
 //   MON TUE WED THU FRI SAT SUN

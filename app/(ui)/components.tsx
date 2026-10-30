@@ -463,8 +463,8 @@ export function useDeferred() {
  * selects text): left or right past 80 px. Built on touch events rather than pointer events: iOS Safari cancels a
  * touch's pointer stream as soon as it suspects a scroll, so a swipe that drifts a little vertically never ended.
  * Once a gesture is clearly sideways (after 8 px) the card owns it and stops the page from scrolling; a vertical
- * one stays the browser's. A touch that starts on a control (a link, a button, an option) is that control's, and one that
- * starts in something that scrolls sideways (a wide table) is that scroll's.
+ * one stays the browser's. A touch that starts in a field is the field's, and one that starts in something that scrolls
+ * sideways (a wide table) is that scroll's.
  */
 export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
   const [dx, setDx] = useState(0);
@@ -496,7 +496,9 @@ export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
     const down = (e: TouchEvent) => {
       const t = e.touches[0];
       const target = e.target as Element;
-      if (e.touches.length !== 1 || !t || target.closest('button, a, input, textarea, label, summary, img, [role="radio"]') || scrollsSideways(target)) return reset();
+      // A sideways drag never presses a button or follows a link (the browser takes a moved touch for no tap), so only
+      // what is typed into keeps its touches, with what scrolls sideways.
+      if (e.touches.length !== 1 || !t || target.closest('input, textarea, select, [contenteditable]') || scrollsSideways(target)) return reset();
       start = { x: t.clientX, y: t.clientY };
       axis = null;
       x = 0;
@@ -553,17 +555,6 @@ export function options(card: MeCard): { list: Option[]; edit: boolean; byDefaul
   const byDefault = list.find((o) => o.isDefault) ?? null;
   return { list, edit, byDefault };
 }
-
-/**
- * What a swipe chooses (docs/mobile-prd.md): right the default, nothing without one; left `dismissed`, which every
- * decision card offers (§4.5). Never `reject`: that is one of the producer's actions, chosen by tapping it.
- */
-export function swipeChoice(card: MeCard, direction: 'left' | 'right'): { decision: string; label: string } | null {
-  if (direction === 'left') return { decision: 'dismissed', label: 'Dismiss' };
-  const { byDefault } = options(card);
-  return byDefault ? { decision: byDefault.id, label: byDefault.label } : null;
-}
-
 
 /** What a recorded decision reads as: the option's label, or the protocol decision's name (§4.3). */
 export function decisionLabel(card: MeCard): string {

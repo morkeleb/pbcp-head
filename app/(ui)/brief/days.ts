@@ -27,7 +27,7 @@ export interface BriefResponse {
 
 export interface Day {
   date: string;
-  kind: 'past' | 'today' | 'tomorrow';
+  kind: 'past' | 'today' | 'tomorrow' | 'ahead';
   /** The day's paragraph; `parts` when the head kept its entries apart, so the label filter can follow it. */
   paragraph: { html: string; soFar: boolean; parts?: ParagraphParts; /** The label filter's choice, when one is on. */ chosen?: string[] } | null;
   decisions: MeCard[];
@@ -41,6 +41,25 @@ export interface Day {
 
 /** Earlier days are fetched this many at a time. */
 export const WEEK = 7;
+
+/** How far ahead the timeline reaches: the days after tomorrow with cards about them (a calendar sends a week or so). */
+export const AHEAD = 14;
+
+/**
+ * A day after tomorrow: what is set for it (§8: a card about a later day appears on that day). Its artifacts and signals
+ * as threads, and its schedule; its open decisions are under today, marked with their day.
+ */
+export function aheadOf(date: string, cards: MeCard[]): Day {
+  return {
+    date,
+    kind: 'ahead',
+    paragraph: null,
+    decisions: [],
+    ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && c.state === 'open' && c.delivery !== 'log'))),
+    rail: railCards(cards),
+    ...(cards.length === 0 ? { nothing: true } : {}),
+  };
+}
 
 export const addDays = (date: string, n: number) => {
   const d = new Date(`${date}T00:00:00Z`);

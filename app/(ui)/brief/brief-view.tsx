@@ -5,16 +5,20 @@
 //
 //   < 900 px   timeline: masthead, week strip, then the days top to bottom, each with a sticky dated header and a thin
 //              rail of times; today first on load, earlier days loaded above as the person scrolls up (a week at a
-//              time, back to the head's first card), tomorrow below; the week strip's month label picks any day.
+//              time, back to the head's first card), tomorrow and the days ahead that have cards below (two weeks);
+//              the week strip's month label picks any day of the past year or the next two weeks.
 //   ≥ 900 px   broadsheet: the week strip in the masthead; each day in two columns, 60/40, decisions on the left,
-//              updates and signals on the right; the same past-above, future-below scrolling; j/k/enter/d.
+//              the schedule, updates and signals on the right; the same past-above, future-below scrolling; j/k/enter/d.
+//
+// A sideways swipe moves to the next or the previous day. What the person is looking at stays where it is on screen
+// whatever loads or changes around it (the pin below).
 
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MastheadRow, MastheadTools, useChrome, useChromeCards } from '../chrome';
-import type { MeCard } from '../components';
+import { useSwipe, type MeCard } from '../components';
 import { matchesLabels } from '../../../lib/brief/paragraph';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { DecisionCard, type DecisionCardHandle } from './DecisionCard';
@@ -22,6 +26,7 @@ import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow'
 import { addDays, useBrief, type Day } from './use-brief';
 import { dayName, DaySection, shortDay, weekOf } from './day-section';
 import { WeekStrip, type WeekDay } from './WeekStrip';
+import { AHEAD } from './days';
 
 const HINT_KEY = 'pbcp.swipe-hint';
 /** How long the swipe hint stays up, unless the person scrolls first. */
@@ -30,37 +35,50 @@ const HINT_MS = 8000;
 export function BriefView() {
   // The masthead is the layout's (app/(ui)/chrome.tsx): the layout comes from it, the week strip goes into it.
   const { wide } = useChrome();
-  const { brief, days, references, cachedAt, error, loadEarlier, loadedFrom, atStart, loadedBack, change } = useBrief();
+  const { brief, days, references, cachedAt, error, loadEarlier, showAhead, loadedFrom, atStart, loadedBack, change } = useBrief();
   const [selected, setSelected] = useState<string | null>(null);
   const [todayOut, setTodayOut] = useState<'above' | 'below' | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
   const top = useRef<HTMLDivElement>(null);
   const handles = useRef(new Map<string, DecisionCardHandle | UpdateRowHandle | null>());
-  const anchor = useRef<{ el: Element; docTop: number } | null>(null);
+  // What the person is looking at: the first card (or day) not under the masthead, where it was on screen, and the
+  // scroll position then. Whatever renders (earlier days loading above, a card decided, a new card arriving, the brief
+  // reloaded), that card stays where it was on screen. Done by hand: Safari has no CSS scroll anchoring.
+  const pin = useRef<{ el: Element; top: number; y: number } | null>(null);
+  const remember = useCallback(() => {
+    const mast = document.querySelector('[data-masthead]')?.getBoundingClientRect().bottom ?? 0;
+    // Not a day's header: it is sticky, so where it sits says nothing about what moved.
+    // A card first: a day's section does not move when a card is added inside it, above what the person reads.
+    const below = (sel: string) => [...document.querySelectorAll(sel)].find((e) => e.getBoundingClientRect().bottom > mast + 1);
+    const el = below('main [data-card]') ?? below('main section[data-section]');
+    pin.current = el ? { el, top: el.getBoundingClientRect().top, y: scrollY } : null;
+  }, []);
   const jumpTo = useRef<string | null>(null);
   const today = brief?.date ?? '';
 
-  // Earlier days load above the view. The first day on screen is pinned where it was, so nothing the person is looking
-  // at moves (done by hand: Safari has no CSS scroll anchoring). On load that keeps today under the masthead.
-  const loadAbove = useCallback(
-    async () => {
-      const mast = document.querySelector('[data-masthead]')?.getBoundingClientRect().bottom ?? 0;
-      const el = [...document.querySelectorAll('section[data-section]')].find((s) => s.getBoundingClientRect().bottom > mast);
-      // Its place in the document, not on screen: scrolling while the day loads must not be undone.
-      anchor.current = el ? { el, docTop: el.getBoundingClientRect().top + scrollY } : null;
-      await loadEarlier();
-    },
-    [loadEarlier],
-  );
-  useLayoutEffect(() => {
-    const a = anchor.current;
-    if (!a) return;
-    anchor.current = null;
-    // What was inserted above it, exactly: compensate that, and nothing the person scrolled meanwhile.
-    const inserted = a.el.getBoundingClientRect().top + scrollY - a.docTop;
-    if (inserted) scrollBy({ top: inserted, behavior: 'instant' });
-  }, [loadedBack]);
+  // Earlier days load above the view; the pin keeps what is on screen where it is (on load: today under the masthead).
+  const loadAbove = useCallback(async () => void (await loadEarlier()), [loadEarlier]);
+  const hold = useCallback(() => {
+    const p = pin.current;
+    // Moved by the page, not by the person: the scroll position is where it was, and the card is not.
+    if (p && p.el.isConnected && scrollY === p.y) {
+      const moved = p.el.getBoundingClientRect().top - p.top;
+      if (Math.abs(moved) > 1) scrollBy({ top: moved, behavior: 'instant' });
+    }
+    remember();
+  }, [remember]);
+  // After every render of the page, and whenever anything in it changes size on its own (a card that lays out its body
+  // after it first renders, an image that arrives, a card decided elsewhere on the page).
+  useLayoutEffect(hold);
+  const main = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = main.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => hold());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hold, brief === null]); // eslint-disable-line react-hooks/exhaustive-deps -- the <main> exists once the brief is in
 
   // The sentinel above the first day loads the week before it, until the head has no earlier cards (§8: every card
   // stays reachable). Observed afresh after each load, so a sentinel still in view loads the next week too.
@@ -79,6 +97,9 @@ export function BriefView() {
     let frame = 0;
     const update = () => {
       frame = 0;
+      // The person scrolled: pin what is under the masthead now. The page scrolled itself to hold the pin: keep holding
+      // it (whatever grew meanwhile still counts).
+      hold();
       const mast = document.querySelector('[data-masthead]')?.getBoundingClientRect().bottom ?? 0;
       let current = today;
       for (const h of document.querySelectorAll<HTMLElement>('[data-day]')) if (h.getBoundingClientRect().top <= mast + 8) current = h.dataset.day!;
@@ -95,7 +116,7 @@ export function BriefView() {
       removeEventListener('resize', onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [today, days.length]);
+  }, [today, days.length, hold]);
 
   const scrollToDay = useCallback((date: string) => {
     const section = () => document.querySelector<HTMLElement>(`[data-day="${date}"]`)?.closest('section');
@@ -111,16 +132,34 @@ export function BriefView() {
     for (const ms of [450, 900]) setTimeout(() => Math.abs(offset()) > 2 && scrollBy({ top: offset(), behavior: 'instant' }), ms);
     return true;
   }, []);
-  // A day tapped on the strip or picked that is not on the timeline yet: load back to it (or show it, when it is loaded
-  // but nothing came that day), then go.
+  // A day tapped on the strip or picked that is not on the timeline yet: load back to it, or show the day ahead (both
+  // shown even when nothing is on them), then go.
   const select = async (date: string) => {
     if (scrollToDay(date)) return;
     jumpTo.current = date;
-    await loadEarlier(date);
+    if (today && date > addDays(today, 1)) showAhead(date);
+    else await loadEarlier(date);
   };
   useEffect(() => {
     if (jumpTo.current && scrollToDay(jumpTo.current)) jumpTo.current = null;
-  }, [loadedBack, scrollToDay]);
+  });
+
+  // A sideways swipe moves between days: left to the next day on the timeline, right to the one before it. It starts
+  // anywhere on the page but a control or something that scrolls sideways itself (a wide table).
+  const onTimeline = useRef<string[]>([]);
+  const shownRef = useRef<string>('');
+  const daySwipe = useSwipe((direction) => {
+    const list = onTimeline.current;
+    const i = list.indexOf(shownRef.current);
+    const next = list[direction === 'left' ? i + 1 : i - 1];
+    if (next) void select(next);
+  });
+  // One ref for <main>, stable across renders: a new one each render would detach the swipe's listeners mid-gesture.
+  const swipeRef = daySwipe.ref;
+  const mainRef = useCallback((el: HTMLElement | null) => {
+    main.current = el;
+    swipeRef(el);
+  }, [swipeRef]);
 
   // The swipe hint: shown once per device, then never again. Once shown it also leaves the screen (after a few
   // seconds, or when the person first scrolls): a home-screen app on iOS is resumed rather than reloaded, so a hint that only
@@ -187,8 +226,10 @@ export function BriefView() {
   const tz = brief.timezone;
   const shownDay = selected ?? today;
   const openOn = new Set(brief.decisions.map((c) => c.day ?? c.received_at.slice(0, 10))); // §8: a card's day
-  const firstDay = brief.first_day && brief.first_day < today ? brief.first_day : today;
-  const lastDay = addDays(today, 1);
+  // Any day of the past year, or back to the first card if that is earlier; and the days ahead the timeline reaches.
+  const yearAgo = addDays(today, -365);
+  const firstDay = brief.first_day && brief.first_day < yearAgo ? brief.first_day : yearAgo;
+  const lastDay = addDays(today, AHEAD);
   const week: WeekDay[] = weekOf(shownDay).map((date) => ({ date, open: openOn.has(date), reachable: date >= firstDay && date <= lastDay }));
   // The labels on the loaded days, each with how many cards on screen carry it (a card once, wherever it shows).
   const counts = new Map<string, number>();
@@ -201,6 +242,10 @@ export function BriefView() {
     </MastheadTools>
   );
   const shownDays = chosen.length ? days.map((d) => filtered(d, chosen)) : days;
+  // An earlier or later day with nothing on it is not shown (no header for an empty day), unless the person went to it.
+  const visible = shownDays.filter((d) => d.kind === 'today' || d.kind === 'tomorrow' || d.nothing || d.paragraph || d.decisions.length || d.updates.length || d.signals.length || d.rail?.length);
+  onTimeline.current = visible.map((d) => d.date);
+  shownRef.current = shownDay;
   const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
 
   // §8: a decision whose day is later than the day it is listed under (an open one, under today) says which day it is for.
@@ -219,12 +264,9 @@ export function BriefView() {
     <div className="min-h-dvh pb-24">
       <MastheadRow>{strip}</MastheadRow>
       {labelFilter}
-      <main className={cn('mx-auto max-w-[1440px]', wide ? 'px-6' : 'px-4')}>
+      <main className={cn('mx-auto max-w-[1440px] touch-pan-y', wide ? 'px-6' : 'px-4')} ref={mainRef}>
         <div ref={top} aria-hidden className="h-px" />
-        {shownDays
-          // An earlier day with nothing on it is not shown (no header for an empty day), unless the person went to it.
-          .filter((d) => d.kind !== 'past' || d.nothing || d.paragraph || d.decisions.length || d.updates.length || d.signals.length)
-          .map((d) => (
+        {visible.map((d) => (
             <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} tz={tz} decision={decision} update={update} />
           ))}
       </main>
@@ -240,7 +282,7 @@ export function BriefView() {
         {wide ? (
           <span><kbd className="font-sans">j</kbd> / <kbd className="font-sans">k</kbd> move · <kbd className="font-sans">enter</kbd> open · <kbd className="font-sans">d</kbd> dismiss</span>
         ) : hint ? (
-          <span>Swipe right for the default · swipe left to dismiss</span>
+          <span>Swipe left for the next day · right for the day before</span>
         ) : (
           <span>{brief.snoozed > 0 ? `${brief.snoozed} snoozed` : ' '}</span>
         )}

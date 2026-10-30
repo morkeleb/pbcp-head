@@ -77,7 +77,7 @@ export function DaySection({ day, name, wide, tz, decision, update }: {
       {day.kind === 'tomorrow' && empty ? (
         <p className="py-3 text-lead text-muted-foreground">Nothing set for tomorrow yet.</p>
       ) : day.nothing ? (
-        <p className="py-3 text-lead text-muted-foreground">Nothing arrived this day.</p>
+        <p className="py-3 text-lead text-muted-foreground">{day.kind === 'ahead' ? 'Nothing set for this day yet.' : 'Nothing arrived this day.'}</p>
       ) : wide ? (
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] gap-6 pt-3">
           <div className="min-w-0">
