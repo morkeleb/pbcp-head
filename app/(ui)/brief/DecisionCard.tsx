@@ -13,8 +13,8 @@
 // Every action is a control on the row, in the card's order, with no gesture before it; the default is the one primary
 // control, and with no default none is. Options that carry a body are laid out one under another, each with its own
 // control beside its body. A tap commits at once and the controls give way to a state line ("Approved · 09:14"), with
-// the later cards that reference the card beside it (§8: "Sent: Re: invoice timing · 08:11"). A swipe (touch or pen)
-// or a key (via `handle`) waits behind a 4 s undo.
+// the later cards that reference the card beside it (§8: "Sent: Re: invoice timing · 08:11"). A key (via `handle`)
+// waits behind a 4 s undo. A sideways swipe is not the card's: it moves the brief between days.
 
 import { ChevronDown, EllipsisVertical } from 'lucide-react';
 import Link from 'next/link';
@@ -27,7 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, splitBody, swipeChoice, useDecide, useDeferred, useSwipe,
+  announce, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, splitBody, useDecide, useDeferred,
   type MeCard,
 } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
@@ -37,7 +37,7 @@ export { clock };
 
 /** What the page can do to a card from the keyboard (j/k/enter/d) or elsewhere. */
 export interface DecisionCardHandle {
-  /** `d`: dismiss, after the same undo window as a swipe. */
+  /** `d`: dismiss, after an undo window. */
   dismiss(): void;
   /** `enter`: open the rest of the body. */
   expand(): void;
@@ -83,10 +83,6 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   const decide = (decision: string, extra: { edited_proposal?: string } = {}) =>
     post({ decision, ...extra, ...(comment.trim() ? { comment: comment.trim() } : {}) });
   const deferred = useDeferred();
-  const swipe = useSwipe((direction) => {
-    const choice = decided || !online || deferred.pending ? null : swipeChoice(card, direction);
-    if (choice) deferred.schedule(`${choice.label}: ${card.title}`, () => void decide(choice.decision));
-  });
 
   // The proposal and the rest, from the body the head rendered (the lead is the head's: rendered_lead).
   const [parts, setParts] = useState<{ proposal: string; rest: string } | null>(null);
@@ -225,12 +221,10 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       data-kind="decision"
       tabIndex={-1}
       className={cn(
-        'decision-card relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] touch-pan-y rounded-lg border bg-card p-4 text-card-foreground outline-none transition-[opacity,transform] duration-150 max-[899px]:p-3',
+        'decision-card relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] rounded-lg border bg-card p-4 text-card-foreground outline-none transition-[opacity,transform] duration-150 max-[899px]:p-3',
         decided && !expanded && 'opacity-80',
         focused && 'ring-2 ring-ring',
       )}
-      style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
-      ref={swipe.ref}
     >
       <div className="flex items-start justify-between gap-2">
         <CardMeta

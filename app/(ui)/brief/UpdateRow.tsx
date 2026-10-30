@@ -9,8 +9,8 @@
 //   [first diagram or image, fitted to the row, captioned; opens full-screen at native size]
 //   2 earlier in this thread ⌄   → each earlier card by time and title, then the newest, newest last
 //
-// The row says what the card wants (acknowledge) and never what kind it is (§4.1a). Acknowledging (a tap now; a swipe
-// after the undo window) acknowledges every card in the thread (§4.2) and turns the control into "Acknowledged · 09:14".
+// The row says what the card wants (acknowledge) and never what kind it is (§4.1a). Acknowledging (a tap) acknowledges
+// every card in the thread (§4.2) and turns the control into "Acknowledged · 09:14".
 
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, Rendered, useDeferred, useLocale, useSwipe, type MeCard } from '../components';
+import { announce, NOT_SENT, Rendered, useLocale, type MeCard } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
 import { rowId } from './days';
 
@@ -55,10 +55,6 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
   const [acked, setAcked] = useState<string | null>(done ? (last ?? null) : null);
   const [error, setError] = useState<string | null>(null);
   const online = useOnline();
-  const deferred = useDeferred();
-  const swipe = useSwipe(() => {
-    if (!acked && online && !deferred.pending) deferred.schedule(`Acknowledge: ${c.title}`, () => void ack());
-  });
   useImperativeHandle(handle, () => ({ open: () => void (location.href = cardHref(c.id)) }));
 
   const ack = async () => {
@@ -96,9 +92,7 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
       data-card={c.id}
       data-kind={c.kind}
       tabIndex={-1}
-      className={cn('update-row relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] touch-pan-y py-3 outline-none transition-transform duration-150', focused && 'ring-2 ring-ring rounded-md')}
-      style={swipe.dx ? { transform: `translateX(${swipe.dx / 3}px)` } : undefined}
-      ref={swipe.ref}
+      className={cn('update-row relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] py-3 outline-none', focused && 'ring-2 ring-ring rounded-md')}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
@@ -137,7 +131,6 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
         </Collapsible>
       )}
       {error && <p className="mt-1 text-lead text-destructive" role="alert">{error}</p>}
-      {deferred.toast}
     </article>
   );
 }
