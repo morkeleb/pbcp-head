@@ -618,6 +618,7 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect((await call('PUT', cardPath(id), { auth, body: card(id, { producer: root, ...extra }) })).status).toBeLessThan(300);
   };
   const today = () => `section[data-section]:has([data-day="${new Date().toISOString().slice(0, 10)}"])`;
+  const row_db = row;
 
   it('shows a decision with `at` once, on its row with its controls, and once on the schedule as a marker that links to it', async () => {
     await put('cal', 'cal:work:review', { title: 'Move the design review?', summary: 'It clashes with the offsite call.', at: todayAt('15:00'), until: todayAt('15:30'), actions: [{ id: 'move', label: 'Move it', default: true }, { id: 'keep', label: 'Keep it' }] });
@@ -628,7 +629,7 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect(await page.$eval('article[data-card="cal:work:review"] [data-card-time]', (t) => t.textContent)).toBe('15:00–15:30');
     const marker = (await page.$('[data-marker="cal:work:review"]'))!;
     expect(await marker.evaluate((a) => a.getAttribute('href'))).toBe('#brief-cal:work:review');
-    expect(await marker.evaluate((a) => a.textContent)).toBe('15:00–15:30calMove the design review?');
+    expect(await marker.evaluate((a) => a.textContent)).toBe('15:00–15:30Move the design review?'); // one line: time · title
     expect(await page.$$eval('[data-schedule] button, [data-schedule] article', (es) => es.length)).toBe(0);
     expect(await page.$eval('[data-schedule]', (d) => d.textContent)).not.toContain('It clashes with the offsite call.');
     await marker.click();
@@ -656,10 +657,66 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect(rail[0]!.colour).toBe(rail[1]!.colour);
     expect(rail[0]!.colour).not.toBe(rail[2]!.colour);
     expect(await page.$$eval(`${today()} [data-legend] [data-legend-producer]`, (ls) => ls.map((l) => l.getAttribute('data-legend-producer')))).toEqual(['cal', 'todoist']);
-    // The log card has no row of its own (§9): its entry links to its page; the signal's to its row.
+    // Timed artifacts and signals have no row of their own: the schedule is where they are; their entries open in place.
     expect(await page.$('article[data-card="cal:work:long"]')).toBeNull();
-    expect(await page.$eval('[data-rail-entry="cal:work:long"] a', (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent('cal:work:long')}`);
-    expect(await page.$('[data-marker="todoist:task:due"]')).not.toBeNull();
+    expect(await page.$('article[data-card="todoist:task:due"]')).toBeNull();
+    expect(await page.$('[data-rail-entry="cal:work:long"] button[data-schedule-row]')).not.toBeNull();
+    expect(await page.$('[data-rail-entry="todoist:task:due"] [data-change]')).not.toBeNull(); // a signal: the change mark
+  });
+
+  it('shows a card with `at` once in its day: an artifact or signal on the schedule only, an open decision as a card and a marker; cards without `at` as before', async () => {
+    await put('cal', 'cal:occ:standup', { kind: 'artifact', urgency: 'log', title: 'Standup', at: todayAt('09:15'), until: todayAt('09:30') });
+    await put('cal', 'cal:occ:review', { kind: 'artifact', title: 'Design review', summary: 'Room 3.', at: todayAt('11:00'), until: todayAt('12:00') });
+    await put('cal', 'cal:chg:moved', { kind: 'signal', urgency: 'immediate', title: 'Moved: Call with Anna now at 16:00', at: todayAt('16:00'), until: todayAt('16:30') });
+    await put('cal', 'cal:dec:table', { title: 'Keep the table?', at: todayAt('19:00'), actions: [{ id: 'keep', label: 'Keep it', default: true }, { id: 'release', label: 'Release it' }] });
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-rail-entry="cal:dec:table"]`);
+    const where = (id: string) => page.evaluate((id) => ({
+      rows: document.querySelectorAll(`article[data-card="${id}"]`).length,
+      schedule: document.querySelectorAll(`[data-schedule] [data-rail-entry="${id}"]`).length,
+      marker: document.querySelectorAll(`[data-schedule] [data-marker="${id}"]`).length,
+    }), id);
+    expect(await where('cal:occ:standup')).toEqual({ rows: 0, schedule: 1, marker: 0 }); // a log occurrence
+    expect(await where('cal:occ:review')).toEqual({ rows: 0, schedule: 1, marker: 0 }); // a brief artifact with `at`: not in Updates
+    expect(await where('cal:chg:moved')).toEqual({ rows: 0, schedule: 1, marker: 0 }); // a signal with `at`: not in Signals
+    expect(await where('cal:dec:table')).toEqual({ rows: 1, schedule: 1, marker: 1 }); // the card among the decisions, a marker here
+    expect(await where('goalpath:report:1')).toEqual({ rows: 1, schedule: 0, marker: 0 }); // no `at`: an update, as before
+    expect(await where('goalpath:item:1:ship')).toEqual({ rows: 1, schedule: 0, marker: 0 });
+    // Only cal is on the schedule: no legend for one producer.
+    expect(await page.$(`${today()} [data-legend]`)).toBeNull();
+  });
+
+  it('opens a schedule row in place: lead, source, thread, menu, Acknowledge, which records acknowledged_at', async () => {
+    await put('cal', 'cal:day:agenda', { kind: 'artifact', thread: 'day', title: 'Today: 1 event' });
+    await put('cal', 'cal:occ:review', { kind: 'artifact', thread: 'day', title: 'Design review', summary: 'Room 3, second floor.', at: todayAt('11:00'), until: todayAt('12:00'), source: { url: 'https://calendar.example/e/1', label: 'Calendar' } });
+    await page.setViewport({ width: 360, height: 800, isMobile: true, hasTouch: true });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const row = `${today()} [data-rail-entry="cal:occ:review"]`;
+    await page.waitForSelector(row);
+    expect(await page.$eval(`${row} [data-schedule-row]`, (b) => [b.textContent, Math.round(b.getBoundingClientRect().height)])).toEqual(['11:00–12:00Design review', expect.any(Number)]);
+    expect((await page.$eval(`${row} [data-schedule-row]`, (b) => b.getBoundingClientRect().height))).toBeLessThan(30); // one line
+    expect(await page.$(`${row} [data-schedule-detail]`)).toBeNull();
+    await page.tap(`${row} [data-schedule-row]`);
+    const detail = `${row} [data-schedule-detail]`;
+    await page.waitForSelector(detail);
+    expect(await page.$eval(`${detail} .lead`, (l) => l.textContent)).toBe('Room 3, second floor.');
+    expect(await page.$eval(`${detail} [data-source]`, (a) => a.getAttribute('href'))).toBe('https://calendar.example/e/1');
+    expect(await page.$eval(detail, (d) => d.textContent)).toContain('1 earlier in this thread');
+    expect(await page.$(`${detail} button[aria-label^="More actions"]`)).not.toBeNull();
+    await (await page.$(`xpath/.//*[@data-schedule-detail="cal:occ:review"]//button[.="Acknowledge"]`))!.tap();
+    await page.waitForFunction((sel) => document.querySelector(sel)?.textContent?.startsWith('Acknowledged · '), {}, `${detail} .state-line`);
+    await until(async () => (await row_db('cal:occ:review')).acknowledgedAt !== null);
+    expect(errors).toEqual([]);
+  });
+
+  it('leaves a cancelled occurrence off the schedule: the signal that superseded it is there, at its time', async () => {
+    await put('cal', 'cal:occ:talk', { kind: 'artifact', urgency: 'log', title: 'Tech talk', at: todayAt('11:00'), until: todayAt('12:00') });
+    await put('cal', 'cal:occ:talk:cancelled', { kind: 'signal', title: 'Cancelled: Tech talk 11:00', supersedes: 'cal:occ:talk', at: todayAt('11:00') });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${today()} [data-rail-entry="cal:occ:talk:cancelled"]`);
+    expect(await page.$(`[data-rail-entry="cal:occ:talk"]`)).toBeNull();
+    expect(await page.$('article[data-card="cal:occ:talk:cancelled"]')).toBeNull();
   });
 
   it('lists the schedule as an agenda, no free time between, and toggles to the timeline that shows it; remembered on the device', async () => {

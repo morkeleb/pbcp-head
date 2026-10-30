@@ -267,7 +267,7 @@ export function BriefView() {
       <main className={cn('mx-auto max-w-[1440px] touch-pan-y', wide ? 'px-6' : 'px-4')} ref={mainRef}>
         <div ref={top} aria-hidden className="h-px" />
         {visible.map((d) => (
-            <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} tz={tz} decision={decision} update={update} />
+            <DaySection key={d.date} day={d} name={dayName(d, today)} wide={wide} tz={tz} decision={decision} update={update} onChange={change} />
           ))}
       </main>
       {todayOut && (

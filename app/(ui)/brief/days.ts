@@ -35,8 +35,10 @@ export interface Day {
   signals: UpdateThread[];
   /** An earlier day the person jumped to on which nothing arrived: shown, with a line saying so. */
   nothing?: boolean;
-  /** The day's cards with `at`, for its rail (RFC 0.8 §8); undefined until they are loaded. */
+  /** The day's cards with `at`, for its schedule (RFC 0.8 §8); undefined until they are loaded. */
   rail?: MeCard[];
+  /** Every card of the day, when loaded: the schedule finds a timed card's thread in them. */
+  cards?: MeCard[];
 }
 
 /** Earlier days are fetched this many at a time. */
@@ -55,8 +57,9 @@ export function aheadOf(date: string, cards: MeCard[]): Day {
     kind: 'ahead',
     paragraph: null,
     decisions: [],
-    ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && c.state === 'open' && c.delivery !== 'log'))),
+    ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && c.state === 'open' && c.delivery !== 'log' && rowed(c)))),
     rail: railCards(cards),
+    cards,
     ...(cards.length === 0 ? { nothing: true } : {}),
   };
 }
@@ -86,8 +89,20 @@ export const shortDay = (date: string) => {
   return `${part('weekday')} ${part('day')} ${part('month')}`;
 };
 
-/** The rail's cards: the day's cards that carry `at`, from every producer, `log` included, in the day's order (§8). */
-export const railCards = (cards: MeCard[]): MeCard[] => cards.filter((c) => c.at !== undefined && c.state !== 'superseded').sort(byTime);
+/**
+ * Where a card is shown in its day: a card with `at` is on the schedule and nowhere else (§8: a card's time), unless it
+ * is an open decision, whose card with its controls stays among the decisions and has a marker on the schedule (§4.5).
+ * A card without `at` is a decision, an update or a signal row as before.
+ */
+export const timed = (c: Pick<MeCard, 'at'>): boolean => c.at !== undefined;
+export const rowed = (c: MeCard): boolean => !timed(c) || (c.kind === 'decision' && c.state === 'open');
+
+/**
+ * The schedule's cards: the day's cards that carry `at`, from every producer, `log` included, in the day's order (§8).
+ * Not a superseded one (a cancelled occurrence: the signal that cancelled it is there), nor one snoozed for now.
+ */
+export const railCards = (cards: MeCard[]): MeCard[] =>
+  cards.filter((c) => timed(c) && c.state !== 'superseded' && !(c.snoozed_until && Date.parse(c.snoozed_until) > Date.now())).sort(byTime);
 
 /** The element id of a card's row on the brief, which the rail's markers link to. */
 export const rowId = (id: string) => `brief-${id}`;
@@ -115,8 +130,18 @@ export const localDay = (at: string, timezone: string) =>
 export const isUpdate = (c: MeCard) => c.kind === 'artifact' || c.kind === 'signal';
 export const split = (ts: UpdateThread[]) => ({ updates: ts.filter((t) => t.latest.kind === 'artifact'), signals: ts.filter((t) => t.latest.kind === 'signal') });
 
-export function todayOf(b: BriefResponse): Day {
-  const ts: UpdateThread[] = b.threads.map((f) => ({ latest: f.latest, earlier: f.cards.filter((c) => c.id !== f.latest.id) }));
+/**
+ * Today, from the brief. With today's cards (`cards`, every one of them), its threads keep only their cards without
+ * `at`, which are on the schedule instead; a thread left with none is not a row.
+ */
+export function todayOf(b: BriefResponse, cards?: MeCard[]): Day {
+  const byId = new Map((cards ?? []).map((c) => [c.id, c]));
+  const onSchedule = (id: string) => !!byId.get(id)?.at;
+  const ts: UpdateThread[] = b.threads.flatMap((f) => {
+    const kept = f.cards.filter((c) => !onSchedule(c.id));
+    const latest = !onSchedule(f.latest.id) ? f.latest : byId.get(kept.at(-1)?.id ?? '');
+    return latest ? [{ latest, earlier: kept.filter((c) => c.id !== latest.id) }] : [];
+  });
   return {
     date: b.date,
     kind: 'today',
@@ -134,14 +159,15 @@ export function pastOf(date: string, cards: MeCard[]): Day {
     date,
     kind: 'past',
     paragraph: daily?.rendered_lead ? { html: daily.rendered_lead, soFar: false, ...(daily.paragraph ? { parts: daily.paragraph } : {}) } : null,
-    decisions: cards.filter((c) => c.kind === 'decision' && c.state !== 'open'),
-    ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head'))),
+    decisions: cards.filter((c) => c.kind === 'decision' && c.state !== 'open' && rowed(c)),
+    ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && rowed(c)))),
     ...(cards.length === 0 ? { nothing: true } : {}),
     rail: railCards(cards),
+    cards,
   };
 }
 
 export function tomorrowOf(b: BriefResponse): Day {
-  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision'), ...split(threads(b.tomorrow.cards.filter(isUpdate))) };
+  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision' && rowed(c)), ...split(threads(b.tomorrow.cards.filter((c) => isUpdate(c) && rowed(c)))) };
 }
 

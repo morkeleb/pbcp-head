@@ -68,7 +68,7 @@ export function DemoSandbox() {
 function changed(day: Day, card: MeCard): Day {
   const swap = (c: MeCard) => (c.id === card.id ? card : c);
   const awake = (c: MeCard) => !c.snoozed_until || Date.parse(c.snoozed_until) <= Date.now();
-  return { ...day, decisions: day.decisions.map(swap).filter(awake) };
+  return { ...day, decisions: day.decisions.map(swap).filter(awake), ...(day.rail ? { rail: day.rail.map(swap).filter(awake) } : {}) };
 }
 
 /** The masthead as the app draws it, inside the frame: the name, the dateline, the week, search, theme. */
@@ -117,7 +117,7 @@ function DemoDays({ head, names, wide }: { head: DemoHead; names: DayNames; wide
   return (
     <div className={cn('pb-6', wide ? 'px-6' : 'px-4')} style={{ ['--masthead-h' as string]: '0px' }}>
       {[today, head.tomorrow as Day].map((d) => (
-        <DaySection key={d.date} day={d} name={names[d.date] ?? d.date} wide={wide} tz={tz} decision={decision} update={update} />
+        <DaySection key={d.date} day={d} name={names[d.date] ?? d.date} wide={wide} tz={tz} decision={decision} update={update} onChange={change} />
       ))}
     </div>
   );

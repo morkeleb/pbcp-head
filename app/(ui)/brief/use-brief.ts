@@ -210,6 +210,17 @@ export function useBrief() {
       const seq = c.change_seq === b.seq + 1 ? c.change_seq : b.seq;
       return { ...b, seq, decisions, tomorrow: { ...b.tomorrow, cards: tomorrowCards } };
     });
+    const swap = (m: Map<string, MeCard[]>) => {
+      let touched = false;
+      const next = new Map(m);
+      for (const [date, cards] of m) {
+        if (!cards.some((x) => x.id === c.id)) continue;
+        next.set(date, cards.map((x) => (x.id === c.id ? c : x)));
+        touched = true;
+      }
+      return touched ? next : m;
+    };
+    setNear(swap);
     setPast((p) => {
       let touched = false;
       const next = new Map(p);
@@ -224,9 +235,9 @@ export function useBrief() {
   }, []);
 
   const pastDays = [...past.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => pastOf(date, cards));
-  const withRail = (d: Day): Day => (near.has(d.date) ? { ...d, rail: railCards(near.get(d.date)!) } : d);
+  const withRail = (d: Day): Day => (near.has(d.date) ? { ...d, rail: railCards(near.get(d.date)!), cards: near.get(d.date)! } : d);
   const later = brief ? [...near.entries()].filter(([date]) => date > addDays(brief.date, 1)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => aheadOf(date, cards)) : [];
-  const days: Day[] = brief ? [...pastDays, withRail(todayOf(brief)), withRail(tomorrowOf(brief)), ...later] : [];
+  const days: Day[] = brief ? [...pastDays, withRail(todayOf(brief, near.get(brief.date))), withRail(tomorrowOf(brief)), ...later] : [];
   // §8 pairing: the later cards that reference a card, from everything loaded.
   const references = referencedBy([...past.values(), ...near.values()].flat());
   /** A day after tomorrow the person went to: shown even with nothing set for it. */
