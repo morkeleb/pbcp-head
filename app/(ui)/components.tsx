@@ -463,7 +463,8 @@ export function useDeferred() {
  * selects text): left or right past 80 px. Built on touch events rather than pointer events: iOS Safari cancels a
  * touch's pointer stream as soon as it suspects a scroll, so a swipe that drifts a little vertically never ended.
  * Once a gesture is clearly sideways (after 8 px) the card owns it and stops the page from scrolling; a vertical
- * one stays the browser's. A touch that starts on a control (a link, a button, an option) is that control's.
+ * one stays the browser's. A touch that starts on a control (a link, a button, an option) is that control's, and one that
+ * starts in something that scrolls sideways (a wide table) is that scroll's.
  */
 export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
   const [dx, setDx] = useState(0);
@@ -483,9 +484,19 @@ export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
       x = 0;
       setDx(0);
     };
+    // Inside the card, something that scrolls sideways itself (a producer's wide table, a code block): a touch that
+    // starts there is its scroll, not the card's swipe.
+    const scrollsSideways = (target: Element) => {
+      for (let n: Element | null = target; n && n !== el; n = n.parentElement) {
+        const overflow = getComputedStyle(n).overflowX;
+        if ((overflow === 'auto' || overflow === 'scroll') && n.scrollWidth > n.clientWidth) return true;
+      }
+      return false;
+    };
     const down = (e: TouchEvent) => {
       const t = e.touches[0];
-      if (e.touches.length !== 1 || !t || (e.target as Element).closest('button, a, input, textarea, label, summary, img, [role="radio"]')) return reset();
+      const target = e.target as Element;
+      if (e.touches.length !== 1 || !t || target.closest('button, a, input, textarea, label, summary, img, [role="radio"]') || scrollsSideways(target)) return reset();
       start = { x: t.clientX, y: t.clientY };
       axis = null;
       x = 0;

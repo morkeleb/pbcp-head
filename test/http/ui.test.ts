@@ -1032,6 +1032,50 @@ describe('a producer’s table on a phone', () => {
       expect(r, String(width)).toEqual({ pageFits: true, tableInCard: true, scrolls: 'auto', multiLine: [], rightAligned: 'right' });
     }
   });
+
+  it('scrolls the table sideways under a finger, on the card page and on the brief, without swiping the card', async () => {
+    const n8n = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'n8n' })}`;
+    const rows = [
+      '| hello@goalpath.example | Stripe Webhook Event: payment_intent.payment_failed | Thu 29 Oct |',
+      '| editor@premium.newsletter.example.se | Norrländska gjuterier byter fossilt kol mot svenskt ”Säkrar i krisläge” | Thu 29 Oct |',
+      '| notifications@github.example | Re: [morkeleb/pbcp-head] Menus no longer hide the masthead on a scrolled page | Thu 29 Oct |',
+    ];
+    const body = ['Archived without asking: 4 threads.', '', '| Sender | Subject | Date |', '| --- | --- | --- |', ...rows].join('\n');
+    await call('PUT', cardPath('n8n:mail:archived'), { auth: n8n, body: card('n8n:mail:archived', { kind: 'artifact', title: 'Archived mail', body }) });
+    await until(async () => (await row('n8n:mail:archived')).renderedHtml !== null);
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    /** A finger from the table's right side leftwards: what the table scrolled by. */
+    const swipe = async (table: string) => {
+      const el = (await page.$(table))!;
+      await el.evaluate((t) => t.scrollIntoView({ block: 'center' }));
+      const box = (await el.boundingBox())!;
+      const [x, y] = [box.x + box.width - 20, box.y + box.height / 2];
+      await page.touchscreen.touchStart(x, y);
+      for (let i = 1; i <= 10; i++) await page.touchscreen.touchMove(x - 20 * i, y);
+      await page.touchscreen.touchEnd();
+      await new Promise((r) => setTimeout(r, 400));
+      return el.evaluate((t) => t.scrollLeft);
+    };
+    for (const [path, table] of [
+      [`/card/${encodeURIComponent('n8n:mail:archived')}`, '.rendered table'],
+    ] as const) {
+      await page.goto(`${headUrl()}${path}`, { waitUntil: 'networkidle0' });
+      await page.waitForSelector(table);
+      expect(await page.$eval(table, (t) => t.scrollWidth > t.clientWidth), path).toBe(true);
+      expect(await swipe(table), path).toBeGreaterThan(50);
+      expect(await page.$('.toast'), path).toBeNull(); // not taken for the card's swipe
+    }
+    // On the brief, too: a row's body is behind its card page, but a decision's proposal and options render in place.
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes' })}`;
+    await call('PUT', cardPath('hermes:mail:sort'), { auth: hermes, body: card('hermes:mail:sort', { title: 'Archive these?', body: `Four newsletters.\n\n## Proposal\n\n${['| Sender | Subject | Date |', '| --- | --- | --- |', ...rows].join('\n')}` }) });
+    await until(async () => (await row('hermes:mail:sort')).renderedHtml !== null);
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const proposal = 'article[data-card="hermes:mail:sort"] .proposal table';
+    await page.waitForSelector(proposal);
+    expect(await swipe(proposal)).toBeGreaterThan(50);
+    expect(await page.$('.toast')).toBeNull();
+    expect((await row('hermes:mail:sort')).state).toBe('open');
+  });
 });
 
 describe('the front door in a browser', () => {
