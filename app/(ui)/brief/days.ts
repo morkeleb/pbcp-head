@@ -22,7 +22,17 @@ export interface BriefResponse {
   snoozed: number;
   late_outcomes: MeCard[];
   lapsed_orders: MeCard[];
+  /** Open orders with progress or an outcome since the last visit (A.3): one row each. */
+  order_updates?: OrderUpdate[];
   new: string[];
+}
+
+/** An order with news: its title, how many cards came since the last visit, and the newest of them. */
+export interface OrderUpdate {
+  id: string;
+  title: string;
+  count: number;
+  latest: MeCard;
 }
 
 export interface Day {
@@ -39,6 +49,8 @@ export interface Day {
   rail?: MeCard[];
   /** Every card of the day, when loaded: the schedule finds a timed card's thread in them. */
   cards?: MeCard[];
+  /** Today: the orders with news since the last visit, among the updates. */
+  orders?: OrderUpdate[];
 }
 
 /** Earlier days are fetched this many at a time. */
@@ -148,6 +160,7 @@ export function todayOf(b: BriefResponse, cards?: MeCard[]): Day {
     paragraph: b.daily_paragraph ? { html: b.daily_paragraph.html, soFar: b.daily_paragraph.so_far, parts: b.daily_paragraph.parts } : null,
     decisions: b.decisions,
     ...split(ts),
+    orders: b.order_updates ?? [],
   };
 }
 

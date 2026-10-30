@@ -5,7 +5,7 @@
 // the next: a day is neither doubled nor, once its 05:30 is reached in the zone the owner is in, skipped.
 // The card goes through the same submit path as any producer's (A.1: the head owns the `head:` root).
 
-import { and, desc, eq, gte, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { cards, heads } from '../../db/schema';
 import { now } from '../clock';
@@ -44,7 +44,10 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
     .select()
     .from(cards)
     .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), isNotNull(cards.decision), gte(cards.decidedAt, from), lt(cards.decidedAt, to), lte(cards.decidedAt, new Date(now()))));
-  return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), decidedYesterday: decided.map(toCard) };
+  // A.3: the orders whose threads moved that day, so their cards are told as the order's.
+  const orderIds = [...new Set(yesterday.map((r) => (r.producerDoc as { thread?: string }).thread).filter((t): t is string => !!t && t.startsWith('head:order:')))];
+  const orders = orderIds.length ? await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, orderIds), isNotNull(cards.toProducer))) : [];
+  return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), decidedYesterday: decided.map(toCard), orders: orders.map(toCard) };
 }
 
 /**
@@ -59,7 +62,7 @@ export async function dailyParagraphNow(db: Db, headId: string, timezone: string
 export async function renderParts(db: Db, parts: ParagraphParts): Promise<ParagraphParts> {
   const inline = async (md: string) => (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
   const each = (es: ParagraphParts['decisions'] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
-  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, decided: await each(parts.decided), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
+  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
 }
 
 /** Mints `head:daily:<date>`; a quiet day's says "Nothing waiting for you." */

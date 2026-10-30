@@ -37,6 +37,22 @@ export async function giveOrder(db: Db, headId: string, input: OrderInput): Prom
   });
 }
 
+/**
+ * The owner's record of an order's lease (head-private columns, never synced): a new claim (its `claim_seq` moved)
+ * starts it afresh, a renewal (the same claim, held on) counts once more, and a lease that expires with no outcome
+ * leaves the time it lapsed, which core drops from the order with the lease (A.2).
+ */
+async function recordLease(tx: Tx, headId: string, before: OrderCard, after: OrderCard, at: string): Promise<void> {
+  const where = and(eq(cards.headId, headId), eq(cards.id, after.id));
+  if (after.exec_state === 'claimed' && after.claim_seq !== before.claim_seq) {
+    await tx.update(cards).set({ leaseClaimedAt: new Date(at), leaseRenewals: 0, leaseLapsedAt: null }).where(where);
+  } else if (after.exec_state === 'claimed' && before.exec_state === 'claimed') {
+    await tx.update(cards).set({ leaseRenewals: sql`${cards.leaseRenewals} + 1` }).where(where);
+  } else if (before.exec_state === 'claimed' && after.exec_state === 'open' && before.claim_expires_at) {
+    await tx.update(cards).set({ leaseLapsedAt: new Date(before.claim_expires_at) }).where(where);
+  }
+}
+
 /** A.2: every claimed order whose lease is at or before now returns to `open`, each with a new change_seq. */
 export async function expireDueOrders(db: Db, headId: string): Promise<void> {
   const at = now();
@@ -49,7 +65,9 @@ export async function expireDueOrders(db: Db, headId: string): Promise<void> {
     for (const { id } of due) {
       const o = await load(tx, headId, id, { forUpdate: true });
       if (!o || !isOrder(o.card)) continue;
-      for (const c of expireIfDue(o.card as unknown as OrderCard, at).changed) await persist(tx, headId, c);
+      const r = expireIfDue(o.card as unknown as OrderCard, at);
+      for (const c of r.changed) await persist(tx, headId, c);
+      await recordLease(tx, headId, o.card as unknown as OrderCard, r.card, at);
     }
   });
 }
@@ -70,9 +88,12 @@ export async function claimOrder(db: Db, producer: { headId: string; root: strin
     }
     const lease = checkLease((body as { lease_seconds?: unknown } | null)?.lease_seconds);
     if (lease > MAX_LEASE_SECONDS) throw new PbcpError('invalid_lease', `lease_seconds may be at most ${MAX_LEASE_SECONDS}`);
-    const r = claim(stored.card as unknown as OrderCard, producer.root, lease, now());
+    const at = now();
+    const r = claim(stored.card as unknown as OrderCard, producer.root, lease, at);
     let card: Card = stored.card;
     for (const c of r.changed) card = await persist(tx, producer.headId, c);
+    // A claim on a lapsed lease expires it and claims afresh in one step; a refusal changes nothing to record.
+    if (r.status === 200) await recordLease(tx, producer.headId, stored.card as unknown as OrderCard, r.card, at);
     return { status: r.status, card, refused: r.status === 200 ? undefined : r.code };
   });
   if (r.refused) throw new ClaimRefusal(r.refused, r.card as unknown as Record<string, unknown> & { id: string });
@@ -91,6 +112,7 @@ export async function applyOutcomeInTx(tx: Tx, headId: string, incoming: Produce
   const at = now();
   const expiry = expireIfDue(o.card as unknown as OrderCard, at);
   for (const c of expiry.changed) await persist(tx, headId, c);
+  await recordLease(tx, headId, o.card as unknown as OrderCard, expiry.card, at);
   const r = applyOutcome(expiry.card, incoming, at);
   for (const c of r.changed) await persist(tx, headId, c);
   await tx.update(cards).set({ outcome: r.stale ? 'stale' : 'applied' }).where(and(eq(cards.headId, headId), eq(cards.id, incoming.id)));

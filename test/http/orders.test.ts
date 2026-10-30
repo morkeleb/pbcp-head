@@ -175,7 +175,7 @@ describe('/api/me/orders', () => {
     await outcome(hermes, 'hermes', o.id, 1);
 
     const list = (await call('GET', '/api/me/orders', { auth: owner.auth })).body.orders;
-    expect(list).toEqual([expect.objectContaining({ id: o.id, exec_state: 'done', progress: { count: 2, latest: expect.objectContaining({ title: 'Done', order_outcome: 'applied' }) } })]);
+    expect(list).toEqual([expect.objectContaining({ id: o.id, exec_state: 'done', progress: expect.objectContaining({ count: 2, latest: expect.objectContaining({ title: 'Done', order_outcome: 'applied' }) }) })]);
     const detail = (await call('GET', `/api/me/cards/${encodeURIComponent(outcomeId('hermes', o.id, 1))}`, { auth: owner.auth })).body;
     expect(detail.thread.map((t: { id: string }) => t.id)).toEqual([o.id, progress, outcomeId('hermes', o.id, 1)]);
   });
@@ -185,5 +185,86 @@ describe('/api/me/orders', () => {
       expect((await call('POST', '/api/me/orders', { auth: owner.auth, body })).status, JSON.stringify(body)).toBe(400);
     }
     expect((await call('POST', '/api/me/orders', { auth: hermes, body: { to_producer: '*', title: 'x' } })).status).toBe(401);
+  });
+});
+
+describe('an order as the owner sees it (A.2, A.3)', () => {
+  const orders = async () => (await call('GET', '/api/me/orders', { auth: owner.auth })).body.orders as Array<Record<string, any>>;
+  const progress = (order: string, n: number, title: string) => {
+    const id = `hermes:order:${ulid(order)}:progress-1-${n}`;
+    return call('PUT', cardPath(id), { auth: hermes, body: card(id, { kind: 'signal', urgency: 'log', thread: order, references: [order], title }) });
+  };
+
+  it('keeps the lease: when it was claimed, how often renewed, when it lapsed; none of it synced', async () => {
+    const o = await give('*');
+    expect((await orders())[0]!).toMatchObject({ exec_state: 'open', lease: { claimed_at: null, renewals: 0, lapsed_at: null } });
+    await claim(hermes, o.id, 60);
+    expect((await orders())[0]!).toMatchObject({ exec_state: 'claimed', claimed_by: 'hermes', claim_expires_at: '2026-10-07T09:01:00Z', lease: { claimed_at: '2026-10-07T09:00:00Z', renewals: 0, lapsed_at: null } });
+    await clock('2026-10-07T09:00:40Z');
+    await claim(hermes, o.id, 60);
+    await clock('2026-10-07T09:01:20Z');
+    await claim(hermes, o.id, 60);
+    expect((await orders())[0]!).toMatchObject({ claim_expires_at: '2026-10-07T09:02:20Z', lease: { claimed_at: '2026-10-07T09:00:00Z', renewals: 2 } });
+    // A refused claim is no renewal.
+    expect((await claim(cal, o.id, 60)).status).toBe(409);
+    expect((await orders())[0]!.lease.renewals).toBe(2);
+    // The lease runs out with no outcome.
+    await clock('2026-10-07T09:05:00Z');
+    expect((await orders())[0]!).toMatchObject({ exec_state: 'open', lease: { lapsed_at: '2026-10-07T09:02:20Z' } });
+    expect((await orders())[0]!).not.toHaveProperty('claimed_by');
+    // Claimed again: a new lease, the lapse forgotten.
+    await claim(cal, o.id, 60);
+    expect((await orders())[0]!).toMatchObject({ exec_state: 'claimed', claimed_by: 'cal', lease: { claimed_at: '2026-10-07T09:05:00Z', renewals: 0, lapsed_at: null } });
+    // Head-private: the executor's sync carries none of it.
+    const synced = (await call('GET', '/api/changes?after=0', { auth: cal })).body.changes.map((c: { card: object }) => c.card);
+    for (const c of synced) for (const k of ['lease', 'lease_claimed_at', 'lease_renewals', 'lease_lapsed_at']) expect(c).not.toHaveProperty(k);
+  });
+
+  it('lists its progress newest first, and its outcome apart', async () => {
+    const o = await give('*');
+    await claim(hermes, o.id, 600);
+    for (const [n, title] of [[1, 'Found two free slots'], [2, 'Picked Tuesday 09:00'], [3, 'Booking with the clinic']] as const) {
+      await clock(`2026-10-07T09:0${n}:00Z`);
+      await progress(o.id, n, title);
+    }
+    expect((await orders())[0]!.progress).toMatchObject({ count: 3, outcome: null });
+    expect((await orders())[0]!.progress.notes.map((n: { title: string }) => n.title)).toEqual(['Booking with the clinic', 'Picked Tuesday 09:00', 'Found two free slots']);
+    await outcome(hermes, 'hermes', o.id, 1, { title: 'Booked the dentist for Tuesday 09:00', summary: 'Tuesday 09:00 with Dr. Lund.' });
+    const done = (await orders())[0]!;
+    expect(done.exec_state).toBe('done');
+    expect(done.progress.outcome).toMatchObject({ title: 'Booked the dentist for Tuesday 09:00' });
+    expect(done.progress.notes).toHaveLength(3); // the outcome is not a note
+  });
+
+  it('is one row in the brief when progress or an outcome came since the last visit; a quiet order has none', async () => {
+    const quiet = await give('*', 'Renew the parking permit');
+    const busy = await give('*', 'Book the dentist');
+    await claim(hermes, quiet.id, 600);
+    await claim(hermes, busy.id, 600);
+    await progress(quiet.id, 1, 'Opened the council site');
+    // The owner looks, and leaves: what came so far is seen.
+    let b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
+    await call('POST', '/api/me/visit', { auth: owner.auth, body: { seq: b.seq } });
+    await clock('2026-10-07T09:10:00Z');
+    await progress(busy.id, 1, 'Found two free slots');
+    await outcome(hermes, 'hermes', busy.id, 1, { title: 'Booked the dentist for Tuesday 09:00', summary: 'Tuesday 09:00 with Dr. Lund.' });
+    b = (await call('GET', '/api/me/brief', { auth: owner.auth })).body;
+    expect(b.order_updates).toEqual([expect.objectContaining({ id: busy.id, title: 'Book the dentist', count: 2, latest: expect.objectContaining({ title: 'Booked the dentist for Tuesday 09:00', lead: 'Tuesday 09:00 with Dr. Lund.' }) })]);
+    // The outcome is told in that row, not again as a signal of its own.
+    expect(b.threads.flatMap((t: { cards: Array<{ id: string }> }) => t.cards.map((c) => c.id))).not.toContain(outcomeId('hermes', busy.id, 1));
+  });
+
+  it('tells yesterday’s outcome in the daily paragraph with what was decided, and counts an order that only progressed', async () => {
+    const busy = await give('*', 'Book the dentist');
+    const quiet = await give('*', 'Renew the parking permit');
+    await claim(hermes, busy.id, 600);
+    await claim(hermes, quiet.id, 600);
+    await progress(quiet.id, 1, 'Opened the council site');
+    await outcome(hermes, 'hermes', busy.id, 1, { title: 'Booked the dentist for Tuesday 09:00', summary: 'Tuesday 09:00 with Dr. Lund.' });
+    await clock('2026-10-08T09:00:00Z');
+    const p = (await call('GET', '/api/me/brief', { auth: owner.auth })).body.daily_paragraph;
+    expect(p.html).toMatch(/Yesterday your orders came back: <a href="\/card\/head%3Aorder%3A[^"]+">Book the dentist<\/a> — done: Tuesday 09:00 with Dr\. Lund\./);
+    expect(p.html).toContain('And 1 update from hermes.');
+    expect(p.html).not.toContain('Booked the dentist for Tuesday 09:00'); // the order's title, not the outcome's
   });
 });

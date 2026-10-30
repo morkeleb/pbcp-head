@@ -127,6 +127,13 @@
       "when": 1793202851691,
       "tag": "0017_invite_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793374768161,
+      "tag": "0018_order_lease",
+      "breakpoints": true
     }
   ]
 }

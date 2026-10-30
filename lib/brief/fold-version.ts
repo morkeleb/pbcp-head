@@ -10,9 +10,11 @@
 //   5  no snoozed card in the entries either (RFC 0.6 §8 correction); a thread shows its newest unsnoozed card
 //   6  the day before in three parts weighted by delivery: what was decided, what mattered (named, six at most), the
 //      rest counted by producer; "Nothing waiting for you." on a quiet day
+//   7  orders (A.3): an order whose outcome arrived is told with what was decided ("<order> — done: <lead>"), an order
+//      that only progressed is counted among the rest; their cards are not threads of their own
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 6;
+export const FOLD_VERSION = 7;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

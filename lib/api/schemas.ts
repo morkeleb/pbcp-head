@@ -68,6 +68,7 @@ export const ParagraphParts = z.object({
   decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed'),
   snoozed: z.array(z.array(z.string())).describe('The labels of each snoozed decision: counted, never listed (§8)'),
   decided: z.array(ParagraphEntry).optional().describe('Decisions made the day before: "<title> — decided <value>"'),
+  orders: z.array(ParagraphEntry).optional().describe('Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3)'),
   mattered: z.array(ParagraphEntry).optional().describe('The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more"'),
   rest: z.array(z.object({ producer: z.string(), labels: z.array(z.string()) })).optional().describe('Every other thread of the day before, counted by producer: "And 9 updates from mail, goalpath and hermes."'),
   yesterday: z.array(ParagraphEntry).optional().describe('Folds before 6 only: the previous day’s threads, one list'),
@@ -97,9 +98,18 @@ export const CardSummary = z.object({
   order_outcome: z.enum(['applied', 'stale']).optional(),
 }).register(responses, { id: 'CardSummary' });
 
+/** An order's lease as the owner sees it (A.2): head-private, never synced. */
+const OrderLease = z
+  .object({
+    claimed_at: z.string().nullable().describe('When the current claim began'),
+    renewals: z.number().int().nonnegative().describe('How many times its holder has renewed the current claim'),
+    lapsed_at: z.string().nullable().describe('When the last lease lapsed with no outcome (A.2), until the order is claimed again'),
+  })
+  .describe('The lease as the owner sees it: head-private, never synced');
+
 export const CardDetail = z.object({
   timezone: Zone,
-  card: MeCard,
+  card: MeCard.extend({ lease: OrderLease.optional().describe('On an order: its lease as the owner sees it') }),
   predecessors: z.array(MeCard).describe('The cards this one supersedes, oldest first'),
   successors: z.array(CardSummary).describe('The cards that supersede it, in order'),
   references: z.array(z.object({ id: z.string(), card: CardSummary.nullable().describe('Null when this head holds no such card') })),
@@ -163,6 +173,9 @@ export const Brief = z.object({
   threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
   snoozed: z.number().int().nonnegative(),
   late_outcomes: z.array(MeCard).describe('Order outcomes that came late or from an earlier claim (A.3)'),
+  order_updates: z
+    .array(z.object({ id: z.string().describe('The order'), title: z.string(), count: z.number().int().positive().describe('Its progress and outcome cards since the last visit'), latest: MeCard.describe('The newest of them') }))
+    .describe('Open orders with progress or an outcome since the last visit (A.3), newest first: one row each'),
   lapsed_orders: z.array(MeCard).describe('Orders whose lease lapsed with no outcome (A.2)'),
   new: z.array(z.string()).describe('Ids changed since the last visit'),
 }).register(responses, { id: 'Brief' });
@@ -177,7 +190,13 @@ export const Visit = LastVisit;
 // --- orders ---------------------------------------------------------------------------------------------
 
 export const OrderWithProgress = MeCard.extend({
-  progress: z.object({ count: z.number().int().nonnegative(), latest: MeCard.nullable() }),
+  lease: OrderLease,
+  progress: z.object({
+    count: z.number().int().nonnegative(),
+    latest: MeCard.nullable(),
+    notes: z.array(z.object({ id: z.string(), title: z.string(), received_at: z.string() })).describe('Every progress card of the thread, newest first (A.3)'),
+    outcome: MeCard.nullable().describe('The latest outcome card, in full'),
+  }),
 }).register(responses, { id: 'OrderWithProgress' });
 
 export const OrderList = z.object({ timezone: Zone, orders: z.array(OrderWithProgress) }).register(responses, { id: 'OrderList' });

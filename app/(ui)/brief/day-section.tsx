@@ -7,13 +7,14 @@
 // follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on the
 // left, and the schedule above the updates and signals on the right.
 
+import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { composeParagraphs } from '../../../lib/brief/paragraph';
 import { useLocale, type MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
 import { clock } from './DecisionCard';
-import { addDays, anchors, type Day } from './days';
+import { addDays, anchors, type Day, type OrderUpdate } from './days';
 import { ScheduleToggle, TimeRail } from './TimeRail';
 import type { UpdateThread } from './UpdateRow';
 
@@ -64,8 +65,8 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
       </div>
     </Group>
   );
-  const updates = day.updates.length > 0 && <Updates title="Updates" threads={day.updates} wide={wide} update={update} />;
-  const signals = day.signals.length > 0 && <Updates title="Signals" threads={day.signals} wide={wide} update={update} />;
+  const updates = (day.updates.length > 0 || !!day.orders?.length) && <Updates title="Updates" threads={day.updates} orders={day.orders ?? []} wide={wide} update={update} tz={tz} />;
+  const signals = day.signals.length > 0 && <Updates title="Signals" threads={day.signals} wide={wide} update={update} tz={tz} />;
 
   return (
     <section className="pb-6" aria-label={name} data-section>
@@ -105,6 +106,34 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
   );
 }
 
+/**
+ * An order with news since the last visit (A.3): "<order title> — <the newest progress or outcome's lead>", linking to
+ * the orders page, where the order shows its lease and every note. It stands for those cards: they have no rows here.
+ */
+function OrderUpdateRow({ order, tz }: { order: OrderUpdate; tz: string }) {
+  const locale = useLocale();
+  const c = order.latest;
+  const lead = c.rendered_lead || c.title;
+  return (
+    <article className="update-row py-3" data-order-update={order.id}>
+      <div className="flex items-center gap-2 text-meta font-medium uppercase tracking-meta text-muted-foreground">
+        <span>{c.producer}</span>
+        <span aria-hidden>·</span>
+        <span className="normal-case tracking-normal">order</span>
+        <span aria-hidden>·</span>
+        <time className="normal-case tracking-normal tabular-nums" dateTime={c.received_at}>{clock(c.received_at, tz, locale)}</time>
+        {order.count > 1 && <span className="normal-case tracking-normal">· {order.count} new</span>}
+      </div>
+      <Link href="/orders" className="block hover:underline">
+        <span className="font-serif text-title font-semibold tracking-editorial">{order.title}</span>
+        <span className="text-lead text-muted-foreground"> — <span dangerouslySetInnerHTML={{ __html: lead === c.title ? escapeHtml(c.title) : lead }} /></span>
+      </Link>
+    </article>
+  );
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (ch) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' } as Record<string, string>)[ch]};`);
+
 function Group({ title, count, tools, children }: { title: string; count?: number; tools?: ReactNode; children: ReactNode }) {
   return (
     <div className="pt-3">
@@ -137,12 +166,17 @@ function Rail({ wide, items, gap, tz }: { wide: boolean; items: Array<{ key: str
 }
 
 /** Updates or signals: rows separated by hairlines, folded after FOLD_AT behind "More updates (N)". */
-function Updates({ title, threads, wide, update }: { title: string; threads: UpdateThread[]; wide: boolean; update: (t: UpdateThread) => ReactNode }) {
+function Updates({ title, threads, orders = [], wide, update, tz }: {
+  title: string; threads: UpdateThread[]; orders?: OrderUpdate[]; wide: boolean; update: (t: UpdateThread) => ReactNode; tz: string;
+}) {
   const [all, setAll] = useState(false);
   const shown = all ? threads : threads.slice(0, FOLD_AT);
   return (
     <Group title={title}>
-      <div className={cn('divide-y border-y', !wide && 'ml-[2.75rem] border-l pl-3')}>{shown.map((t) => update(t))}</div>
+      <div className={cn('divide-y border-y', !wide && 'ml-[2.75rem] border-l pl-3')}>
+        {orders.map((o) => <OrderUpdateRow key={o.id} order={o} tz={tz} />)}
+        {shown.map((t) => update(t))}
+      </div>
       {threads.length > FOLD_AT && !all && (
         <button className="mt-2 text-lead text-muted-foreground hover:text-foreground" onClick={() => setAll(true)}>
           More {title.toLowerCase()} ({threads.length - FOLD_AT})

@@ -772,6 +772,15 @@ export interface components {
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
             }[];
+            /** @description Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3) */
+            orders?: {
+                /** @description The card the entry is */
+                id: string;
+                /** @description Its labels (§4.1), for filtering */
+                labels: string[];
+                /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
+                text: string;
+            }[];
             /** @description The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more" */
             mattered?: {
                 /** @description The card the entry is */
@@ -908,7 +917,108 @@ export interface components {
         CardDetail: {
             /** @description An IANA timezone, e.g. `Europe/Copenhagen` */
             timezone: string;
-            card: components["schemas"]["MeCard"];
+            card: {
+                /** @constant */
+                protocol: "pbcp/1";
+                id: string;
+                /** @enum {string} */
+                kind: "decision" | "artifact" | "signal" | "order";
+                /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
+                to_person?: string;
+                producer: string;
+                title: string;
+                summary?: string;
+                body: string;
+                /** @enum {string} */
+                urgency?: "immediate" | "brief" | "log";
+                thread?: string;
+                labels?: string[];
+                about?: string;
+                at?: string;
+                until?: string;
+                references?: string[];
+                supersedes?: string;
+                actions?: (string | ({
+                    id: string;
+                    label?: string;
+                    body?: string;
+                    default?: boolean;
+                } & {
+                    [key: string]: unknown;
+                }))[];
+                emitted_at: string;
+                source?: {
+                    url: string;
+                    label?: string;
+                } & {
+                    [key: string]: unknown;
+                };
+                /** @enum {string} */
+                state: "open" | "decided" | "superseded";
+                change_seq: number;
+                received_at: string;
+                changed_at: string;
+                /** @enum {string} */
+                delivery: "immediate" | "brief" | "log";
+                seen_at?: string;
+                acknowledged_at?: string;
+                snoozed_until?: string;
+                decision?: string;
+                edited_proposal?: string;
+                comment?: string;
+                decided_at?: string;
+                delegated_to?: string;
+                to_producer?: string;
+                /** @enum {string} */
+                exec_state?: "open" | "claimed" | "done" | "failed" | "cancelled";
+                claimed_by?: string;
+                claim_expires_at?: string;
+                claim_seq?: number;
+                /** @description On an executor’s outcome card: the claim it reports on (A.3) */
+                "orders.claim_seq"?: number;
+                /**
+                 * @description On an executor’s outcome card: how the run ended (A.3)
+                 * @enum {string}
+                 */
+                "orders.result"?: "done" | "failed";
+                /** @description The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself. */
+                rendered_html: string;
+                /** @description The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none. */
+                lead: string;
+                /**
+                 * @description Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+                 * @enum {string}
+                 */
+                lead_source: "summary" | "body";
+                /** @description The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself. */
+                rendered_lead: string;
+                /** @description Rendered bodies of choice options (§4.4), by action id */
+                rendered_actions?: {
+                    [key: string]: string;
+                };
+                /** @description The first diagram or image in the body, for a thumbnail */
+                first_visual?: components["schemas"]["Visual"];
+                /**
+                 * @description On an outcome card: whether it moved its order, or came late or from an earlier claim
+                 * @enum {string}
+                 */
+                order_outcome?: "applied" | "stale";
+                /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
+                day: string;
+                /** @description On a `head:daily` card: its paragraph in parts */
+                paragraph?: components["schemas"]["ParagraphParts"];
+                /** @description On an order: its lease as the owner sees it */
+                lease?: {
+                    /** @description When the current claim began */
+                    claimed_at: string | null;
+                    /** @description How many times its holder has renewed the current claim */
+                    renewals: number;
+                    /** @description When the last lease lapsed with no outcome (A.2), until the order is claimed again */
+                    lapsed_at: string | null;
+                };
+            } & {
+                [key: string]: unknown;
+            };
             /** @description The cards this one supersedes, oldest first */
             predecessors: components["schemas"]["MeCard"][];
             /** @description The cards that supersede it, in order */
@@ -994,6 +1104,16 @@ export interface components {
             snoozed: number;
             /** @description Order outcomes that came late or from an earlier claim (A.3) */
             late_outcomes: components["schemas"]["MeCard"][];
+            /** @description Open orders with progress or an outcome since the last visit (A.3), newest first: one row each */
+            order_updates: {
+                /** @description The order */
+                id: string;
+                title: string;
+                /** @description Its progress and outcome cards since the last visit */
+                count: number;
+                /** @description The newest of them */
+                latest: components["schemas"]["MeCard"];
+            }[];
             /** @description Orders whose lease lapsed with no outcome (A.2) */
             lapsed_orders: components["schemas"]["MeCard"][];
             /** @description Ids changed since the last visit */
@@ -1095,9 +1215,26 @@ export interface components {
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];
+            /** @description The lease as the owner sees it: head-private, never synced */
+            lease: {
+                /** @description When the current claim began */
+                claimed_at: string | null;
+                /** @description How many times its holder has renewed the current claim */
+                renewals: number;
+                /** @description When the last lease lapsed with no outcome (A.2), until the order is claimed again */
+                lapsed_at: string | null;
+            };
             progress: {
                 count: number;
                 latest: components["schemas"]["MeCard"] | null;
+                /** @description Every progress card of the thread, newest first (A.3) */
+                notes: {
+                    id: string;
+                    title: string;
+                    received_at: string;
+                }[];
+                /** @description The latest outcome card, in full */
+                outcome: components["schemas"]["MeCard"] | null;
             };
         } & {
             [key: string]: unknown;

@@ -127,6 +127,12 @@ export const cards = pgTable(
     // On a card that is an order's outcome (A.3): `applied` when it moved exec_state, `stale` when it came
     // from an old or lapsed lease or after the order ended. Head-private; the brief surfaces stale ones.
     outcome: text('outcome'),
+    // On an order, the owner's view of its lease (A.2), head-private and never synced: when the current claim began,
+    // how many times its holder has renewed it, and when the last lease lapsed with no outcome (core drops the lease
+    // fields then, so the time would otherwise be lost).
+    leaseClaimedAt: tstz('lease_claimed_at'),
+    leaseRenewals: integer('lease_renewals').notNull().default(0),
+    leaseLapsedAt: tstz('lease_lapsed_at'),
   },
   (t) => [
     primaryKey({ columns: [t.headId, t.id] }),
