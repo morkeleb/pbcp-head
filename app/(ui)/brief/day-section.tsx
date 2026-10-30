@@ -2,7 +2,8 @@
 
 // A day of the brief, the same component tree in both layouts (brief-view.tsx) and on the front door's demo brief
 // (app/about): the sticky dated header, the day's brief in short paragraphs, its decisions, the day's schedule (the
-// cards with `at` on a time rail, RFC 0.8 §8), and its updates and signals as threads. On the timeline (a phone) they
+// cards with `at` as an agenda, or on a time rail that shows the free time between them, RFC 0.8 §8), and its updates
+// and signals as threads. On the timeline (a phone) they
 // follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on the
 // left, and the schedule above the updates and signals on the right.
 
@@ -13,7 +14,7 @@ import { useLocale, type MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
 import { clock } from './DecisionCard';
 import { addDays, anchors, type Day } from './days';
-import { TimeRail } from './TimeRail';
+import { ScheduleToggle, TimeRail } from './TimeRail';
 import type { UpdateThread } from './UpdateRow';
 
 /** Updates are folded after this many, behind "More updates (N)". */
@@ -55,7 +56,7 @@ export function DaySection({ day, name, wide, tz, decision, update }: {
   );
   // The day's cards with a time, every producer, `log` included; a card shown above or below is a marker linking to it.
   const schedule = !!day.rail?.length && (
-    <Group title="Schedule">
+    <Group title="Schedule" tools={<ScheduleToggle />}>
       <div className={cn(!wide && 'ml-[2.75rem] border-l pl-3')} data-schedule>
         <TimeRail cards={day.rail} date={day.date} timezone={tz} anchors={anchors(day)} />
       </div>
@@ -102,13 +103,16 @@ export function DaySection({ day, name, wide, tz, decision, update }: {
   );
 }
 
-function Group({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+function Group({ title, count, tools, children }: { title: string; count?: number; tools?: ReactNode; children: ReactNode }) {
   return (
     <div className="pt-3">
-      <h3 className="pb-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground">
-        {title}
-        {count !== undefined && <span className="font-normal"> ({count})</span>}
-      </h3>
+      <div className="flex items-center justify-between gap-2 pb-2">
+        <h3 className="text-meta font-semibold uppercase tracking-meta text-muted-foreground">
+          {title}
+          {count !== undefined && <span className="font-normal"> ({count})</span>}
+        </h3>
+        {tools}
+      </div>
       {children}
     </div>
   );

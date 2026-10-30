@@ -1,9 +1,14 @@
 'use client';
 
-// TimeRail: the day view (RFC 0.8 §8, a card's time). Every card of the selected day that carries `at`, from every
-// producer, `log` included, laid out on one time axis in the head's timezone: each at its `at`, a bar down to its
-// `until` when it has one, a point when it does not. Colour says which producer sent it and nothing else; a bar's
-// length says `until` and nothing else. Under the rail, the legend: each producer's colour.
+// TimeRail: a day's schedule (RFC 0.8 §8, a card's time). Every card of the day that carries `at`, from every
+// producer, `log` included, in the head's timezone, in one of two modes the person switches between (ScheduleToggle,
+// remembered on this device, the same for every day):
+//
+// - agenda (the default): the cards one under another in time order, each with its time, and nothing between them;
+// - timeline: one time axis, each card at its `at`, a bar down to its `until` when it has one, a point when it does
+//   not, so the free time between them shows. A bar's length says `until` and nothing else.
+//
+// In both, colour says which producer sent a card and nothing else; under the cards, the legend: each producer's colour.
 //
 // A card the brief column presents is a marker here: its time, producer and title, linking to its row in the brief,
 // where its body and controls are (§4.5, §8: the ask once, the time beside it). Any other card links to its own page.
@@ -17,7 +22,7 @@
 //   10:00 ┼
 
 import Link from 'next/link';
-import type { MouseEvent } from 'react';
+import { useSyncExternalStore, type MouseEvent } from 'react';
 import { instant, zonedInstant } from '../../../lib/time';
 import { cardHref } from '../client';
 import { useLocale, type MeCard } from '../components';
@@ -31,6 +36,66 @@ const LABEL_PX = 38;
 /** The rail always shows at least this span of the day, wider when a card falls outside it. */
 const DAY_START_H = 8;
 const DAY_END_H = 18;
+
+export type ScheduleMode = 'agenda' | 'timeline';
+const MODE_KEY = 'pbcp.schedule';
+const MODE_EVENT = 'pbcp:schedule';
+
+function savedMode(): ScheduleMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'timeline' ? 'timeline' : 'agenda';
+  } catch {
+    return 'agenda';
+  }
+}
+
+/** The schedule's mode on this device, followed live: every day's schedule shows the same one. */
+export function useScheduleMode(): [ScheduleMode, (m: ScheduleMode) => void] {
+  const mode = useSyncExternalStore(
+    (changed) => {
+      window.addEventListener(MODE_EVENT, changed);
+      window.addEventListener('storage', changed);
+      return () => {
+        window.removeEventListener(MODE_EVENT, changed);
+        window.removeEventListener('storage', changed);
+      };
+    },
+    savedMode,
+    (): ScheduleMode => 'agenda',
+  );
+  const set = (m: ScheduleMode) => {
+    try {
+      if (m === 'agenda') localStorage.removeItem(MODE_KEY);
+      else localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // the choice lasts as long as the page
+    }
+    window.dispatchEvent(new Event(MODE_EVENT));
+  };
+  return [mode, set];
+}
+
+/** Agenda or timeline: two small buttons, the chosen one pressed. */
+export function ScheduleToggle() {
+  const [mode, setMode] = useScheduleMode();
+  const button = (m: ScheduleMode, label: string) => (
+    <button
+      type="button"
+      aria-pressed={mode === m}
+      onClick={() => setMode(m)}
+      data-schedule-mode={m}
+      className={`rounded px-2 py-0.5 text-meta font-medium normal-case tracking-normal outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === m ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <span className="flex items-center gap-0.5 rounded-md border p-0.5" role="group" aria-label="Schedule view">
+      {button('agenda', 'Agenda')}
+      {button('timeline', 'Timeline')}
+    </span>
+  );
+}
 
 /** A colour per producer of the day, by name, so the legend and the rail agree. */
 export function producerColours(cards: MeCard[]): Map<string, string> {
@@ -91,10 +156,9 @@ export function TimeRail({ cards, date, timezone, anchors }: {
   anchors: Map<string, string>;
 }) {
   const locale = useLocale();
+  const [mode] = useScheduleMode();
   const colours = producerColours(cards);
   if (cards.length === 0) return <p className="py-3 text-lead text-muted-foreground" data-rail-empty>Nothing on this day has a time.</p>;
-  const { placed, fromH, toH } = place(cards, date, timezone);
-  const hours = Array.from({ length: toH - fromH + 1 }, (_, i) => fromH + i);
 
   // A marker scrolls to its card's row in the brief and focuses it; without script, the link alone does.
   const go = (e: MouseEvent<HTMLAnchorElement>, row: string) => {
@@ -106,6 +170,56 @@ export function TimeRail({ cards, date, timezone, anchors }: {
     history.replaceState(null, '', `#${row}`);
   };
 
+  /** A card's time, producer and title, linking to its row on the brief (a marker) or to its own page. */
+  const entry = (card: MeCard) => {
+    const row = anchors.get(card.id);
+    const time = cardTime(card, timezone, locale);
+    const label = (
+      <>
+        <span className="flex items-baseline gap-1.5 text-meta text-muted-foreground">
+          <time className="tabular-nums" dateTime={time.dateTime}>{time.text}</time>
+          <span className="truncate uppercase tracking-meta">{card.producer}</span>
+        </span>
+        <span className="block truncate text-lead text-foreground">{card.title}</span>
+      </>
+    );
+    return row ? (
+      // Presented on the brief: a marker, no body and no controls (§4.5).
+      <a href={`#${row}`} onClick={(e) => go(e, row)} className="block min-w-0 pl-3 pr-1 hover:underline" data-marker={card.id}>{label}</a>
+    ) : (
+      <Link href={cardHref(card.id)} className="block min-w-0 pl-3 pr-1 hover:underline">{label}</Link>
+    );
+  };
+  const legend = (
+    <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-meta text-muted-foreground" aria-label="Producers" data-legend>
+      {[...colours].map(([producer, colour]) => (
+        <li key={producer} className="flex items-center gap-1.5" data-legend-producer={producer}>
+          <span className="size-2.5 rounded-full" style={{ background: colour }} aria-hidden />
+          <span className="uppercase tracking-meta">{producer}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  if (mode === 'agenda') {
+    // In time order, one under another: no free time between them.
+    return (
+      <div>
+        <ol className="flex flex-col gap-2" aria-label="Cards with a time" data-agenda>
+          {cards.map((card) => (
+            <li key={card.id} className="relative" data-rail-entry={card.id}>
+              <span className="absolute left-0 top-[3px] size-2.5 rounded-full" style={{ background: colours.get(card.producer) }} aria-hidden />
+              <div className="pl-1">{entry(card)}</div>
+            </li>
+          ))}
+        </ol>
+        {legend}
+      </div>
+    );
+  }
+
+  const { placed, fromH, toH } = place(cards, date, timezone);
+  const hours = Array.from({ length: toH - fromH + 1 }, (_, i) => fromH + i);
   return (
     <div>
       <div className="relative" style={{ height: (toH - fromH) * PX_PER_HOUR + LABEL_PX }} data-rail>
@@ -118,17 +232,6 @@ export function TimeRail({ cards, date, timezone, anchors }: {
         <ol className="absolute inset-y-0 left-12 right-0" aria-label="Cards with a time">
           {placed.map(({ card, top, bar, lane, lanes }) => {
             const colour = colours.get(card.producer)!;
-            const row = anchors.get(card.id);
-            const time = cardTime(card, timezone, locale);
-            const label = (
-              <>
-                <span className="flex items-baseline gap-1.5 text-meta text-muted-foreground">
-                  <time className="tabular-nums" dateTime={time.dateTime}>{time.text}</time>
-                  <span className="truncate uppercase tracking-meta">{card.producer}</span>
-                </span>
-                <span className="block truncate text-lead text-foreground">{card.title}</span>
-              </>
-            );
             return (
               <li
                 key={card.id}
@@ -142,25 +245,13 @@ export function TimeRail({ cards, date, timezone, anchors }: {
                 ) : (
                   <span className="absolute -left-[3px] top-[3px] size-2.5 rounded-full" style={{ background: colour }} aria-hidden />
                 )}
-                {row ? (
-                  // Presented in the brief: a marker, no body and no controls (§4.5).
-                  <a href={`#${row}`} onClick={(e) => go(e, row)} className="block min-w-0 pl-3 pr-1 hover:underline" data-marker={card.id}>{label}</a>
-                ) : (
-                  <Link href={cardHref(card.id)} className="block min-w-0 pl-3 pr-1 hover:underline">{label}</Link>
-                )}
+                {entry(card)}
               </li>
             );
           })}
         </ol>
       </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-meta text-muted-foreground" aria-label="Producers" data-legend>
-        {[...colours].map(([producer, colour]) => (
-          <li key={producer} className="flex items-center gap-1.5" data-legend-producer={producer}>
-            <span className="size-2.5 rounded-full" style={{ background: colour }} aria-hidden />
-            <span className="uppercase tracking-meta">{producer}</span>
-          </li>
-        ))}
-      </ul>
+      {legend}
     </div>
   );
 }
