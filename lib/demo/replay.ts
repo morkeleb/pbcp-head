@@ -37,6 +37,8 @@ export interface DemoDay {
   signals: DemoThread[];
   /** The day's cards with `at`, for its schedule (RFC 0.8 §8), `log` included. */
   rail: MeCard[];
+  /** Every card of the day, for a scheduled card's thread. */
+  cards: MeCard[];
 }
 
 export type DemoOrder = MeCard & {
@@ -176,8 +178,10 @@ async function build(db: Db, date: string): Promise<DemoHead> {
   // As GET /api/me/brief shows a head: every open decision, newest first; today's artifacts and signals delivered at
   // brief or immediate (a log card is only in the day view, §9), as threads.
   const decisions = shown((c) => c.kind === 'decision' && c.state === 'open').sort((a, b) => b.received_at.localeCompare(a.received_at));
-  const todayUpdates = threads(shown((c) => fromProducer(c) && c.state === 'open' && (c.kind === 'artifact' || c.kind === 'signal') && c.delivery !== 'log' && c.day === date));
-  const tomorrowCards = shown((c) => fromProducer(c) && c.state === 'open' && c.day === tomorrowDate);
+  // A card with `at` is on its day's schedule and nowhere else, unless it is an open decision (app/(ui)/brief/days.ts).
+  const rowed = (c: MeCard) => c.at === undefined || (c.kind === 'decision' && c.state === 'open');
+  const todayUpdates = threads(shown((c) => fromProducer(c) && c.state === 'open' && (c.kind === 'artifact' || c.kind === 'signal') && c.delivery !== 'log' && c.day === date && rowed(c)));
+  const tomorrowCards = shown((c) => fromProducer(c) && c.state === 'open' && c.day === tomorrowDate && rowed(c));
 
   // The day's paragraph, as the live "so far today" fold makes it (lib/brief/nightly.ts dailyParagraphNow).
   const cardUrl = (id: string) => `${ownOrigin()}/card/${encodeURIComponent(id)}`;
@@ -200,6 +204,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       updates: todayUpdates.filter((t) => t.latest.kind === 'artifact'),
       signals: todayUpdates.filter((t) => t.latest.kind === 'signal'),
       rail: rail(date),
+      cards: shown((c) => c.day === date),
     },
     tomorrow: {
       date: tomorrowDate,
@@ -209,6 +214,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       updates: threads(tomorrowCards.filter((c) => c.kind === 'artifact')),
       signals: threads(tomorrowCards.filter((c) => c.kind === 'signal')),
       rail: rail(tomorrowDate),
+      cards: shown((c) => c.day === tomorrowDate),
     },
     orders,
     detail: me.get('hermes:demo:gmail-19c3a8e05f72:reply')!,

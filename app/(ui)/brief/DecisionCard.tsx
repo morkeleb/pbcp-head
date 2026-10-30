@@ -172,9 +172,10 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
         // Options that carry a body: one under another, each its own control beside what it costs (§4.4, §4.5).
         <ul className="space-y-2" aria-label="Options" data-options>
           {list.map((o) => (
-            <li key={o.id} className="flex items-start gap-3 rounded-md border p-2.5">
-              <span className="flex-none">{control(o)}</span>
-              {card.rendered_actions?.[o.id] && <Rendered className="min-w-0 flex-1 pt-1 text-lead text-muted-foreground" html={card.rendered_actions[o.id]!} />}
+            // Its body beside the button where there is room, under it where there is not (never a word-wide column).
+            <li key={o.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border p-2.5">
+              <span className="max-w-full flex-none">{control(o)}</span>
+              {card.rendered_actions?.[o.id] && <Rendered className="min-w-[12rem] flex-1 pt-1 text-lead text-muted-foreground" html={card.rendered_actions[o.id]!} />}
             </li>
           ))}
         </ul>

@@ -8,7 +8,15 @@
 // - timeline: one time axis, each card at its `at`, a bar down to its `until` when it has one, a point when it does
 //   not, so the free time between them shows. A bar's length says `until` and nothing else.
 //
-// In both, colour says which producer sent a card and nothing else; under the cards, the legend: each producer's colour.
+// In both, colour says which producer sent a card and nothing else; under the cards, when the day has more than one
+// producer, the legend: each producer's colour. A signal (a change: moved, new, cancelled) carries a bell; an occurrence
+// does not.
+//
+// A card on the schedule is shown nowhere else in its day (days.ts `rowed`), so its row carries what an update's row
+// carried: one line (time · title) that opens in place to its header line (producer, labels, source), its lead, the
+// earlier cards of its thread, an Acknowledge button or the decision recorded, and a menu (snooze, open card,
+// acknowledge). In the timeline the details open under the axis. An open decision is the exception: its card and its
+// controls are among the decisions, and the schedule has a marker (time · title) that links to it (§4.5).
 //
 // A card the brief column presents is a marker here: its time, producer and title, linking to its row in the brief,
 // where its body and controls are (§4.5, §8: the ask once, the time beside it). Any other card links to its own page.
@@ -21,12 +29,19 @@
 //         │ ▌ Design review                     (a bar, as long as the meeting)
 //   10:00 ┼
 
+import { Bell, ChevronDown, EllipsisVertical } from 'lucide-react';
 import Link from 'next/link';
-import { useSyncExternalStore, type MouseEvent } from 'react';
+import { useState, useSyncExternalStore, type MouseEvent, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { instant, zonedInstant } from '../../../lib/time';
-import { cardHref } from '../client';
-import { useLocale, type MeCard } from '../components';
-import { cardTime } from './card-parts';
+import { api, cardHref, OfflineError, useOnline } from '../client';
+import { announce, decidedLine, NOT_SENT, useLocale, type MeCard } from '../components';
+import { CardMeta, cardTime, clock, wants } from './card-parts';
+import { timed } from './days';
 
 /** The producers' colours, in the order they are handed out: distinct from each other in light and dark alike. */
 const PALETTE = ['#2f6fdf', '#d9822b', '#2a9d6f', '#c2417a', '#7a5ad8', '#1f9bb5', '#8a9a2b', '#d14b3c'];
@@ -148,15 +163,20 @@ function place(cards: MeCard[], date: string, timezone: string): { placed: Place
   return { placed, fromH, toH };
 }
 
-export function TimeRail({ cards, date, timezone, anchors }: {
+export function TimeRail({ cards, date, timezone, anchors, dayCards = [], onChange }: {
   cards: MeCard[];
   date: string;
   timezone: string;
-  /** Cards the brief column presents, and the id of the row that presents each. */
+  /** Cards the brief presents in a row of their own (an open decision), and the id of that row. */
   anchors: Map<string, string>;
+  /** Every card of the day, for a scheduled card's thread. */
+  dayCards?: MeCard[];
+  /** A card changed here (acknowledged, snoozed): the same card everywhere it is shown. */
+  onChange?: (card: MeCard) => void;
 }) {
   const locale = useLocale();
   const [mode] = useScheduleMode();
+  const [open, setOpen] = useState<string | null>(null);
   const colours = producerColours(cards);
   if (cards.length === 0) return <p className="py-3 text-lead text-muted-foreground" data-rail-empty>Nothing on this day has a time.</p>;
 
@@ -169,28 +189,41 @@ export function TimeRail({ cards, date, timezone, anchors }: {
     el.focus({ preventScroll: true });
     history.replaceState(null, '', `#${row}`);
   };
+  const toggle = (id: string) => setOpen((o) => (o === id ? null : id));
+  const mark = (card: MeCard) => card.kind === 'signal' && <Bell className="size-3.5 flex-none self-center text-muted-foreground" aria-label="a change" data-change />;
+  /** The earlier cards of a scheduled card's thread that are not on the schedule themselves, oldest first. */
+  const earlier = (card: MeCard) =>
+    card.thread === undefined ? [] : dayCards.filter((c) => c.id !== card.id && c.producer === card.producer && c.thread === card.thread && !timed(c) && c.received_at <= card.received_at).sort((a, b) => a.received_at.localeCompare(b.received_at));
+  const details = (card: MeCard) => <Details card={card} timezone={timezone} earlier={earlier(card)} onChange={onChange} />;
 
-  /** A card's time, producer and title, linking to its row on the brief (a marker) or to its own page. */
-  const entry = (card: MeCard) => {
+  /** One line: time · title. A marker links to the card's row; any other opens its details. */
+  const line = (card: MeCard, twoLines = false) => {
     const row = anchors.get(card.id);
     const time = cardTime(card, timezone, locale);
-    const label = (
+    const when = <time className="flex-none text-meta tabular-nums text-muted-foreground" dateTime={time.dateTime}>{time.text}</time>;
+    const title = <span className={`min-w-0 truncate text-lead ${card.acknowledged_at ? 'text-muted-foreground' : 'text-foreground'}`}>{card.title}</span>;
+    // The agenda: one line, time · title. The timeline: the time (and the mark) above the title, beside the bar.
+    const text = twoLines ? (
       <>
-        <span className="flex items-baseline gap-1.5 text-meta text-muted-foreground">
-          <time className="tabular-nums" dateTime={time.dateTime}>{time.text}</time>
-          <span className="truncate uppercase tracking-meta">{card.producer}</span>
-        </span>
-        <span className="block truncate text-lead text-foreground">{card.title}</span>
+        <span className="flex items-center gap-1.5">{when}{mark(card)}</span>
+        <span className="block w-full min-w-0 truncate">{title}</span>
+      </>
+    ) : (
+      <>
+        {when}
+        {mark(card)}
+        {title}
       </>
     );
+    const cls = `flex min-w-0 pl-3 pr-1 text-left hover:underline ${twoLines ? 'w-full flex-col items-start gap-0' : 'items-baseline gap-2'}`;
     return row ? (
-      // Presented on the brief: a marker, no body and no controls (§4.5).
-      <a href={`#${row}`} onClick={(e) => go(e, row)} className="block min-w-0 pl-3 pr-1 hover:underline" data-marker={card.id}>{label}</a>
+      // Its card and controls are on the brief: a marker, no body and no controls here (§4.5).
+      <a href={`#${row}`} onClick={(e) => go(e, row)} className={cls} data-marker={card.id}>{text}</a>
     ) : (
-      <Link href={cardHref(card.id)} className="block min-w-0 pl-3 pr-1 hover:underline">{label}</Link>
+      <button type="button" className={`${cls} w-full`} aria-expanded={open === card.id} onClick={() => toggle(card.id)} data-schedule-row={card.id}>{text}</button>
     );
   };
-  const legend = (
+  const legend = colours.size > 1 && (
     <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-meta text-muted-foreground" aria-label="Producers" data-legend>
       {[...colours].map(([producer, colour]) => (
         <li key={producer} className="flex items-center gap-1.5" data-legend-producer={producer}>
@@ -202,14 +235,15 @@ export function TimeRail({ cards, date, timezone, anchors }: {
   );
 
   if (mode === 'agenda') {
-    // In time order, one under another: no free time between them.
+    // In time order, one line each, one under another: no free time between them.
     return (
       <div>
-        <ol className="flex flex-col gap-2" aria-label="Cards with a time" data-agenda>
+        <ol className="flex flex-col gap-1.5" aria-label="Cards with a time" data-agenda>
           {cards.map((card) => (
             <li key={card.id} className="relative" data-rail-entry={card.id}>
-              <span className="absolute left-0 top-[3px] size-2.5 rounded-full" style={{ background: colours.get(card.producer) }} aria-hidden />
-              <div className="pl-1">{entry(card)}</div>
+              <span className="absolute left-0 top-[5px] size-2.5 rounded-full" style={{ background: colours.get(card.producer) }} aria-hidden />
+              <div className="pl-1">{line(card)}</div>
+              {open === card.id && <div className="pl-4">{details(card)}</div>}
             </li>
           ))}
         </ol>
@@ -220,6 +254,7 @@ export function TimeRail({ cards, date, timezone, anchors }: {
 
   const { placed, fromH, toH } = place(cards, date, timezone);
   const hours = Array.from({ length: toH - fromH + 1 }, (_, i) => fromH + i);
+  const chosen = cards.find((c) => c.id === open);
   return (
     <div>
       <div className="relative" style={{ height: (toH - fromH) * PX_PER_HOUR + LABEL_PX }} data-rail>
@@ -245,13 +280,112 @@ export function TimeRail({ cards, date, timezone, anchors }: {
                 ) : (
                   <span className="absolute -left-[3px] top-[3px] size-2.5 rounded-full" style={{ background: colour }} aria-hidden />
                 )}
-                {entry(card)}
+                {line(card, true)}
               </li>
             );
           })}
         </ol>
       </div>
+      {chosen && <div data-schedule-detail-for={chosen.id}>{details(chosen)}</div>}
       {legend}
+    </div>
+  );
+}
+
+const SNOOZES = [
+  { preset: 'tonight', label: 'Tonight' },
+  { preset: 'tomorrow', label: 'Tomorrow’s brief' },
+  { preset: 'next-week', label: 'Next week' },
+] as const;
+
+/** A scheduled card, opened: what its row on the brief would have shown, and what can be done with it. */
+function Details({ card, timezone, earlier, onChange }: { card: MeCard; timezone: string; earlier: MeCard[]; onChange?: (card: MeCard) => void }) {
+  const locale = useLocale();
+  const online = useOnline();
+  const [error, setError] = useState<string | null>(null);
+  const want = wants(card);
+  const post = async (path: string, body?: unknown): Promise<Partial<MeCard>> => {
+    setError(null);
+    try {
+      const r = await api<Partial<MeCard> & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/${path}`, { method: 'POST', ...(body ? { body } : {}) });
+      if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
+      return r.body;
+    } catch (e) {
+      setError(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
+      throw e;
+    }
+  };
+  const acknowledge = async () => {
+    const at = new Date().toISOString();
+    onChange?.({ ...card, acknowledged_at: at });
+    announce(`Acknowledged: ${card.title}`);
+    try {
+      const r = await post('ack');
+      onChange?.({ ...card, acknowledged_at: r.acknowledged_at ?? at });
+    } catch {
+      onChange?.(card);
+    }
+  };
+  const snooze = async (preset: string, label: string) => {
+    const r = await post('snooze', { preset }).catch(() => null);
+    if (!r) return;
+    onChange?.({ ...card, ...r });
+    announce(`Snoozed until ${label.toLowerCase()}: ${card.title}`);
+  };
+  let state: ReactNode = null;
+  if (card.kind === 'decision' && card.state === 'decided') state = <>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</>;
+  else if (card.acknowledged_at) state = <>Acknowledged · {clock(card.acknowledged_at, timezone, locale)}</>;
+  return (
+    <div className="my-1.5 rounded-md border p-3" data-schedule-detail={card.id}>
+      <div className="flex items-start justify-between gap-2">
+        <CardMeta card={card} timezone={timezone} want={want} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" className="-mr-2 -mt-1 text-muted-foreground" aria-label={`More actions: ${card.title}`}>
+              <EllipsisVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            <DropdownMenuLabel className="text-meta uppercase tracking-meta text-muted-foreground">Snooze</DropdownMenuLabel>
+            {SNOOZES.map((s) => (
+              <DropdownMenuItem key={s.preset} disabled={!online} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href={cardHref(card.id)}>Open card</Link>
+            </DropdownMenuItem>
+            {want === 'acknowledge' && <DropdownMenuItem disabled={!online} onSelect={() => void acknowledge()}>Acknowledge</DropdownMenuItem>}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <h4 className="mt-0.5 font-serif text-body font-semibold tracking-editorial">
+        <Link href={cardHref(card.id)} className="hover:underline">{card.title}</Link>
+      </h4>
+      {card.rendered_lead && <p className="lead mt-0.5 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
+      {earlier.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger className="group mt-1 flex items-center gap-1 text-lead text-muted-foreground">
+            {earlier.length} earlier in this thread <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ol className="mt-1 space-y-0.5 text-lead" data-thread>
+              {earlier.map((e) => (
+                <li key={e.id} className="truncate">
+                  <span className="tabular-nums text-muted-foreground">{clock(e.received_at, timezone, locale)}</span> <Link href={cardHref(e.id)} className="hover:underline">{e.title}</Link>
+                </li>
+              ))}
+            </ol>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+      <div className="mt-2">
+        {state ? (
+          <span className="state-line text-meta text-muted-foreground" role="status">{state}</span>
+        ) : (
+          want === 'acknowledge' && <Button size="xs" variant="outline" disabled={!online} onClick={() => void acknowledge()}>Acknowledge</Button>
+        )}
+      </div>
+      {error && <p className="mt-1 text-lead text-destructive" role="alert">{error}</p>}
     </div>
   );
 }

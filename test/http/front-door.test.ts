@@ -41,11 +41,10 @@ describe('the front door', () => {
     expect(html).toContain('data-hero-brief');
     // Leads as the head renders them, in the markup itself.
     expect(shown(html)).toContain('Anna wants to pay the September invoice on the 20th instead of the 15th');
-    // Today's schedule: the calendar's timed cards on the rail, and the moved call, which the brief presents, as a
-    // marker that links to its row there (§4.5, §8).
+    // Today's schedule: the calendar's timed cards, the moved call among them.
     expect(shown(html)).toContain('data-schedule');
     expect(shown(html)).toMatch(/data-rail-entry="cal:demo:standup-\d{8}"/);
-    expect(shown(html)).toMatch(/href="#brief-cal:demo:3f9a0c1d2e4b5a69-\d{8}T1600Z:moved"[^>]*data-marker=/);
+    expect(shown(html)).toMatch(/data-schedule-row="cal:demo:3f9a0c1d2e4b5a69-\d{8}T1600Z:moved"/); // a signal with `at`: on the schedule only
     expect(html).not.toContain('A private card on this head');
     expect(html).not.toContain(`>${OWNER}<`);
     // Replaying the demo stores nothing: no card rows but the one PUT above.

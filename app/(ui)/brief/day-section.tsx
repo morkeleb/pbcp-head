@@ -37,8 +37,10 @@ export const weekOf = (date: string): string[] => {
 
 export { shortDay } from './days';
 
-export function DaySection({ day, name, wide, tz, decision, update }: {
+export function DaySection({ day, name, wide, tz, decision, update, onChange }: {
   day: Day; name: string; wide: boolean; tz: string;
+  /** A card changed on the schedule (acknowledged, snoozed). */
+  onChange?: (card: MeCard) => void;
   decision: (c: MeCard, under: string) => ReactNode; update: (t: UpdateThread) => ReactNode;
 }) {
   // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
@@ -58,7 +60,7 @@ export function DaySection({ day, name, wide, tz, decision, update }: {
   const schedule = !!day.rail?.length && (
     <Group title="Schedule" tools={<ScheduleToggle />}>
       <div className={cn(!wide && 'ml-[2.75rem] border-l pl-3')} data-schedule>
-        <TimeRail cards={day.rail} date={day.date} timezone={tz} anchors={anchors(day)} />
+        <TimeRail cards={day.rail} date={day.date} timezone={tz} anchors={anchors(day)} dayCards={day.cards ?? []} {...(onChange ? { onChange } : {})} />
       </div>
     </Group>
   );
