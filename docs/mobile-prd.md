@@ -16,7 +16,7 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 
 | Screen | Shows | Actions |
 | --- | --- | --- |
-| **Brief** | A timeline of days (today on top at open, earlier days above, tomorrow and the days ahead that have cards below, two weeks), each opening with its paragraph; open decisions, then the day's schedule (its cards with `at` on a time rail, RFC 0.8 §8), then artifacts (Updates) and signals folded by thread. Built from the components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
+| **Brief** | One day at a time (today at open; any day of the past year and the next two weeks by a swipe, ‹ Today › under the masthead, the week strip and its week arrows, or ← and →; the day in the address, `/brief?day=`, and where each day was scrolled kept for the session), opening with its paragraph; open decisions, then the day's schedule (its cards with `at` on a time rail, RFC 0.8 §8), then artifacts (Updates) and signals folded by thread. Built from the components below | Tap an action, swipe, pull to refresh, tap a day on the week strip; marks the last-visit cursor on close |
 | **Card** | The card as the Brief shows it (`DecisionCard`, or `UpdateRow` for an artifact or signal) with its body fully open; then its thread as the Brief lists threads; then its decision log entries as a small table | Decide, snooze, open source, see thread |
 | **Orders** | Open orders, each a block styled like a `DecisionCard` with `exec_state`, who holds it and the lease in a small table, its latest progress as an `UpdateRow` beneath; then done orders as `UpdateRow`s of their outcomes | Dictate a new order (text or voice); cancel |
 
@@ -28,12 +28,12 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 | `UpdateRow` | An artifact or signal thread: producer · labels · time · acknowledge · label · host ↗ (as on `DecisionCard`; never the kind's name, RFC §4.1a), the newest card's title and `rendered_lead`, its first visual fitted to the row, the thread behind one line, newest last | Acknowledges the thread (the control becomes "Acknowledged · 09:14") |
 | `DailyBrief` | "Today's brief" (with "· so far today" until the nightly card exists), "Morning brief" on an earlier day and the day's paragraph: its decisions as title — lead, then one sentence of yesterday's threads the same way, each title linked to its card (`daily_paragraph`) | — |
 | `TimeRail` | A day's schedule: its cards with `at`, every producer, `log` included, as an agenda (in time order, nothing between them) or, toggled, a timeline that shows the free time (a bar to `until`, a point without; length is `until`); colour is the producer; the producer legend under it. The choice is remembered per device and is the same for every day. A card shown on the brief is a marker (time, producer, title) linking to its row | — |
-| `WeekStrip` | Seven days, the selected one filled, a dot under days with open decisions (by each card's day, RFC 0.7 §8) | Jumps the timeline to a day |
+| `WeekStrip` | The month (the date picker) and a week back and on; seven days, the selected one filled, a dot under days with open decisions (by each card's day, RFC 0.7 §8) | Shows a day |
 | `LabelFilter` | Beside the week strip: the labels on the loaded days with counts; while on, a chip with a clear control | Shows only cards carrying any chosen label, in decisions, updates and signals, and only their entries in the daily paragraph; remembered per device; never groups by label (§8) |
 
-**The nightly card's day.** The `head:daily` card dated D is the morning paper for D and reports on D−1; the timeline shows it at the top of D.
+**The nightly card's day.** The `head:daily` card dated D is the morning paper for D and reports on D−1; the brief shows it at the top of D.
 
-Under 900 px the brief is a timeline with a rail of times; from 900 px a broadsheet with decisions on the left (60 %) and the schedule above updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.
+Under 900 px a day is one column, with a rail of times beside its decisions; from 900 px a broadsheet with decisions on the left (60 %) and the schedule above updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.
 
 **Visuals** (RFC §3.1 Presentation). Diagrams and images in a card are thumbnails fitted to the card width, captioned, in reading order; the Brief shows at most the first visual of a folded card. Tap opens a full-screen viewer with pinch-zoom and pan on the cached SVG or image at native size, a share action, and the fence source behind a disclosure. The viewer is the same component for mermaid output and for producer images, so there is one zoom experience to get right.
 
@@ -85,7 +85,7 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | Endpoint | Returns | Notes |
 | --- | --- | --- |
 | `GET /api/me/brief` | The current `head:daily` card, open decisions, today's folded threads, the last-visit cursor | One call paints the Brief screen |
-| `GET /api/me/cards?from=&to=&state=` | Earlier days on the timeline, a week at a time | Paginated by `change_seq`; `before` names the latest earlier day with a card |
+| `GET /api/me/cards?date=`, `?from=&to=&state=` | An earlier day when it is shown; the days ahead in one request | Paginated by `change_seq`; `before` names the latest earlier day with a card |
 | `GET /api/me/cards/{id}` | One card with its thread (predecessors, references, progress) |  |
 | `POST /api/me/cards/{id}/decision` | The core decide operation, actor = device | Same semantics as RFC §7.3 |
 | `POST /api/me/cards/{id}/ack` | Sets `acknowledged_at` | Artifacts and signals |

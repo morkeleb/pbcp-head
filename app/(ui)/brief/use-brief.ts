@@ -1,17 +1,17 @@
 'use client';
 
-// The brief's data for both layouts: today (GET /api/me/brief), earlier days loaded a week at a time as the person
-// scrolls up (GET /api/me/cards?from=&to=), as far back as the head has cards (§8: every card stays reachable), and
-// tomorrow (from the brief), and the days after it that have cards, up to two weeks ahead. Each day's schedule (its
-// cards with `at`, RFC 0.8 §8) comes from its cards: an earlier day's as loaded, today's and the days ahead from
-// GET /api/me/cards?from=&to=, since the brief leaves `log` cards out. Days are shaped once here, the same for the timeline and
-// the broadsheet: the day's paragraph, its decisions, its updates (artifacts) and signals as threads.
+// The brief's data, one day at a time: today (GET /api/me/brief), tomorrow (from the brief) and the days after it, up to
+// two weeks ahead, and any earlier day the person goes to (GET /api/me/cards?date=, loaded when it is first shown; §8:
+// every card stays reachable). Each day's schedule (its cards with `at`, RFC 0.8 §8) comes from its cards: an earlier
+// day's as loaded, today's and the days ahead from GET /api/me/cards?from=&to=, since the brief leaves `log` cards out.
+// A day is shaped once here, the same at every width: its paragraph, its decisions, its schedule, its updates
+// (artifacts) and signals as threads.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, useFresh } from '../client';
 import type { MeCard } from '../components';
 
-import { addDays, aheadOf, AHEAD, localDay, pastOf, railCards, referencedBy, todayOf, tomorrowOf, WEEK, type BriefResponse, type Day } from './days';
+import { addDays, aheadOf, AHEAD, localDay, pastOf, railCards, referencedBy, todayOf, tomorrowOf, type BriefResponse, type Day } from './days';
 
 export { addDays, type BriefResponse, type Day };
 
@@ -23,14 +23,11 @@ export function useBrief() {
   const [brief, setBrief] = useState<BriefResponse | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Earlier days the person has gone to, by date: every card of each.
   const [past, setPast] = useState<Map<string, MeCard[]>>(new Map());
-  // Earlier days are loaded without gaps from today back to `from`; `before` is the latest day before that with a
-  // card (null: the head has none earlier, the timeline has reached its start).
-  const [reach, setReach] = useState<{ from: string | null; before: string | null | undefined }>({ from: null, before: undefined });
-  const reachRef = useRef(reach);
-  reachRef.current = reach;
-  const loading = useRef<Promise<boolean> | null>(null);
   const seq = useRef<number | null>(null);
+  /** The day the page shows, for the live check: an earlier one loads again when the head changes. */
+  const showing = useRef<string | null>(null);
   // Today's cards and those of the days ahead, every one of them, by day: for their schedules, and for the days after
   // tomorrow, which the brief does not carry. A day jumped to that has none is kept, empty, so it can be shown.
   const [near, setNear] = useState<Map<string, MeCard[]>>(new Map());
@@ -73,6 +70,18 @@ export function useBrief() {
   const stale = useCallback(() => void load(true), [load]);
   useFresh('/api/me/brief', fresh, stale);
 
+  /** Loads an earlier day: every card whose day it is (§8), all pages. Loaded again when the head has changed. */
+  const loadDay = useCallback(async (date: string, network = false) => {
+    const cards: MeCard[] = [];
+    for (let after: number | null = 0; after !== null; ) {
+      const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?date=${date}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
+      if (r.status !== 200) return;
+      cards.push(...r.body.cards);
+      after = r.body.next;
+    }
+    setPast((m) => new Map(m).set(date, cards));
+  }, []);
+
   // Live: whatever the device's notification settings, the brief looks for changes when the app comes back to the
   // foreground and once a minute while it is on screen, and at once when a push arrives (the service worker says so;
   // only a device with notifications on gets pushes). It asks the head's change counter and date (GET /api/me/seq), and
@@ -93,6 +102,10 @@ export function useBrief() {
         if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) {
           await load(true, true);
           await loadNear(r.body.date, b.timezone, true);
+          // An earlier day on screen loads again; the others when they are next shown.
+          const shown = showing.current;
+          setPast((m) => (shown && m.has(shown) ? new Map([[shown, m.get(shown)!]]) : new Map()));
+          if (shown && shown < r.body.date) await loadDay(shown, true);
         }
       } catch {
         // offline, or signed out: the next check tries again
@@ -112,7 +125,7 @@ export function useBrief() {
       navigator.serviceWorker?.removeEventListener('message', onMessage);
       clearInterval(timer);
     };
-  }, [load, loadNear]);
+  }, [load, loadNear, loadDay]);
 
   // Leaving the brief advances the global last-visit cursor to what was on screen (mobile PRD: on close).
   useEffect(() => {
@@ -131,68 +144,6 @@ export function useBrief() {
       leave();
     };
   }, []);
-
-  /**
-   * Loads earlier days: with `date`, every day from it up to those already loaded (a day jumped to is shown even if
-   * nothing came that day); without, the next week back that has cards. Resolves when they are in; false when nothing
-   * was loaded (at the start, a scroll's load already running, or the request failed).
-   */
-  const loadEarlier = useCallback(
-    async (date?: string): Promise<boolean> => {
-      const today = brief?.date;
-      const tz = brief?.timezone;
-      if (!today || !tz) return false;
-      // One load at a time: a scroll's load already running is the same load again; a jump waits for it, then goes.
-      if (loading.current) {
-        if (!date) return false;
-        await loading.current;
-      }
-      const { from: loadedFrom, before } = reachRef.current;
-      const to = addDays(loadedFrom ?? today, -1);
-      // Scrolling: the week ending at the latest day with cards (yesterday on the first load). Jumping: back to `date`.
-      if (date && date > to) {
-        // Already loaded: a day with nothing on it is not on the timeline until the person asks for it.
-        setPast((p) => (date >= today || p.has(date) ? p : new Map(p).set(date, [])));
-        return true;
-      }
-      const end = date ? to : before === undefined ? to : before;
-      if (end === null) return false;
-      const from = date ?? addDays(end, -(WEEK - 1));
-      const load = (async () => {
-        const cards: MeCard[] = [];
-        let earlier: string | null = null;
-        for (let after: number | null = 0; after !== null; ) {
-          const r: { status: number; body: { cards: MeCard[]; next: number | null; before?: string | null } } = await api(
-            `/api/me/cards?from=${from}&to=${to}&limit=200${after ? `&after=${after}` : ''}`,
-          );
-          if (r.status !== 200) return false;
-          cards.push(...r.body.cards);
-          earlier = r.body.before ?? null;
-          after = r.body.next;
-        }
-        setPast((p) => {
-          const next = new Map(p);
-          for (const c of cards) {
-            const day = c.day ?? localDay(c.received_at, tz); // §8: the head's day for the card
-            next.set(day, [...(next.get(day) ?? []), c]);
-          }
-          if (date && !next.has(date)) next.set(date, []); // a day jumped to is shown even when nothing came that day
-          return next;
-        });
-        const next = { from, before: earlier };
-        reachRef.current = next; // the next load starts from here even before React re-renders
-        setReach(next);
-        return true;
-      })();
-      loading.current = load;
-      try {
-        return await load;
-      } finally {
-        loading.current = null;
-      }
-    },
-    [brief?.date, brief?.timezone],
-  );
 
   /** A card changed on screen (decided, seen, snoozed, or rolled back): the same card everywhere it is shown. */
   const change = useCallback((c: MeCard) => {
@@ -234,15 +185,21 @@ export function useBrief() {
     });
   }, []);
 
-  const pastDays = [...past.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => pastOf(date, cards));
   const withRail = (d: Day): Day => (near.has(d.date) ? { ...d, rail: railCards(near.get(d.date)!), cards: near.get(d.date)! } : d);
-  const later = brief ? [...near.entries()].filter(([date]) => date > addDays(brief.date, 1)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, cards]) => aheadOf(date, cards)) : [];
-  const days: Day[] = brief ? [...pastDays, withRail(todayOf(brief, near.get(brief.date))), withRail(tomorrowOf(brief)), ...later] : [];
+  /**
+   * The day `date` as the page shows it: today and tomorrow from the brief (with their schedules), a later day from the
+   * days ahead, an earlier one once loaded (null until then: `loadDay`).
+   */
+  const dayOf = (date: string): Day | null => {
+    if (!brief) return null;
+    if (date === brief.date) return withRail(todayOf(brief, near.get(brief.date)));
+    if (date === addDays(brief.date, 1)) return withRail(tomorrowOf(brief));
+    if (date > brief.date) return aheadOf(date, near.get(date) ?? []);
+    return past.has(date) ? pastOf(date, past.get(date)!) : null;
+  };
   // §8 pairing: the later cards that reference a card, from everything loaded.
   const references = referencedBy([...past.values(), ...near.values()].flat());
-  /** A day after tomorrow the person went to: shown even with nothing set for it. */
-  const showAhead = useCallback((date: string) => setNear((m) => (m.has(date) ? m : new Map(m).set(date, []))), []);
-  return { brief, days, references, cachedAt, error, loadEarlier, showAhead, loadedFrom: reach.from, atStart: reach.before === null, loadedBack: past, change };
+  return { brief, dayOf, loadDay, references, cachedAt, error, change, showing };
 }
 
 /**

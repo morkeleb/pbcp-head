@@ -12,7 +12,7 @@ import { cards, decisionLog, labelCeilings } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
 import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
-import { load, persist, toCard, writeTx, type Stored, type Tx } from './store';
+import { load, newestSuccessor, persist, toCard, writeTx, type Stored, type Tx } from './store';
 
 export interface Outcome {
   status: number;
@@ -161,6 +161,15 @@ export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: un
         decidedDoc,
         actor: ctx.actor,
       });
+    }
+    // §7.3: deciding a card that is not open is 409 with the stored card. A superseded one says what replaced it, so the
+    // owner's interface can say so and offer the successor instead of quietly showing the card unchanged (§8).
+    if (r.status === 409 && stored.card.state === 'superseded') {
+      const successor = await newestSuccessor(tx, ctx.headId, stored.card);
+      if (successor) {
+        const replaced_by = { id: successor.id, title: successor.title, state: successor.state, ...(successor.decision ? { decision: successor.decision } : {}) };
+        return { status: 409, card: { ...card, replaced_by, message: `This card was replaced by “${successor.title}”.` } as Card };
+      }
     }
     return { status: r.status, card };
   });

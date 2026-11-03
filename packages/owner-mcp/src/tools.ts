@@ -43,9 +43,9 @@ const decisionRow = (c: MeCard) => ({
   ...(c.labels?.length ? { labels: c.labels } : {}),
   ...(c.about ? { about: c.about } : {}),
   ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
-  actions: choices(c),
-  ...(editable(c) ? { editable: true } : {}),
-  ...(c.state !== 'open' ? { state: c.state, decision: c.decision } : {}),
+  // Only an open card takes a decision (§7.3); a superseded one names what replaced it (§8).
+  ...(c.state === 'open' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
+  ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
 });
 
 const updateRow = (latest: MeCard, count: number) => ({
@@ -212,7 +212,8 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
             ...(c.about ? { about: c.about } : {}),
             ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
             ...(c.source ? { source: c.source } : {}),
-            ...(c.kind === 'decision' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : {}),
+            ...(c.kind === 'decision' && c.state === 'open' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : {}),
+            ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
             ...(c.decision ? { decision: c.decision, decided_at: c.decided_at } : {}),
             ...(c.snoozed_until ? { snoozed_until: c.snoozed_until } : {}),
             ...(c.acknowledged_at ? { acknowledged_at: c.acknowledged_at } : {}),

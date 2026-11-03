@@ -869,6 +869,16 @@ export interface components {
              * @enum {string}
              */
             "orders.result"?: "done" | "failed";
+            /** @description On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words. */
+            replaced_by?: {
+                id: string;
+                title: string;
+                /** @enum {string} */
+                state: "open" | "decided" | "superseded";
+                decision?: string;
+            };
+            /** @description On a 409 from the decision route for a superseded card: “This card was replaced by …” */
+            message?: string;
             /** @description The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself. */
             rendered_html: string;
             /** @description The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none. */
@@ -981,6 +991,16 @@ export interface components {
                  * @enum {string}
                  */
                 "orders.result"?: "done" | "failed";
+                /** @description On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words. */
+                replaced_by?: {
+                    id: string;
+                    title: string;
+                    /** @enum {string} */
+                    state: "open" | "decided" | "superseded";
+                    decision?: string;
+                };
+                /** @description On a 409 from the decision route for a superseded card: “This card was replaced by …” */
+                message?: string;
                 /** @description The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself. */
                 rendered_html: string;
                 /** @description The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none. */
@@ -1189,6 +1209,16 @@ export interface components {
              * @enum {string}
              */
             "orders.result"?: "done" | "failed";
+            /** @description On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words. */
+            replaced_by?: {
+                id: string;
+                title: string;
+                /** @enum {string} */
+                state: "open" | "decided" | "superseded";
+                decision?: string;
+            };
+            /** @description On a 409 from the decision route for a superseded card: “This card was replaced by …” */
+            message?: string;
             /** @description The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself. */
             rendered_html: string;
             /** @description The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none. */

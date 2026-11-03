@@ -347,7 +347,7 @@ describe('the brief: lead, proposal, More', () => {
     const [day, today] = [yesterday.toISOString().slice(0, 10), new Date().toISOString().slice(0, 10)];
     await page.setViewport({ width: 390, height: 844, hasTouch: true, isMobile: true });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await page.waitForSelector(`[data-day="${day}"]`);
+    await page.waitForSelector(`[data-day="${today}"]`);
     const swipe = async (sel: string, dx: number) => {
       const el = (await page.$(sel))!;
       await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
@@ -358,14 +358,14 @@ describe('the brief: lead, proposal, More', () => {
       for (let i = 1; i <= 6; i++) await page.touchscreen.touchMove(x + (dx * i) / 6, y);
       await page.touchscreen.touchEnd();
     };
-    const atMasthead = (d: string) => page.waitForFunction((d) => Math.abs(document.querySelector(`[data-day="${d}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, d);
+    const shows = (d: string) => page.waitForSelector(`main[data-brief-day="${d}"] [data-day="${d}"]`);
     // On a card, rightwards: the day before; the card is not decided.
     await swipe('article[data-card="goalpath:item:1:ship"]', 160);
-    await atMasthead(day);
+    await shows(day);
     expect(await page.$eval('nav[aria-label="Week"] button[aria-pressed="true"]', (b) => b.getAttribute('aria-current'))).toBeNull();
     // Leftwards: back to today.
     await swipe(`section[data-section]:has([data-day="${day}"])`, -160);
-    await atMasthead(today);
+    await shows(today);
     await new Promise((r) => setTimeout(r, 4500)); // past any undo window
     expect(await page.$('.toast')).toBeNull();
     expect((await row('goalpath:item:1:ship')).state).toBe('open');
@@ -398,25 +398,25 @@ describe('the brief: lead, proposal, More', () => {
     expect(errors).toEqual([]);
   });
 
-  it('shows the days ahead that have cards, each with its schedule, and the date picker reaches them', async () => {
+  it('shows a day ahead with its cards and its schedule, an empty one saying so, as far as two weeks on', async () => {
     const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
     const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
     for (const n of [3, 6]) {
       await call('PUT', cardPath(`cal:x:agenda-${n}`), { auth: cal, body: card(`cal:x:agenda-${n}`, { producer: 'cal', kind: 'artifact', title: `Agenda in ${n} days`, about: day(n) }) });
       await call('PUT', cardPath(`cal:x:meet-${n}`), { auth: cal, body: card(`cal:x:meet-${n}`, { producer: 'cal', kind: 'artifact', urgency: 'log', title: `Meeting in ${n} days`, at: `${day(n)}T10:00:00Z`, until: `${day(n)}T11:00:00Z` }) });
     }
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await page.waitForSelector(`[data-day="${day(6)}"]`);
-    const days = await page.$$eval('[data-day]', (hs) => hs.map((h) => h.getAttribute('data-day')));
-    expect(days.slice(-4)).toEqual([day(0), day(1), day(3), day(6)]); // empty days ahead have no header
+    // Three days on: its agenda and its schedule.
+    await page.goto(`${headUrl()}/brief?day=${day(3)}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`main[data-brief-day="${day(3)}"] [data-rail-entry="cal:x:meet-3"]`);
     expect(await page.$eval(`section[data-section]:has([data-day="${day(3)}"])`, (s) => s.textContent)).toContain('Agenda in 3 days');
-    expect(await page.$(`section[data-section]:has([data-day="${day(3)}"]) [data-rail-entry="cal:x:meet-3"]`)).not.toBeNull();
-    // A day ahead with nothing on it, from the week strip: shown, saying so.
-    const empty = day(5);
-    if ((await page.$(`nav[aria-label="Week"] button:not([disabled])[aria-label^="${new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${empty}T00:00:00Z`))}"]`)) === null) return; // not in this week
-    await (await page.$(`nav[aria-label="Week"] button[aria-label^="${new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${empty}T00:00:00Z`))}"]`))!.click();
-    await page.waitForSelector(`[data-day="${empty}"]`);
-    expect(await page.$eval(`section[data-section]:has([data-day="${empty}"])`, (s) => s.textContent)).toContain('Nothing set for this day yet.');
+    // The day after, with nothing on it: shown, saying so.
+    await (await page.$('[data-day-nav] button[aria-label="Next day"]'))!.click();
+    await page.waitForSelector(`main[data-brief-day="${day(4)}"] [data-day="${day(4)}"]`);
+    expect(await page.$eval('main', (s) => s.textContent)).toContain('Nothing set for this day yet.');
+    // Two weeks on is as far as it goes.
+    await page.goto(`${headUrl()}/brief?day=${day(14)}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`main[data-brief-day="${day(14)}"]`);
+    expect(await page.$eval('[data-day-nav] button[aria-label="Next day"]', (b) => (b as HTMLButtonElement).disabled)).toBe(true);
   });
 
   it('opens a diagram full-screen at least as wide as the screen, never smaller than its thumbnail', async () => {
@@ -435,151 +435,136 @@ describe('the brief: lead, proposal, More', () => {
   });
 });
 
-describe('the brief: days, week strip, layouts', () => {
-  /** Cards received yesterday, through the head's clock. */
-  async function yesterday() {
-    const at = new Date(Date.now() - 24 * 3600 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
-    await call('POST', '/api/test', { body: { clock: at } });
+describe('the brief: one day at a time', () => {
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const dayAt = (n: number) => iso(Date.now() + n * 86_400_000).slice(0, 10);
+  /** Cards received `n` days ago, through the head's clock. */
+  async function earlier(n: number, count = 8) {
+    await call('POST', '/api/test', { body: { clock: iso(Date.now() - n * 86_400_000).replace(/\.\d+Z$/, 'Z') } });
     const todoist = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todoist' })}`;
-    for (let i = 1; i <= 8; i++) {
-      await call('PUT', cardPath(`todoist:old:${i}`), { auth: todoist, body: card(`todoist:old:${i}`, { producer: 'todoist', kind: 'signal', title: `Overdue item ${i}`, body: `Item ${i} is past due.` }) });
+    for (let i = 1; i <= count; i++) {
+      await call('PUT', cardPath(`todoist:old${n}:${i}`), { auth: todoist, body: card(`todoist:old${n}:${i}`, { producer: 'todoist', kind: 'signal', title: `Overdue item ${i}`, body: `Item ${i} is past due.` }) });
     }
     await call('POST', '/api/test', { body: { clock: null } });
+    return dayAt(-n);
   }
-  const top = (sel: string) => page.$eval(sel, (e) => e.getBoundingClientRect().top);
-  const mastBottom = () => page.$eval('[data-masthead]', (e) => e.getBoundingClientRect().bottom);
+  const shownDay = () => page.$eval('main[data-brief-day]', (m) => m.getAttribute('data-brief-day'));
+  const sections = () => page.$$eval('section[data-section]', (ss) => ss.map((s) => s.querySelector('[data-day]')!.getAttribute('data-day')));
+  const wait = (d: string) => page.waitForSelector(`main[data-brief-day="${d}"] section[data-section] [data-day="${d}"]`);
 
-  it('opens on today under the masthead, loads yesterday above without moving it, and offers "Back to today" once today is out of view', async () => {
-    await yesterday();
-    await page.setViewport({ width: 390, height: 520 }); // short, so scrolling up into yesterday takes today out of view
+  it('shows one day: today on load, under its heading; ‹ and › step a day, Today comes back, and the day is in the address', async () => {
+    const yesterday = await earlier(1, 2);
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const day = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
-    await page.waitForSelector(`[data-day="${day}"]`); // yesterday, loaded above
-    await new Promise((r) => setTimeout(r, 300));
-    const today = (await page.$$eval('[data-day]', (hs) => hs.map((h) => h.getAttribute('data-day'))))[1]!;
-    expect(Math.abs((await top(`[data-day="${today}"]`)) - (await mastBottom()))).toBeLessThan(6);
-    expect(await page.$('xpath/.//button[contains(., "Back to today")]')).toBeNull();
-    expect(await page.$eval(`[data-day="${day}"]`, (e) => e.textContent)).toMatch(/^Yesterday · /);
-    await page.evaluate(() => scrollTo(0, 0)); // up into yesterday
-    await page.waitForSelector('xpath/.//button[contains(., "Back to today")]');
-    // Today is below the view now: the chip points down, the way to scroll.
-    expect(await page.$eval('[data-today-is]', (b) => [b.getAttribute('data-today-is'), !!b.querySelector('.lucide-arrow-down'), !!b.querySelector('.lucide-arrow-up')])).toEqual(['below', true, false]);
-    await (await page.$('xpath/.//button[contains(., "Back to today")]'))!.click();
-    await page.waitForFunction((t) => Math.abs(document.querySelector(`[data-day="${t}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, today);
+    expect(await shownDay()).toBe(dayAt(0));
+    expect(await sections()).toEqual([dayAt(0)]); // nothing above it, nothing below
+    expect(await page.$eval(`[data-day="${dayAt(0)}"]`, (h) => h.textContent)).toMatch(/^Today · /);
+    expect(await page.$('[data-day-nav] [data-today]')).toBeNull(); // already today
+    await (await page.$('[data-day-nav] button[aria-label="Previous day"]'))!.click();
+    await wait(yesterday);
+    expect(await sections()).toEqual([yesterday]);
+    expect(new URL(page.url()).search).toBe(`?day=${yesterday}`);
+    expect(await page.$eval(`[data-day="${yesterday}"]`, (h) => h.textContent)).toMatch(/^Yesterday · /);
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Overdue item 2');
+    await (await page.$('[data-day-nav] button[aria-label="Next day"]'))!.click();
+    await wait(dayAt(0));
+    await (await page.$('[data-day-nav] button[aria-label="Next day"]'))!.click();
+    await wait(dayAt(1));
+    await (await page.$('[data-day-nav] [data-today]'))!.click();
+    await wait(dayAt(0));
+    expect(new URL(page.url()).search).toBe('');
+    expect(errors).toEqual([]);
   });
 
-  it('jumps to a day tapped on the week strip; the selected day is filled, days with open decisions dotted', async () => {
-    await yesterday();
+  it('goes to a day tapped on the week strip, and a week back or on with the strip’s arrows; ← and → step a day', async () => {
+    await page.setViewport({ width: 1280, height: 844 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const day = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
-    await page.waitForSelector(`[data-day="${day}"]`);
     const strip = (await page.$('nav[aria-label="Week"]'))!;
-    expect(await strip.$$eval('button[aria-pressed="true"]', (bs) => bs.length)).toBe(1);
-    await (await strip.$(`xpath/.//button[contains(@aria-label, "${new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`))}")]`))!.click();
-    await page.waitForFunction((d) => Math.abs(document.querySelector(`[data-day="${d}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, day);
-    await page.waitForFunction(() => document.querySelector('nav[aria-label="Week"] button[aria-pressed="true"]')?.getAttribute('aria-current') !== 'date');
+    const yesterday = dayAt(-1);
+    const label = (d: string) => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
+    if (weekOfDay(yesterday) === weekOfDay(dayAt(0))) {
+      await (await strip.$(`xpath/.//button[starts-with(@aria-label, "${label(yesterday)}")]`))!.click();
+      await wait(yesterday);
+    }
+    const before = (await shownDay())!;
+    await (await page.$('[data-week-nav] button[aria-label="Previous week"]'))!.click();
+    await page.waitForFunction((d) => document.querySelector('main[data-brief-day]')!.getAttribute('data-brief-day') !== d, {}, before);
+    const weekBack = (await shownDay())!;
+    expect(Date.parse(`${before}T00:00:00Z`) - Date.parse(`${weekBack}T00:00:00Z`)).toBe(7 * 86_400_000); // the same weekday, a week back
+    await wait(weekBack);
+    expect(Date.parse(`${dayAt(0)}T00:00:00Z`) - Date.parse(`${weekBack}T00:00:00Z`)).toBeGreaterThanOrEqual(7 * 86_400_000);
+    await page.keyboard.press('ArrowRight');
+    await wait(dayAt(Math.round((Date.parse(`${weekBack}T00:00:00Z`) - Date.parse(`${dayAt(0)}T00:00:00Z`)) / 86_400_000) + 1));
+    await page.keyboard.press('ArrowLeft');
+    await wait(weekBack);
+    await (await page.$('[data-week-nav] button[aria-label="Next week"]'))!.click();
+    await page.waitForFunction((d) => document.querySelector('main[data-brief-day]')!.getAttribute('data-brief-day')! > d, {}, weekBack);
   });
 
-  /** One signal `days` days ago, through the head's clock; its local day (the test head is on UTC). */
-  async function daysAgo(days: number, title: string) {
-    const at = new Date(Date.now() - days * 24 * 3600 * 1000);
-    await call('POST', '/api/test', { body: { clock: at.toISOString().replace(/\.\d+Z$/, 'Z') } });
-    const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
-    const id = `cal:old:${days}`;
-    await call('PUT', cardPath(id), { auth: cal, body: card(id, { producer: 'cal', kind: 'signal', title, body: `${title}.` }) });
-    await call('POST', '/api/test', { body: { clock: null } });
-    return at.toISOString().slice(0, 10);
-  }
-  const atMasthead = (d: string) =>
-    page.waitForFunction((d) => Math.abs(document.querySelector(`[data-day="${d}"]`)!.getBoundingClientRect().top - document.querySelector('[data-masthead]')!.getBoundingClientRect().bottom) < 6, {}, d);
-
-  it('loads earlier days a week at a time as far back as the head has cards, skipping empty weeks, with no cap', async () => {
-    const oldest = await daysAgo(100, 'Back in the summer');
-    const middle = await daysAgo(45, 'Six weeks ago');
-    const recent = await daysAgo(3, 'Three days ago');
-    const weeks: string[] = [];
-    // Earlier weeks only (the days ahead are one request of their own, from today).
-    const todayDate = new Date().toISOString().slice(0, 10);
-    page.on('request', (r) => r.url().includes('/api/me/cards?from=') && new URL(r.url()).searchParams.get('from')! < todayDate && weeks.push(new URL(r.url()).searchParams.get('from')!));
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await page.waitForSelector(`[data-day="${recent}"]`);
-    // Scroll to the top until the oldest day is in and nothing more loads.
-    await until(async () => {
-      await page.evaluate(() => scrollTo(0, 0));
-      return (await page.$(`[data-day="${oldest}"]`)) !== null;
-    }, 20_000);
-    await page.evaluate(() => scrollTo(0, 0));
-    await new Promise((r) => setTimeout(r, 800));
-    const shown = await page.$$eval('[data-day]', (hs) => hs.map((h) => h.getAttribute('data-day')!));
-    expect(shown.slice(0, 3)).toEqual([oldest, middle, recent]); // empty days have no header
-    expect(await page.$eval('main', (m) => m.textContent)).not.toMatch(/goes back/);
-    // A week per fetch, and no fetch for the empty weeks between the cards: yesterday's week, then one per card.
-    expect(weeks).toHaveLength(3);
+  it('comes back from a card to the same day, where it was scrolled to', async () => {
+    const day = await earlier(2, 14);
+    await page.setViewport({ width: 390, height: 600 });
+    await page.goto(`${headUrl()}/brief?day=${day}`, { waitUntil: 'networkidle0' });
+    await wait(day);
+    await (await page.$('xpath/.//button[contains(., "More signals (8)")]'))!.evaluate((b) => (b as HTMLElement).click());
+    await page.waitForFunction(() => document.querySelectorAll('.update-row').length === 14);
+    const link = 'article[data-card="todoist:old2:3"] h4 a';
+    await page.$eval(link, (a) => a.scrollIntoView({ block: 'center' }));
+    await new Promise((r) => setTimeout(r, 400));
+    const y = await page.evaluate(() => scrollY);
+    expect(y).toBeGreaterThan(200);
+    await (await page.$(link))!.click();
+    await page.waitForSelector('[data-card-page]');
+    await page.goBack({ waitUntil: 'networkidle0' });
+    await wait(day);
+    await page.waitForFunction((y) => Math.abs(scrollY - y) < 40, {}, y);
+    expect(await shownDay()).toBe(day);
   });
 
-  it('the week strip’s month label opens a date picker whose arrows move by month, that jumps to any day of the past year and the next two weeks', async () => {
-    const oldest = await daysAgo(100, 'Back in the summer');
-    await daysAgo(3, 'Three days ago');
+  it('the week strip’s month label opens a date picker whose arrows move by month, that goes to any day of the past year and the next two weeks', async () => {
+    const oldest = await earlier(100, 1);
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-month]');
     const month = (d: string) => new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
-    expect((await page.$eval('[data-month]', (b) => b.textContent))!.toLowerCase()).toContain(month(new Date().toISOString().slice(0, 10)).toLowerCase());
+    expect((await page.$eval('[data-month]', (b) => b.textContent))!.toLowerCase()).toContain(month(dayAt(0)).toLowerCase());
     await (await page.$('[data-month]'))!.click();
     await page.waitForSelector('[data-date-picker]');
-    // The arrows move a month at a time: forward to the next two weeks' month, back to the oldest card's month and on.
-    const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-    const ahead = iso(Date.now() + 14 * 86_400_000);
+    const ahead = dayAt(14);
     while (!(await page.$(`[data-date-picker] [data-date="${ahead}"]`))) await (await page.$('[data-date-picker] button[aria-label="Next month"]'))!.click();
     expect(await page.$eval(`[data-date-picker] [data-date="${ahead}"]`, (b) => (b as HTMLButtonElement).disabled)).toBe(false);
-    expect(await page.$eval(`[data-date-picker] [data-date="${iso(Date.now() + 15 * 86_400_000)}"]`, (b) => (b as HTMLButtonElement).disabled).catch(() => true)).toBe(true);
     while (!(await page.$(`[data-date-picker] [data-date="${oldest}"]`))) await (await page.$('[data-date-picker] button[aria-label="Previous month"]'))!.click();
-    const dayBefore = iso(Date.parse(`${oldest}T00:00:00Z`) - 86_400_000);
-    if (dayBefore.slice(0, 7) === oldest.slice(0, 7)) {
-      expect(await page.$eval(`[data-date-picker] [data-date="${dayBefore}"]`, (b) => (b as HTMLButtonElement).disabled)).toBe(false); // before the first card: pickable, and empty
-    }
-    expect(await page.$eval('[data-date-picker] button[aria-label="Previous month"]', (b) => (b as HTMLButtonElement).disabled)).toBe(false);
     await (await page.$(`[data-date-picker] [data-date="${oldest}"]`))!.click();
-    await page.waitForSelector(`[data-day="${oldest}"]`);
-    await atMasthead(oldest);
+    await wait(oldest);
     await page.waitForFunction(() => !document.querySelector('[data-date-picker]')); // closed on the pick
-    expect(await page.$eval('nav[aria-label="Week"] button[aria-pressed="true"]', (b) => b.getAttribute('aria-label'))).toContain(
-      new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${oldest}T00:00:00Z`)),
-    );
-
-    // A day loaded but empty: shown when picked, saying so.
-    const empty = new Date(Date.parse(`${oldest}T00:00:00Z`) + 20 * 86_400_000).toISOString().slice(0, 10);
-    await (await page.$('[data-month]'))!.click();
-    await page.waitForSelector('[data-date-picker]');
-    while (!(await page.$(`[data-date-picker] [data-date="${empty}"]`))) await (await page.$('[data-date-picker] button[aria-label="Next month"]'))!.click();
-    await (await page.$(`[data-date-picker] [data-date="${empty}"]`))!.click();
-    await atMasthead(empty);
-    expect(await page.$eval(`xpath/.//section[.//h2[@data-day="${empty}"]]`, (s) => s.textContent)).toContain('Nothing arrived this day.');
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Overdue item 1');
+    // A day with nothing on it: shown, saying so.
+    const empty = iso(Date.parse(`${oldest}T00:00:00Z`) + 20 * 86_400_000).slice(0, 10);
+    await page.goto(`${headUrl()}/brief?day=${empty}`, { waitUntil: 'networkidle0' });
+    await wait(empty);
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Nothing arrived this day.');
     expect(errors).toEqual([]);
   });
 
   it('folds updates after six behind "More signals (N)"', async () => {
-    await yesterday();
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const day = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
-    await page.waitForSelector(`[data-day="${day}"]`);
-    const section = (await page.$(`xpath/.//section[.//h2[@data-day="${day}"]]`))!;
-    expect(await section.$$eval('.update-row', (rs) => rs.length)).toBe(6);
-    const more = (await section.$('xpath/.//button[contains(., "More signals (2)")]'))!;
+    const day = await earlier(1);
+    await page.goto(`${headUrl()}/brief?day=${day}`, { waitUntil: 'networkidle0' });
+    await wait(day);
+    expect(await page.$$eval('.update-row', (rs) => rs.length)).toBe(6);
+    const more = (await page.$('xpath/.//button[contains(., "More signals (2)")]'))!;
     await more.evaluate((b) => b.scrollIntoView({ block: 'center' })); // clear of the fixed footer
     await more.click();
-    await page.waitForFunction((sec) => (sec as Element).querySelectorAll('.update-row').length === 8, {}, section);
+    await page.waitForFunction(() => document.querySelectorAll('.update-row').length === 8);
   });
 
-  it('lists tomorrow: a card snoozed until then, or says in one line that nothing is set', async () => {
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const tomorrow = (await page.$$eval('[data-day]', (hs) => hs.map((h) => h.getAttribute('data-day')))).at(-1)!;
-    const section = (await page.$(`xpath/.//section[.//h2[@data-day="${tomorrow}"]]`))!;
-    expect(await section.evaluate((e) => e.textContent)).toContain('Nothing set for tomorrow yet.');
+  it('shows tomorrow: a card snoozed until then, or says in one line that nothing is set', async () => {
+    const tomorrow = dayAt(1);
+    await page.goto(`${headUrl()}/brief?day=${tomorrow}`, { waitUntil: 'networkidle0' });
+    await wait(tomorrow);
+    expect(await page.$eval('main', (e) => e.textContent)).toContain('Nothing set for tomorrow yet.');
     const s = await call('POST', `/api/me/cards/${encodeURIComponent('goalpath:item:1:ship')}/snooze`, { auth: `Session ${session.access_token}`, body: { preset: 'tomorrow' } });
     expect(s.status).toBe(200);
     await page.reload({ waitUntil: 'networkidle0' });
-    const after = (await page.$(`xpath/.//section[.//h2[@data-day="${tomorrow}"]]`))!;
-    expect(await after.evaluate((e) => e.textContent)).toContain('When should M4 ship?');
+    await wait(tomorrow);
+    expect(await page.$eval('main', (e) => e.textContent)).toContain('When should M4 ship?');
   });
 
   it('shows the swipe hint once per device, and takes it down after a few seconds', async () => {
@@ -592,7 +577,6 @@ describe('the brief: days, week strip, layouts', () => {
     await page.reload({ waitUntil: 'networkidle0' });
     expect(await footer()).not.toContain('Swipe left');
   });
-
 
   it('broadsheet: two columns, j/k move, d dismisses the focused decision after the undo window', async () => {
     await page.setViewport({ width: 1100, height: 900 });
@@ -608,6 +592,13 @@ describe('the brief: days, week strip, layouts', () => {
     await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 8000);
   });
 });
+
+/** The Monday of `date`'s week, for tests that tap the week strip. */
+function weekOfDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
 
 describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
   const owner = () => `Session ${session.access_token}`;
@@ -788,7 +779,7 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     await call('POST', '/api/test', { body: { clock: `${yesterday}T08:11:00Z` } });
     await put('hermes', 'hermes:gmail:anna:sent', { kind: 'artifact', urgency: 'log', thread: 'anna', references: ['hermes:gmail:anna'], title: 'Sent: Re: invoice timing' });
     await call('POST', '/api/test', { body: { clock: null } });
-    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.goto(`${headUrl()}/brief?day=${yesterday}`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('article[data-card="hermes:gmail:anna"] [data-paired]');
     expect(await page.$eval('article[data-card="hermes:gmail:anna"] .state-line', (s) => s.textContent)).toBe('Approved · 08:02 · Sent: Re: invoice timing 08:11');
   });
@@ -892,20 +883,22 @@ describe('labels and a card’s day (RFC 0.7)', () => {
     expect(Math.max(...tools)).toBeLessThanOrEqual(360);
   });
 
-  it('puts a card about tomorrow under Tomorrow, and marks a decision about a later day under today with its day', async () => {
+  it('marks a decision about a later day under today with its day, and puts a card about tomorrow on tomorrow', async () => {
     const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
     const cal = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'cal' })}`;
     await call('PUT', cardPath('cal:x:agenda'), { auth: cal, body: card('cal:x:agenda', { producer: 'cal', kind: 'artifact', title: 'Tomorrow’s agenda', about: day(1) }) });
     await call('PUT', cardPath('cal:x:table'), { auth: cal, body: card('cal:x:table', { producer: 'cal', title: 'Keep the table?', about: day(3) }) });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    const tomorrow = (await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]'))!;
-    expect(await titles('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]//article')).toEqual(['Tomorrow’s agenda']);
-    expect(tomorrow).not.toBeNull();
+    await page.waitForSelector('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]');
     const today = await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]//article[@data-card="cal:x:table"]');
     const label = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${day(3)}T00:00:00Z`));
     const p = (t: string) => label.find((x) => x.type === t)!.value;
     expect(await today!.$eval('[data-for-day]', (f) => f.textContent)).toBe(`· for ${p('weekday')} ${p('day')} ${p('month')}`);
     expect(await page.$('xpath/.//section[@data-section][.//h2[starts-with(., "Today")]]//article[@data-card="cal:x:agenda"]')).toBeNull();
+    // Tomorrow, a day on: its agenda.
+    await (await page.$('[data-day-nav] button[aria-label="Next day"]'))!.click();
+    await page.waitForSelector('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]');
+    expect(await titles('xpath/.//section[@data-section][.//h2[starts-with(., "Tomorrow")]]//article')).toEqual(['Tomorrow’s agenda']);
   });
 });
 
@@ -1499,6 +1492,51 @@ describe('OAuth consent', () => {
     const text = await page.$eval('body', (b) => b.textContent ?? '');
     expect(text).toContain('This request cannot be used.');
     expect(text).not.toMatch(/Totally Your Bank|attacker\.example/);
+  });
+});
+
+describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
+  const chain = ['mail:gmail:a579b8f51eb988eeb7b57db2:triage', 'mail:gmail:445cc4469bdb46ff0910f9bf:triage', 'mail:gmail:d64acb204b83aca9ff63b659:triage-2', 'mail:gmail:7314bfd0299acbc34c435885:triage-3'];
+  const triage = (i: number) => card(chain[i]!, { producer: 'mail', thread: 'thr-1a19faefeef3ed82', title: `Triage ${i + 1}`, actions: ['archive', 'keep', 'task'], ...(i > 0 ? { supersedes: chain[i - 1] } : {}) });
+  const mail = () => mintProducerToken(testDb(), { headId: OWNER, root: 'mail' }).then((t) => `Bearer ${t}`);
+
+  it('offers no controls anywhere, and links to the newest card of its chain; earlier days do not list it', async () => {
+    const auth = await mail();
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z');
+    await call('POST', '/api/test', { body: { clock: yesterday } });
+    await call('PUT', cardPath(chain[0]!), { auth, body: triage(0) }); // received yesterday
+    await call('POST', '/api/test', { body: { clock: null } });
+    for (const i of [1, 2, 3]) await call('PUT', cardPath(chain[i]!), { auth, body: triage(i) });
+    await call('POST', `/api/me/cards/${encodeURIComponent(chain[3]!)}/decision`, { auth: `Session ${session.access_token}`, body: { decision: 'task' } });
+    // The card page of the first: no actions, no Dismiss, no Edit; the way to the current card.
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(chain[0]!)}`, { waitUntil: 'networkidle0' });
+    const first = `article[data-card="${chain[0]}"]`;
+    await page.waitForSelector(`${first} [data-replaced-by]`);
+    expect(await page.$$(`${first} .decide-row, ${first} [data-options], ${first} button[data-action]`)).toEqual([]);
+    expect(await page.$eval(`${first} [data-replaced-by] a`, (a) => [a.getAttribute('href'), a.textContent])).toEqual([`/card/${encodeURIComponent(chain[3]!)}`, 'Replaced by a newer card → Triage 4']);
+    // The brief: none of the superseded cards, on any day; only the decided current one is anywhere.
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-brief-day], section[data-section]');
+    for (const id of chain.slice(0, 3)) expect(await page.$(`article[data-card="${id}"]`), id).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('says so when the card was replaced after the page loaded, and offers the newer card, instead of reverting quietly', async () => {
+    const auth = await mail();
+    await call('PUT', cardPath(chain[0]!), { auth, body: triage(0) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const first = `article[data-card="${chain[0]}"]`;
+    await page.waitForSelector(`${first} button[data-action="archive"]`);
+    // The producer replaces it while the page is open.
+    await call('PUT', cardPath(chain[1]!), { auth, body: triage(1) });
+    await (await page.$(`${first} button[data-action="archive"]`))!.click();
+    await page.waitForSelector(`${first} [data-decide-notice]`);
+    expect(await page.$eval(`${first} [data-decide-notice]`, (n) => n.textContent)).toBe('This card was replaced by “Triage 2”. Open it');
+    expect(await page.$eval(`${first} [data-decide-notice] a`, (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent(chain[1]!)}`);
+    expect(await page.$$(`${first} button[data-action]`)).toEqual([]); // no controls left to press again
+    expect(await page.$(`${first} [data-replaced-by]`)).not.toBeNull();
+    expect((await row(chain[0]!)).state).toBe('superseded');
+    expect(await testDb().select().from(decisionLog)).toEqual([]);
   });
 });
 

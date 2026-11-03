@@ -491,3 +491,46 @@ describe('producers and devices', () => {
     }
   });
 });
+
+describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
+  // The mail triage thread of 2026-11-03: four cards, each superseding the one before; the last decided `task`.
+  const chain = ['hermes:gmail:a579b8f51eb988eeb7b57db2:triage', 'hermes:gmail:445cc4469bdb46ff0910f9bf:triage', 'hermes:gmail:d64acb204b83aca9ff63b659:triage-2', 'hermes:gmail:7314bfd0299acbc34c435885:triage-3'];
+  const actions = ['archive', 'keep', 'task'];
+  async function supersede() {
+    for (const [i, id] of chain.entries()) {
+      await clock(`2026-10-0${5 + Math.min(i, 2)}T08:0${i}:00Z`); // across three days
+      await put(id, { thread: 'thr-1a19faefeef3ed82', title: `Triage ${i + 1}`, actions, ...(i > 0 ? { supersedes: chain[i - 1] } : {}) });
+    }
+    await clock('2026-10-07T09:00:00Z');
+    await me('POST', `/api/me/cards/${encodeURIComponent(chain[3]!)}/decision`, { decision: 'task' });
+  }
+
+  it('names the newest card of its chain as what replaced it, decided or not', async () => {
+    await supersede();
+    for (const id of chain.slice(0, 3)) {
+      const c = (await me('GET', `/api/me/cards/${encodeURIComponent(id)}`)).body.card;
+      expect(c, id).toMatchObject({ state: 'superseded', replaced_by: { id: chain[3], title: 'Triage 4', state: 'decided', decision: 'task' } });
+    }
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent(chain[3]!)}`)).body.card).not.toHaveProperty('replaced_by');
+    // On the days they were received, too.
+    const day = (await me('GET', '/api/me/cards?date=2026-10-05')).body.cards;
+    expect(day).toEqual([expect.objectContaining({ id: chain[0], state: 'superseded', replaced_by: expect.objectContaining({ id: chain[3] }) })]);
+  });
+
+  it('answers a decision on it with 409, the stored card, and what replaced it, in words', async () => {
+    await supersede();
+    const r = await me('POST', `/api/me/cards/${encodeURIComponent(chain[1]!)}/decision`, { decision: 'archive' });
+    expect(r.status).toBe(409);
+    expect(r.body).toMatchObject({ id: chain[1], state: 'superseded', replaced_by: { id: chain[3], title: 'Triage 4' }, message: 'This card was replaced by “Triage 4”.' });
+    expect(r.body).not.toHaveProperty('decision');
+    expect((await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, chain[1]!))))[0]!.state).toBe('superseded');
+  });
+
+  it('is never an open decision: not in the brief, not in its paragraph', async () => {
+    for (const [i, id] of chain.slice(0, 3).entries()) await put(id, { thread: 'thr-1a19faefeef3ed82', title: `Triage ${i + 1}`, actions, ...(i > 0 ? { supersedes: chain[i - 1] } : {}) });
+    const b = (await me('GET', '/api/me/brief')).body;
+    expect(ids(b.decisions)).toEqual([chain[2]]); // the current card alone
+    expect(b.daily_paragraph.html).toMatch(/^1 decision: /);
+    expect(b.daily_paragraph.html).not.toContain('Triage 1');
+  });
+});

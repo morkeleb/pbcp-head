@@ -62,6 +62,10 @@ export interface MeCard {
   until?: string;
   /** §8 the card's day, from the head: `about`, else the day of `at`, else the day it was received, in the head's timezone. */
   day?: string;
+  /** On a superseded card: the newest card of its successor chain (§8); it takes no decision. */
+  replaced_by?: { id: string; title: string; state: 'open' | 'decided' | 'superseded'; decision?: string };
+  /** On a 409 from the decision route: what happened, in words. */
+  message?: string;
   /** On a `head:daily` card: its paragraph in parts, for the label filter. */
   paragraph?: ParagraphParts;
 }
@@ -571,10 +575,13 @@ export type DecisionBody = { decision: string; edited_proposal?: string; comment
  */
 export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
   const [error, setError] = useState<string | null>(null);
+  /** Why the decision was not recorded, when the card had moved on (§7.3 409): shown, never a quiet revert. */
+  const [notice, setNotice] = useState<string | null>(null);
   const decide = async (body: DecisionBody) => {
     const before = card;
     const optimistic: MeCard = { ...card, ...body, state: 'decided', decided_at: new Date().toISOString() };
     setError(null);
+    setNotice(null);
     onChange(optimistic);
     announce(`${decidedLine(optimistic)}. ${card.title}`);
     const failed = (message: string) => {
@@ -584,13 +591,21 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
     };
     try {
       const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
-      if (r.status === 200 || r.status === 409) onChange({ ...before, ...r.body });
-      else failed(r.body?.message ?? `the head answered ${r.status}`);
+      if (r.status === 200) onChange({ ...before, ...r.body });
+      else if (r.status === 409) {
+        // The card is no longer open: replaced by a newer card since the page loaded (§8), or decided elsewhere. The
+        // card shows what it is now, and the person is told why their choice did not count.
+        const { message, ...now } = r.body;
+        onChange({ ...before, ...now } as MeCard);
+        const told = message ?? (now.state === 'decided' ? `This card was already decided: ${decidedLine({ ...before, ...now } as MeCard)}.` : 'This card can no longer be decided.');
+        setNotice(told);
+        announce(`Not recorded: ${told}`);
+      } else failed(r.body?.message ?? `the head answered ${r.status}`);
     } catch (e) {
       failed(e instanceof OfflineError ? NOT_SENT : e instanceof Error ? e.message : 'the request failed');
     }
   };
-  return { decide, error };
+  return { decide, error, notice };
 }
 
 /** "Approved", "Rejected", "Dismissed", "Edited", or the option's label: what the state line says was decided. */

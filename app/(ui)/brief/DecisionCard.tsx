@@ -74,12 +74,16 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   const online = useOnline();
   const locale = useLocale();
   const decided = card.state === 'decided';
+  // Only an open decision takes one (§7.3): a decided card shows what was decided, a superseded one what replaced it
+  // (§8), and neither offers a control.
+  const open = card.state === 'open';
+  const superseded = card.state === 'superseded';
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState('');
   const [comment, setComment] = useState('');
   const [more, setMore] = useState(false);
   const [snoozeError, setSnoozeError] = useState<string | null>(null);
-  const { decide: post, error } = useDecide(card, onChange);
+  const { decide: post, error, notice } = useDecide(card, onChange);
   const decide = (decision: string, extra: { edited_proposal?: string } = {}) =>
     post({ decision, ...extra, ...(comment.trim() ? { comment: comment.trim() } : {}) });
   const deferred = useDeferred();
@@ -102,7 +106,7 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   };
   useImperativeHandle(handle, () => ({
     dismiss: () => {
-      if (!decided && online && !deferred.pending) deferred.schedule(`Dismiss: ${card.title}`, () => void decide('dismissed'));
+      if (open && online && !deferred.pending) deferred.schedule(`Dismiss: ${card.title}`, () => void decide('dismissed'));
     },
     expand: () => expandMore(!more),
   }));
@@ -130,10 +134,10 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuLabel className="text-meta uppercase tracking-meta text-muted-foreground">Snooze</DropdownMenuLabel>
         {SNOOZES.map((s) => (
-          <DropdownMenuItem key={s.preset} disabled={!online || decided} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
+          <DropdownMenuItem key={s.preset} disabled={!online || !open} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
         ))}
         {card.snoozed_until && card.snoozed_until > new Date().toISOString() && (
-          <DropdownMenuItem disabled={!online || decided} onSelect={() => void snooze(null, 'Unsnooze')}>Unsnooze</DropdownMenuItem>
+          <DropdownMenuItem disabled={!online || !open} onSelect={() => void snooze(null, 'Unsnooze')}>Unsnooze</DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -166,7 +170,31 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       {o.label}
     </Button>
   );
-  const controls = !decided && (
+  // §8: the card that replaced this one, linked; the chain followed to its newest card, which may itself be decided.
+  const replaced = superseded && (
+    <p className="mt-3 text-lead text-muted-foreground" data-replaced-by={card.replaced_by?.id ?? ''}>
+      {card.replaced_by ? (
+        <Link href={cardHref(card.replaced_by.id)} className="text-foreground hover:underline">
+          Replaced by a newer card → {card.replaced_by.title}
+        </Link>
+      ) : (
+        'Replaced by a newer card.'
+      )}
+    </p>
+  );
+  // A choice that did not count because the card had moved on since the page loaded (§7.3 409): said, with the way on.
+  const told = notice && (
+    <p className="mt-2 text-lead text-destructive" role="alert" data-decide-notice>
+      {notice}
+      {card.replaced_by && (
+        <>
+          {' '}
+          <Link href={cardHref(card.replaced_by.id)} className="text-foreground underline underline-offset-2">Open it</Link>
+        </>
+      )}
+    </p>
+  );
+  const controls = open && (
     <div className="mt-3 space-y-2">
       {withBodies && !editing && (
         // Options that carry a body: one under another, each its own control beside what it costs (§4.4, §4.5).
@@ -223,13 +251,13 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       tabIndex={-1}
       className={cn(
         'decision-card relative scroll-mt-[calc(var(--masthead-h,0px)+12px)] rounded-lg border bg-card p-4 text-card-foreground outline-none transition-[opacity,transform] duration-150 max-[899px]:p-3',
-        decided && !expanded && 'opacity-80',
+        !open && !expanded && 'opacity-80',
         focused && 'ring-2 ring-ring',
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <CardMeta
-          card={card} timezone={timezone} showTime={showTime} want={wants(card)} unseen={!card.seen_at && !decided}
+          card={card} timezone={timezone} showTime={showTime} want={wants(card)} unseen={!card.seen_at && open}
           extra={forDay && <span className="flex-none normal-case tracking-normal" data-for-day>· for {forDay}</span>}
         />
         {kebab}
@@ -238,10 +266,10 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
         <Link href={cardHref(card.id)} className="hover:underline">{card.title}</Link>
       </h3>
       {card.rendered_lead && <p className="lead mt-1 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
-      {(expanded || !decided) && parts?.proposal && <Rendered className="proposal mt-3 rounded-md bg-inset px-3 py-2 text-body" html={parts.proposal} />}
+      {(expanded || open) && parts?.proposal && <Rendered className="proposal mt-3 rounded-md bg-inset px-3 py-2 text-body" html={parts.proposal} />}
       {expanded && parts?.rest.trim() && <Rendered className="more-body mt-3 text-body" html={parts.rest} />}
-      {!expanded && !decided && !more && card.first_visual && <Thumbnail visual={card.first_visual} />}
-      {!expanded && !decided && parts?.rest.trim() && (
+      {!expanded && open && !more && card.first_visual && <Thumbnail visual={card.first_visual} />}
+      {!expanded && open && parts?.rest.trim() && (
         <Collapsible open={more} onOpenChange={expandMore}>
           <CollapsibleTrigger className="more-trigger group mt-2 flex items-center gap-1 text-lead text-muted-foreground">
             More <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
@@ -252,6 +280,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
         </Collapsible>
       )}
       {stateLine}
+      {replaced}
+      {told}
       {controls}
       {deferred.toast}
     </article>
