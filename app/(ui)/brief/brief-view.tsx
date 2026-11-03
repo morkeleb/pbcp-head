@@ -261,10 +261,15 @@ export function BriefView() {
     <div className="min-h-dvh pb-24">
       <MastheadRow>{strip}</MastheadRow>
       {labelFilter}
-      <main className={cn('relative mx-auto max-w-[1440px] touch-pan-y overflow-x-clip', wide ? 'px-6' : 'px-4')} ref={mainRef} data-brief-day={date}>
-        {/* The day before, back to today, the day after: small, at the right of the day's header line, over it (it scrolls
-            away with the page; the header stays). Today is always there, and does nothing on today. */}
-        <div className={cn('absolute top-0 z-20 flex h-9 items-center gap-1', wide ? 'right-6' : 'right-4')} role="group" aria-label="Day" data-day-nav>
+      <main className={cn('mx-auto max-w-[1440px] touch-pan-y overflow-x-clip', wide ? 'px-6' : 'px-4')} ref={mainRef} data-brief-day={date}>
+        {/* The day before, back to today, the day after: small, at the right of the day's header line, over it, and held
+            under the masthead with the header as the page scrolls (it takes no room: the header slides under it). Today is
+            always there, and does nothing on today. */}
+        <div
+          className="pointer-events-none sticky z-20 -mb-9 flex h-9 items-center justify-end gap-1 [&>*]:pointer-events-auto"
+          style={{ top: 'var(--masthead-h, 0px)' }}
+          role="group" aria-label="Day" data-day-nav
+        >
           <Button size="sm" variant="ghost" className={nav} aria-label="Previous day" disabled={date <= firstDay} onClick={() => go(addDays(date, -1))} data-step="-1">
             <ChevronLeft />
           </Button>

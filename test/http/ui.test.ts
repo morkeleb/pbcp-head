@@ -520,6 +520,12 @@ describe('the brief: one day at a time', () => {
     await new Promise((r) => setTimeout(r, 400));
     const y = await page.evaluate(() => scrollY);
     expect(y).toBeGreaterThan(200);
+    // Scrolled down, the day buttons are still on screen, on the day's header line, which is held under the masthead.
+    const [nav, head] = await Promise.all([page.$eval('[data-day-nav]', (n) => n.getBoundingClientRect().toJSON()), page.$eval(`[data-day="${day}"]`, (h) => h.getBoundingClientRect().toJSON())]);
+    expect(nav.top).toBeGreaterThan(0);
+    expect(Math.abs(nav.top + nav.height / 2 - (head.top + head.height / 2))).toBeLessThan(2);
+    const previous = await page.$eval('[data-day-nav] button[aria-label="Previous day"]', (b) => { const r = b.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b || b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
+    expect(previous).toBe(true); // nothing scrolls over it
     await (await page.$(link))!.click();
     await page.waitForSelector('[data-card-page]');
     await page.goBack({ waitUntil: 'networkidle0' });
