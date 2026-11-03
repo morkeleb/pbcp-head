@@ -53,10 +53,7 @@ export interface Day {
   orders?: OrderUpdate[];
 }
 
-/** Earlier days are fetched this many at a time. */
-export const WEEK = 7;
-
-/** How far ahead the timeline reaches: the days after tomorrow with cards about them (a calendar sends a week or so). */
+/** How far ahead the brief reaches: the days after tomorrow with cards about them (a calendar sends a week or so). */
 export const AHEAD = 14;
 
 /**

@@ -282,7 +282,7 @@ function Masthead({ wide, cards, asOf, rowRef, pageToolsRef }: MastheadProps) {
     </p>
   );
 
-  // The masthead's height, for the sticky day headers, the "Back to today" chip and scroll padding.
+  // The masthead's height, for the sticky day header and scroll padding.
   useEffect(() => {
     const m = document.querySelector<HTMLElement>('[data-masthead]');
     if (!m) return;

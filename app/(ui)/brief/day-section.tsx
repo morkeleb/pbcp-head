@@ -8,7 +8,7 @@
 // left, and the schedule above the updates and signals on the right.
 
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { composeParagraphs } from '../../../lib/brief/paragraph';
 import { useLocale, type MeCard } from '../components';
@@ -65,8 +65,8 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
       </div>
     </Group>
   );
-  const updates = (day.updates.length > 0 || !!day.orders?.length) && <Updates title="Updates" threads={day.updates} orders={day.orders ?? []} wide={wide} update={update} tz={tz} />;
-  const signals = day.signals.length > 0 && <Updates title="Signals" threads={day.signals} wide={wide} update={update} tz={tz} />;
+  const updates = (day.updates.length > 0 || !!day.orders?.length) && <Updates title="Updates" threads={day.updates} orders={day.orders ?? []} wide={wide} update={update} tz={tz} date={day.date} />;
+  const signals = day.signals.length > 0 && <Updates title="Signals" threads={day.signals} wide={wide} update={update} tz={tz} date={day.date} />;
 
   return (
     <section className="pb-6" aria-label={name} data-section>
@@ -166,10 +166,29 @@ function Rail({ wide, items, gap, tz }: { wide: boolean; items: Array<{ key: str
 }
 
 /** Updates or signals: rows separated by hairlines, folded after FOLD_AT behind "More updates (N)". */
-function Updates({ title, threads, orders = [], wide, update, tz }: {
-  title: string; threads: UpdateThread[]; orders?: OrderUpdate[]; wide: boolean; update: (t: UpdateThread) => ReactNode; tz: string;
+function Updates({ title, threads, orders = [], wide, update, tz, date }: {
+  title: string; threads: UpdateThread[]; orders?: OrderUpdate[]; wide: boolean; update: (t: UpdateThread) => ReactNode; tz: string; date: string;
 }) {
-  const [all, setAll] = useState(false);
+  // Opened once, it stays open for the session: a day the person comes back to (from a card, say) is as tall as they
+  // left it, so they come back to the same place.
+  const key = `pbcp.brief.more.${date}.${title}`;
+  const [all, setAllState] = useState(false);
+  // After mounting, so a page rendered on the server (the front door's demo) starts the same in the browser.
+  useLayoutEffect(() => {
+    try {
+      if (sessionStorage.getItem(key) === '1') setAllState(true);
+    } catch {
+      // no storage: folded
+    }
+  }, [key]);
+  const setAll = (v: boolean) => {
+    setAllState(v);
+    try {
+      sessionStorage.setItem(key, v ? '1' : '0');
+    } catch {
+      // the choice lasts as long as the page
+    }
+  };
   const shown = all ? threads : threads.slice(0, FOLD_AT);
   return (
     <Group title={title}>
