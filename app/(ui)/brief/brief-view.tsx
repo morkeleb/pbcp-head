@@ -261,17 +261,16 @@ export function BriefView() {
     <div className="min-h-dvh pb-24">
       <MastheadRow>{strip}</MastheadRow>
       {labelFilter}
-      <main className={cn('mx-auto max-w-[1440px] touch-pan-y overflow-x-clip', wide ? 'px-6' : 'px-4')} ref={mainRef} data-brief-day={date}>
-        {/* The day before, back to today, the day after: small, at the right, under the masthead. */}
-        <div className="flex justify-end gap-1 pt-2" role="group" aria-label="Day" data-day-nav>
+      <main className={cn('relative mx-auto max-w-[1440px] touch-pan-y overflow-x-clip', wide ? 'px-6' : 'px-4')} ref={mainRef} data-brief-day={date}>
+        {/* The day before, back to today, the day after: small, at the right of the day's header line, over it (it scrolls
+            away with the page; the header stays). Today is always there, and does nothing on today. */}
+        <div className={cn('absolute top-0 z-20 flex h-9 items-center gap-1', wide ? 'right-6' : 'right-4')} role="group" aria-label="Day" data-day-nav>
           <Button size="sm" variant="ghost" className={nav} aria-label="Previous day" disabled={date <= firstDay} onClick={() => go(addDays(date, -1))} data-step="-1">
             <ChevronLeft />
           </Button>
-          {date !== today && (
-            <Button size="sm" variant="outline" className="h-7 px-2.5" onClick={() => go(today)} data-today>
-              Today
-            </Button>
-          )}
+          <Button size="sm" variant="outline" className="h-7 px-2.5" disabled={date === today} aria-current={date === today ? 'date' : undefined} onClick={() => go(today)} data-today>
+            Today
+          </Button>
           <Button size="sm" variant="ghost" className={nav} aria-label="Next day" disabled={date >= lastDay} onClick={() => go(addDays(date, 1))} data-step="1">
             <ChevronRight />
           </Button>
