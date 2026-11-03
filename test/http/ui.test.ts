@@ -3,7 +3,7 @@
 // a card is opened.
 
 import { and, eq } from 'drizzle-orm';
-import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type ElementHandle, type HTTPRequest, type Page } from 'puppeteer';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
@@ -30,6 +30,11 @@ afterEach(() => page?.close());
 const decisionCard = (title: string) => page.$(`xpath/.//article[@data-kind="decision"][contains(., "${title}")]`);
 const row_ = (title: string) => page.$(`xpath/.//article[contains(@class,"update-row")][.//h4[contains(., "${title}")]]`);
 const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+/** Clicks (or taps) an element from the middle of the screen: one at the bottom edge sits under the fixed footer. */
+async function press(el: ElementHandle<Element> | null, how: 'click' | 'tap' = 'click') {
+  await el!.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await el![how]();
+}
 async function until(check: () => Promise<boolean>, ms = 10_000) {
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 100))) if (await check()) return;
   throw new Error('timed out');
@@ -268,7 +273,7 @@ describe('the brief: lead, proposal, More', () => {
     expect(await reply.$('[aria-label="unseen"]')).not.toBeNull();
     await new Promise((r) => setTimeout(r, 1500));
     expect((await row('hermes:gmail:anna:reply')).seenAt).toBeNull(); // the lead alone does not present the card
-    await (await reply.$('.more-trigger'))!.click();
+    await press(await reply.$('.more-trigger'));
     expect(await (await reply.waitForSelector('.more-body'))!.evaluate((e) => e.textContent)).toContain('Cash flow covers it.');
     await until(async () => (await row('hermes:gmail:anna:reply')).seenAt !== null);
     expect(await reply.$('[aria-label="unseen"]')).toBeNull();
@@ -458,7 +463,10 @@ describe('the brief: one day at a time', () => {
     expect(await shownDay()).toBe(dayAt(0));
     expect(await sections()).toEqual([dayAt(0)]); // nothing above it, nothing below
     expect(await page.$eval(`[data-day="${dayAt(0)}"]`, (h) => h.textContent)).toMatch(/^Today · /);
-    expect(await page.$('[data-day-nav] [data-today]')).toBeNull(); // already today
+    // Today is always there, on the day's header line at the right; on today it does nothing.
+    expect(await page.$eval('[data-day-nav] [data-today]', (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    const [nav, head] = await Promise.all([page.$eval('[data-day-nav]', (n) => n.getBoundingClientRect().toJSON()), page.$eval(`[data-day="${dayAt(0)}"]`, (h) => h.getBoundingClientRect().toJSON())]);
+    expect(Math.abs(nav.top + nav.height / 2 - (head.top + head.height / 2))).toBeLessThan(2);
     await (await page.$('[data-day-nav] button[aria-label="Previous day"]'))!.click();
     await wait(yesterday);
     expect(await sections()).toEqual([yesterday]);
@@ -688,14 +696,14 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect(await page.$eval(`${row} [data-schedule-row]`, (b) => [b.textContent, Math.round(b.getBoundingClientRect().height)])).toEqual(['11:00–12:00Design review', expect.any(Number)]);
     expect((await page.$eval(`${row} [data-schedule-row]`, (b) => b.getBoundingClientRect().height))).toBeLessThan(30); // one line
     expect(await page.$(`${row} [data-schedule-detail]`)).toBeNull();
-    await page.tap(`${row} [data-schedule-row]`);
+    await press(await page.$(`${row} [data-schedule-row]`), 'tap');
     const detail = `${row} [data-schedule-detail]`;
     await page.waitForSelector(detail);
     expect(await page.$eval(`${detail} .lead`, (l) => l.textContent)).toBe('Room 3, second floor.');
     expect(await page.$eval(`${detail} [data-source]`, (a) => a.getAttribute('href'))).toBe('https://calendar.example/e/1');
     expect(await page.$eval(detail, (d) => d.textContent)).toContain('1 earlier in this thread');
     expect(await page.$(`${detail} button[aria-label^="More actions"]`)).not.toBeNull();
-    await (await page.$(`xpath/.//*[@data-schedule-detail="cal:occ:review"]//button[.="Acknowledge"]`))!.tap();
+    await press(await page.$(`xpath/.//*[@data-schedule-detail="cal:occ:review"]//button[.="Acknowledge"]`), 'tap');
     await page.waitForFunction((sel) => document.querySelector(sel)?.textContent?.startsWith('Acknowledged · '), {}, `${detail} .state-line`);
     await until(async () => (await row_db('cal:occ:review')).acknowledgedAt !== null);
     expect(errors).toEqual([]);

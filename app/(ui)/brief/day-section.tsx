@@ -72,7 +72,7 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
     <section className="pb-6" aria-label={name} data-section>
       <h2
         data-day={day.date}
-        className="sticky z-10 -mx-1 border-b bg-background px-1 py-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground"
+        className="sticky z-10 -mx-1 flex h-9 items-center border-b bg-background px-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground"
         style={{ top: 'var(--masthead-h, 0px)' }}
       >
         {name}
