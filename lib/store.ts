@@ -44,6 +44,27 @@ export async function load(tx: Tx | Db, headId: string, id: string, opts: { forU
   return row ? { card: toCard(row), eligible: row.wildcardEligible } : null;
 }
 
+/**
+ * The card that replaced a superseded one (§8): the successor chain followed to its end, in the producer's namespace
+ * (supersession never crosses it), so the newest card the chain reached, whatever its state. Null when nothing names
+ * this card in `supersedes`. A chain is linear (§8: only the current card can be superseded); a cycle stops it.
+ */
+export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Card | null> {
+  let newest: Card | null = null;
+  const seen = new Set([card.id]);
+  for (let cur = card.id; ; ) {
+    const [next] = await tx
+      .select()
+      .from(cards)
+      .where(and(eq(cards.headId, headId), eq(cards.producer, card.producer), sql`${cards.producerDoc}->>'supersedes' = ${cur}`))
+      .limit(1);
+    if (!next || seen.has(next.id)) return newest;
+    seen.add(next.id);
+    newest = toCard(next);
+    cur = next.id;
+  }
+}
+
 export interface PersistOptions {
   /** For a new `*` order: the eligibility snapshot (A.1); written once, at mint. */
   eligible?: readonly string[] | null;

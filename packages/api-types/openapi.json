@@ -3217,6 +3217,39 @@
               "failed"
             ]
           },
+          "replaced_by": {
+            "description": "On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "decided",
+                  "superseded"
+                ]
+              },
+              "decision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "message": {
+            "description": "On a 409 from the decision route for a superseded card: “This card was replaced by …”",
+            "type": "string"
+          },
           "rendered_html": {
             "type": "string",
             "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
@@ -3570,6 +3603,39 @@
                   "done",
                   "failed"
                 ]
+              },
+              "replaced_by": {
+                "description": "On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "decided",
+                      "superseded"
+                    ]
+                  },
+                  "decision": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "state"
+                ],
+                "additionalProperties": false
+              },
+              "message": {
+                "description": "On a 409 from the decision route for a superseded card: “This card was replaced by …”",
+                "type": "string"
               },
               "rendered_html": {
                 "type": "string",
@@ -4304,6 +4370,39 @@
               "done",
               "failed"
             ]
+          },
+          "replaced_by": {
+            "description": "On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "decided",
+                  "superseded"
+                ]
+              },
+              "decision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "message": {
+            "description": "On a 409 from the decision route for a superseded card: “This card was replaced by …”",
+            "type": "string"
           },
           "rendered_html": {
             "type": "string",

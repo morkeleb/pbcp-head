@@ -75,6 +75,11 @@ export const ParagraphParts = z.object({
 }).register(responses, { id: 'ParagraphParts', description: 'A daily brief in parts, so a view can keep only the entries of chosen labels and write the same sentences, one paragraph each: "N decisions: <entry>; …." (or "Nothing waiting for you."), "Yesterday you decided: …", "What mattered yesterday: …", "And N updates from …"' });
 
 export const MeCard = Card.extend({
+  replaced_by: z
+    .object({ id: z.string(), title: z.string(), state: z.enum(STATES), decision: z.string().optional() })
+    .optional()
+    .describe('On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.'),
+  message: z.string().optional().describe('On a 409 from the decision route for a superseded card: “This card was replaced by …”'),
   rendered_html: z.string().describe('The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.'),
   lead: z.string().describe('The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.'),
   lead_source: z.enum(['summary', 'body']).describe('Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown'),

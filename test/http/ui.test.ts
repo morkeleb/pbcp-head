@@ -1502,6 +1502,51 @@ describe('OAuth consent', () => {
   });
 });
 
+describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
+  const chain = ['mail:gmail:a579b8f51eb988eeb7b57db2:triage', 'mail:gmail:445cc4469bdb46ff0910f9bf:triage', 'mail:gmail:d64acb204b83aca9ff63b659:triage-2', 'mail:gmail:7314bfd0299acbc34c435885:triage-3'];
+  const triage = (i: number) => card(chain[i]!, { producer: 'mail', thread: 'thr-1a19faefeef3ed82', title: `Triage ${i + 1}`, actions: ['archive', 'keep', 'task'], ...(i > 0 ? { supersedes: chain[i - 1] } : {}) });
+  const mail = () => mintProducerToken(testDb(), { headId: OWNER, root: 'mail' }).then((t) => `Bearer ${t}`);
+
+  it('offers no controls anywhere, and links to the newest card of its chain; earlier days do not list it', async () => {
+    const auth = await mail();
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z');
+    await call('POST', '/api/test', { body: { clock: yesterday } });
+    await call('PUT', cardPath(chain[0]!), { auth, body: triage(0) }); // received yesterday
+    await call('POST', '/api/test', { body: { clock: null } });
+    for (const i of [1, 2, 3]) await call('PUT', cardPath(chain[i]!), { auth, body: triage(i) });
+    await call('POST', `/api/me/cards/${encodeURIComponent(chain[3]!)}/decision`, { auth: `Session ${session.access_token}`, body: { decision: 'task' } });
+    // The card page of the first: no actions, no Dismiss, no Edit; the way to the current card.
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(chain[0]!)}`, { waitUntil: 'networkidle0' });
+    const first = `article[data-card="${chain[0]}"]`;
+    await page.waitForSelector(`${first} [data-replaced-by]`);
+    expect(await page.$$(`${first} .decide-row, ${first} [data-options], ${first} button[data-action]`)).toEqual([]);
+    expect(await page.$eval(`${first} [data-replaced-by] a`, (a) => [a.getAttribute('href'), a.textContent])).toEqual([`/card/${encodeURIComponent(chain[3]!)}`, 'Replaced by a newer card → Triage 4']);
+    // The brief: none of the superseded cards, on any day; only the decided current one is anywhere.
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-brief-day], section[data-section]');
+    for (const id of chain.slice(0, 3)) expect(await page.$(`article[data-card="${id}"]`), id).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('says so when the card was replaced after the page loaded, and offers the newer card, instead of reverting quietly', async () => {
+    const auth = await mail();
+    await call('PUT', cardPath(chain[0]!), { auth, body: triage(0) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const first = `article[data-card="${chain[0]}"]`;
+    await page.waitForSelector(`${first} button[data-action="archive"]`);
+    // The producer replaces it while the page is open.
+    await call('PUT', cardPath(chain[1]!), { auth, body: triage(1) });
+    await (await page.$(`${first} button[data-action="archive"]`))!.click();
+    await page.waitForSelector(`${first} [data-decide-notice]`);
+    expect(await page.$eval(`${first} [data-decide-notice]`, (n) => n.textContent)).toBe('This card was replaced by “Triage 2”. Open it');
+    expect(await page.$eval(`${first} [data-decide-notice] a`, (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent(chain[1]!)}`);
+    expect(await page.$$(`${first} button[data-action]`)).toEqual([]); // no controls left to press again
+    expect(await page.$(`${first} [data-replaced-by]`)).not.toBeNull();
+    expect((await row(chain[0]!)).state).toBe('superseded');
+    expect(await testDb().select().from(decisionLog)).toEqual([]);
+  });
+});
+
 describe('web orders', () => {
   const giveOrder = async (title: string) => {
     const r = await call('POST', '/api/me/orders', { auth: `Session ${session.access_token}`, body: { to_producer: '*', title, body: 'Any weekday morning.' } });

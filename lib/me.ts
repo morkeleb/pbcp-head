@@ -14,7 +14,7 @@ import { composeParagraph, type ParagraphParts } from './brief/paragraph';
 import { dailyParagraphNow } from './brief/nightly';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
-import { toCard } from './store';
+import { newestSuccessor, toCard } from './store';
 import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { formatTime } from './push/daily';
@@ -36,7 +36,12 @@ export type MeCard = Card & {
   day: string;
   /** On a `head:daily` card: its paragraph in parts, each entry with its card's labels, for filtering (lib/brief/paragraph.ts). */
   paragraph?: ParagraphParts;
+  /** On a superseded card: the newest card of its successor chain (§8), which the owner is sent to instead. */
+  replaced_by?: Successor;
 };
+
+/** The card that replaced a superseded one: enough to name it and link to it. */
+export type Successor = { id: string; title: string; state: Card['state']; decision?: string };
 
 /** A card for the owner: renders it first if its stored render is missing or stale (§3.1, render on receipt). */
 export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
@@ -61,9 +66,16 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
       day: row.day,
       ...(row.renderedParagraph ? { paragraph: row.renderedParagraph as ParagraphParts } : {}),
+      ...(card.state === 'superseded' ? await successorOf(db, row.headId, card) : {}),
     });
   }
   return out;
+}
+
+/** §8: a superseded card's newest successor, as `replaced_by`; nothing when none is found. */
+async function successorOf(db: Db, headId: string, card: Card): Promise<{ replaced_by?: Successor }> {
+  const s = await newestSuccessor(db, headId, card);
+  return s ? { replaced_by: { id: s.id, title: s.title, state: s.state, ...(s.decision ? { decision: s.decision } : {}) } } : {};
 }
 
 export async function rowsFor(db: Db, headId: string, ids: string[]): Promise<Row[]> {
