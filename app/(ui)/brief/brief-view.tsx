@@ -19,7 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MastheadRow, MastheadTools, useChrome, useChromeCards } from '../chrome';
-import { useSwipe, type MeCard } from '../components';
+import { scrollsSideways, useSwipe, type MeCard } from '../components';
 import { matchesLabels } from '../../../lib/brief/paragraph';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { DecisionCard, type DecisionCardHandle } from './DecisionCard';
@@ -34,7 +34,12 @@ const HINT_KEY = 'pbcp.swipe-hint';
 const HINT_MS = 8000;
 /** Where the person had scrolled each day, for this session. */
 const SCROLL_KEY = (day: string) => `pbcp.brief.scroll.${day}`;
-const isDay = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+/** A real calendar day as YYYY-MM-DD (not 2026-10-32, which no date arithmetic survives). */
+const isDay = (s: string | null): s is string => {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
 
 export function BriefView() {
   // The masthead is the layout's (app/(ui)/chrome.tsx): the layout comes from it, the week strip goes into it.
@@ -56,9 +61,12 @@ export function BriefView() {
   const date = today && isDay(asked) && asked >= firstDay && asked <= lastDay ? asked : today;
   showing.current = date || null;
   const day = date ? dayOf(date) : null;
+  // An earlier day that could not be loaded says so, with a way to try again, rather than "Loading…" for good.
+  const [unloaded, setUnloaded] = useState<string | null>(null);
   useEffect(() => {
-    if (date && !day) void loadDay(date);
-  }, [date, day, loadDay]);
+    if (!date || day || unloaded === date) return;
+    void loadDay(date).then((ok) => void (ok || setUnloaded(date)));
+  }, [date, day, loadDay, unloaded]);
 
   /** Goes to a day: in the address (today is the bare /brief), so Back from a card comes back to it. */
   const go = useCallback(
@@ -195,6 +203,8 @@ export function BriefView() {
       const target = e.target as HTMLElement;
       if (e.metaKey || e.ctrlKey || e.altKey || target.closest('input, textarea, select, [role="dialog"], [role="menu"]')) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // A control that moves with the arrows, or something that scrolls sideways (a wide table), keeps them.
+        if (e.defaultPrevented || scrollsSideways(target)) return;
         e.preventDefault();
         return step.current(e.key === 'ArrowRight' ? 1 : -1);
       }
@@ -286,6 +296,11 @@ export function BriefView() {
         >
           {shown ? (
             <DaySection day={shown} name={dayName(shown, today)} wide={wide} tz={tz} decision={decision} update={update} onChange={change} />
+          ) : unloaded === date ? (
+            <p className="py-6 text-lead text-muted-foreground" role="alert" data-day-unloaded>
+              This day could not be loaded.{' '}
+              <Button size="sm" variant="outline" className="h-7 px-2.5" onClick={() => setUnloaded(null)}>Try again</Button>
+            </p>
           ) : (
             <p className="py-6 text-lead text-muted-foreground">Loading…</p>
           )}

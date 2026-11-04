@@ -508,6 +508,26 @@ describe('the brief: one day at a time', () => {
     await page.waitForFunction((d) => document.querySelector('main[data-brief-day]')!.getAttribute('data-brief-day')! > d, {}, weekBack);
   });
 
+  it('goes to today for a day that does not exist in the address, and says when an earlier day cannot be loaded', async () => {
+    await page.goto(`${headUrl()}/brief?day=${dayAt(0).slice(0, 8)}32`, { waitUntil: 'networkidle0' });
+    await wait(dayAt(0));
+    expect(errors).toEqual([]);
+    const day = await earlier(3, 1);
+    // The page's own requests, not the service worker's, which interception does not see.
+    await page.setBypassServiceWorker(true);
+    await page.setRequestInterception(true);
+    const refuse = (r: HTTPRequest) => void (r.url().includes(`/api/me/cards?date=${day}`) ? r.respond({ status: 503, body: '{}' }) : r.continue());
+    page.on('request', refuse);
+    await page.goto(`${headUrl()}/brief?day=${day}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-day-unloaded]');
+    page.off('request', refuse);
+    await page.setRequestInterception(false);
+    await page.setBypassServiceWorker(false);
+    await (await page.$('xpath/.//*[@data-day-unloaded]//button[.="Try again"]'))!.click();
+    await wait(day);
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Overdue item 1');
+  });
+
   it('comes back from a card to the same day, where it was scrolled to', async () => {
     const day = await earlier(2, 14);
     await page.setViewport({ width: 390, height: 600 });
@@ -604,6 +624,17 @@ describe('the brief: one day at a time', () => {
     await page.keyboard.press('d');
     await page.waitForSelector('.toast');
     await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 8000);
+  });
+
+  it('sends a dismiss still in its undo window when the person moves to another day: nothing undid it', async () => {
+    await page.setViewport({ width: 1100, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.keyboard.press('j');
+    await page.keyboard.press('d');
+    await page.waitForSelector('.toast');
+    await page.keyboard.press('ArrowRight');
+    await wait(dayAt(1));
+    await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 2000); // well inside the window
   });
 });
 
@@ -1548,7 +1579,7 @@ describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
     expect(await page.$eval(`${first} [data-decide-notice]`, (n) => n.textContent)).toBe('This card was replaced by “Triage 2”. Open it');
     expect(await page.$eval(`${first} [data-decide-notice] a`, (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent(chain[1]!)}`);
     expect(await page.$$(`${first} button[data-action]`)).toEqual([]); // no controls left to press again
-    expect(await page.$(`${first} [data-replaced-by]`)).not.toBeNull();
+    expect(await page.$(`${first} [data-replaced-by]`)).toBeNull(); // the notice says it, once
     expect((await row(chain[0]!)).state).toBe('superseded');
     expect(await testDb().select().from(decisionLog)).toEqual([]);
   });

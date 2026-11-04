@@ -70,16 +70,20 @@ export function useBrief() {
   const stale = useCallback(() => void load(true), [load]);
   useFresh('/api/me/brief', fresh, stale);
 
-  /** Loads an earlier day: every card whose day it is (§8), all pages. Loaded again when the head has changed. */
-  const loadDay = useCallback(async (date: string, network = false) => {
+  /**
+   * Loads an earlier day: every card whose day it is (§8), all pages. Loaded again when the head has changed. False when
+   * it could not be loaded (offline with no copy, or the head refused).
+   */
+  const loadDay = useCallback(async (date: string, network = false): Promise<boolean> => {
     const cards: MeCard[] = [];
     for (let after: number | null = 0; after !== null; ) {
       const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?date=${date}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
-      if (r.status !== 200) return;
+      if (r.status !== 200) return false;
       cards.push(...r.body.cards);
       after = r.body.next;
     }
     setPast((m) => new Map(m).set(date, cards));
+    return true;
   }, []);
 
   // Live: whatever the device's notification settings, the brief looks for changes when the app comes back to the

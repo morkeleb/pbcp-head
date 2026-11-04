@@ -169,8 +169,9 @@ export function pastOf(date: string, cards: MeCard[]): Day {
     date,
     kind: 'past',
     paragraph: daily?.rendered_lead ? { html: daily.rendered_lead, soFar: false, ...(daily.paragraph ? { parts: daily.paragraph } : {}) } : null,
-    // What was decided that day; a superseded card is reachable through its thread and its successor, not listed (§8).
-    decisions: cards.filter((c) => c.kind === 'decision' && c.state === 'decided' && rowed(c)),
+    // What was decided that day, a decision later superseded included (§8: its decision stays intact); a card superseded
+    // undecided is reachable through its thread and its successor, not listed.
+    decisions: cards.filter((c) => c.kind === 'decision' && (c.state === 'decided' || (c.state === 'superseded' && !!c.decision)) && rowed(c)),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && rowed(c)))),
     ...(cards.length === 0 ? { nothing: true } : {}),
     rail: railCards(cards),
