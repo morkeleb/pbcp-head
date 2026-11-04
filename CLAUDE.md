@@ -10,7 +10,7 @@ This repo is the **product**: the reference head (Next.js on Vercel, Postgres). 
 
 ## Dependency on the protocol
 
-`@pbcp/core` and `@pbcp/client` are not on npm yet. They come from a git submodule at `vendor/pbcp` (`morkeleb/pbcp`), pinned to `d9b9c1f`, and linked as workspace packages (`pnpm-workspace.yaml`). Move the pin in its own commit, and run the conformance gate with it. When the packages are published, switch to the npm versions in one commit and remove the submodule.
+`@pbcp/core` and `@pbcp/client` are not on npm yet. They come from a git submodule at `vendor/pbcp` (`morkeleb/pbcp`), pinned to `a3648be`, and linked as workspace packages (`pnpm-workspace.yaml`). Move the pin in its own commit, and run the conformance gate with it. When the packages are published, switch to the npm versions in one commit and remove the submodule.
 
 ## Where this is
 
