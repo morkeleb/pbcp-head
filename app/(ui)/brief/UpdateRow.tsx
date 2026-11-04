@@ -27,7 +27,7 @@ import { rowId } from './days';
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
 export interface UpdateThread {
   latest: MeCard;
-  earlier: Array<{ id: string; title: string; received_at: string; kind?: string; acknowledged_at?: string }>;
+  earlier: Array<{ id: string; title: string; received_at: string; kind?: string; acknowledged_at?: string; state?: MeCard['state'] }>;
 }
 
 export interface UpdateRowHandle {
@@ -51,7 +51,8 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
   const locale = useLocale();
   const cards = [c, ...thread.earlier];
   const ids = cards.map((x) => x.id);
-  const done = cards.every((x) => x.acknowledged_at);
+  // A replaced earlier card wants nothing (§8); the newest one replaced and not acknowledged says Replaced instead.
+  const done = cards.every((x) => x.acknowledged_at || (x !== c && x.state === 'superseded'));
   const last = cards.map((x) => x.acknowledged_at).filter(Boolean).sort().at(-1);
   const [acked, setAcked] = useState<string | null>(done ? (last ?? null) : null);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +86,10 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
     }
   };
 
-  // What the row still wants: the newest card's, or an earlier one's not yet acknowledged; nothing once the newest was
-  // replaced (§8).
-  const replaced = c.state === 'superseded';
-  const want = acked || replaced ? null : (wants(c) ?? (thread.earlier.some((e) => !e.acknowledged_at) ? 'acknowledge' : null));
+  // What the row still wants: the newest card's, or an earlier one's not yet acknowledged and not replaced (§8). A row
+  // whose newest card was replaced and that wants nothing else says Replaced.
+  const want = acked ? null : (wants(c) ?? (thread.earlier.some((e) => !e.acknowledged_at && e.state !== 'superseded') ? 'acknowledge' : null));
+  const replaced = c.state === 'superseded' && !want;
   return (
     <article
       id={expanded ? undefined : rowId(c.id)}
