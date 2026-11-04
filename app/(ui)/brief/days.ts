@@ -75,15 +75,18 @@ export function aheadOf(date: string, cards: MeCard[]): Day {
 
 export { addDays } from '../../../lib/time';
 
-/** Cards sharing producer and thread together, newest last (§8); a card without a thread is its own. */
+/**
+ * Cards sharing producer and thread together, newest last (§8); a card without a thread is its own. Newest by when it
+ * arrived: a card replaced later takes a fresh change_seq, and is still not the thread's newest.
+ */
 export function threads(cards: MeCard[]): UpdateThread[] {
   const groups = new Map<string, MeCard[]>();
-  for (const c of [...cards].sort((a, b) => a.change_seq - b.change_seq)) {
+  for (const c of [...cards].sort((a, b) => a.received_at.localeCompare(b.received_at) || a.change_seq - b.change_seq)) {
     const key = `${c.producer}\u0000${c.thread ?? `\u0001${c.id}`}`;
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
   return [...groups.values()]
-    .map((cs) => ({ latest: cs.at(-1)!, earlier: cs.slice(0, -1).map(({ id, title, received_at, acknowledged_at }) => ({ id, title, received_at, ...(acknowledged_at ? { acknowledged_at } : {}) })) }))
+    .map((cs) => ({ latest: cs.at(-1)!, earlier: cs.slice(0, -1).map(({ id, title, received_at, acknowledged_at, state }) => ({ id, title, received_at, state, ...(acknowledged_at ? { acknowledged_at } : {}) })) }))
     .sort((a, b) => b.latest.change_seq - a.latest.change_seq);
 }
 

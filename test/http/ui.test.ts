@@ -1566,6 +1566,30 @@ describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
     expect(errors).toEqual([]);
   });
 
+  it('an update replaced on an earlier day offers no Acknowledge: it says Replaced and links to its successor', async () => {
+    const auth = await mail();
+    const id = 'mail:gmail:5b0c1d2e3f4a5b6c7d8e9f00:summary';
+    const next = 'mail:gmail:5b0c1d2e3f4a5b6c7d8e9f00:summary-2';
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z');
+    await call('POST', '/api/test', { body: { clock: yesterday } });
+    await call('PUT', cardPath(id), { auth, body: card(id, { producer: 'mail', kind: 'artifact', title: 'Summary 1' }) });
+    await call('POST', '/api/test', { body: { clock: null } });
+    await call('PUT', cardPath(next), { auth, body: card(next, { producer: 'mail', kind: 'artifact', title: 'Summary 2', supersedes: id }) });
+    expect((await row(id)).state).toBe('superseded');
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await press(await page.waitForSelector('[data-day-nav] button[aria-label="Previous day"]'));
+    const old = `article[data-card="${id}"]`;
+    await page.waitForSelector(`${old} [data-replaced-by]`);
+    expect(await page.$$eval(`${old} button`, (bs) => bs.map((b) => b.textContent))).not.toContain('Acknowledge');
+    expect(await page.$eval(`${old} [data-replaced-by] a`, (a) => [a.getAttribute('href'), a.textContent])).toEqual([`/card/${encodeURIComponent(next)}`, 'Replaced →']);
+    expect(await page.$(`${old} [data-wants]`)).toBeNull();
+    // Its own card page says the same.
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(id)}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${old} [data-replaced-by]`);
+    expect(await page.$$eval(`${old} button`, (bs) => bs.map((b) => b.textContent))).not.toContain('Acknowledge');
+    expect(errors).toEqual([]);
+  });
+
   it('says so when the card was replaced after the page loaded, and offers the newer card, instead of reverting quietly', async () => {
     const auth = await mail();
     await call('PUT', cardPath(chain[0]!), { auth, body: triage(0) });

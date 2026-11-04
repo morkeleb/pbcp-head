@@ -10,7 +10,8 @@
 //   2 earlier in this thread ⌄   → each earlier card by time and title, then the newest, newest last
 //
 // The row says what the card wants (acknowledge) and never what kind it is (§4.1a). Acknowledging (a tap) acknowledges
-// every card in the thread (§4.2) and turns the control into "Acknowledged · 09:14".
+// every card in the thread (§4.2) and turns the control into "Acknowledged · 09:14". A thread whose newest card was
+// superseded (§8) wants nothing: it says "Replaced", linking to the card that replaced it.
 
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
@@ -26,7 +27,7 @@ import { rowId } from './days';
 /** A thread on the brief: its newest card in full, and the earlier ones by title. */
 export interface UpdateThread {
   latest: MeCard;
-  earlier: Array<{ id: string; title: string; received_at: string; kind?: string; acknowledged_at?: string }>;
+  earlier: Array<{ id: string; title: string; received_at: string; kind?: string; acknowledged_at?: string; state?: MeCard['state'] }>;
 }
 
 export interface UpdateRowHandle {
@@ -50,7 +51,8 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
   const locale = useLocale();
   const cards = [c, ...thread.earlier];
   const ids = cards.map((x) => x.id);
-  const done = cards.every((x) => x.acknowledged_at);
+  // A replaced earlier card wants nothing (§8); the newest one replaced and not acknowledged says Replaced instead.
+  const done = cards.every((x) => x.acknowledged_at || (x !== c && x.state === 'superseded'));
   const last = cards.map((x) => x.acknowledged_at).filter(Boolean).sort().at(-1);
   const [acked, setAcked] = useState<string | null>(done ? (last ?? null) : null);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +86,10 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
     }
   };
 
-  // What the row still wants: the newest card's, or an earlier one's not yet acknowledged.
-  const want = acked ? null : (wants(c) ?? (thread.earlier.some((e) => !e.acknowledged_at) ? 'acknowledge' : null));
+  // What the row still wants: the newest card's, or an earlier one's not yet acknowledged and not replaced (§8). A row
+  // whose newest card was replaced and that wants nothing else says Replaced.
+  const want = acked ? null : (wants(c) ?? (thread.earlier.some((e) => !e.acknowledged_at && e.state !== 'superseded') ? 'acknowledge' : null));
+  const replaced = c.state === 'superseded' && !want;
   return (
     <article
       id={expanded ? undefined : rowId(c.id)}
@@ -105,6 +109,10 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
         <div className="flex-none pt-3">
           {acked ? (
             <span className="state-line text-meta text-muted-foreground" role="status">Acknowledged · {clock(acked, timezone, locale)}</span>
+          ) : replaced ? (
+            <span className="state-line text-meta text-muted-foreground" data-replaced-by={c.replaced_by?.id ?? ''}>
+              {c.replaced_by ? <Link href={cardHref(c.replaced_by.id)} className="hover:underline" title={c.replaced_by.title}>Replaced →</Link> : 'Replaced'}
+            </span>
           ) : (
             <Button size="xs" variant="outline" disabled={!online} onClick={() => void ack()}>Acknowledge</Button>
           )}
