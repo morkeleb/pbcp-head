@@ -31,7 +31,7 @@ import {
   type MeCard,
 } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
-import { rowId } from './days';
+import { hasDecision, rowId } from './days';
 
 export { clock };
 
@@ -151,7 +151,7 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   // §4.5 confirmation: the decision recorded, in words and time, in place of the controls; §8 the later cards that
   // reference the card, beside it.
   // A card superseded after it was decided keeps its decision (§8), and says so.
-  const stateLine = (decided || (superseded && !!card.decision)) && (
+  const stateLine = hasDecision(card) && (
     <div className="state-line mt-3 text-lead text-muted-foreground" role="status">
       <span>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</span>
       {paired.length > 0 && (
@@ -282,8 +282,9 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
         </Collapsible>
       )}
       {stateLine}
-      {/* After a refused choice the notice names the successor and links it: the line would say it twice. */}
-      {!told && replaced}
+      {/* After a refused choice the notice names the successor and links it: the line would say it twice. Without a
+          successor the notice cannot, and the line still says why. */}
+      {!(told && card.replaced_by) && replaced}
       {told}
       {controls}
       {deferred.toast}

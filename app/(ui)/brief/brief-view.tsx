@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { MastheadRow, MastheadTools, useChrome, useChromeCards } from '../chrome';
 import { scrollsSideways, useSwipe, type MeCard } from '../components';
 import { matchesLabels } from '../../../lib/brief/paragraph';
+import { isDate } from '../../../lib/time';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { DecisionCard, type DecisionCardHandle } from './DecisionCard';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
@@ -35,11 +36,7 @@ const HINT_MS = 8000;
 /** Where the person had scrolled each day, for this session. */
 const SCROLL_KEY = (day: string) => `pbcp.brief.scroll.${day}`;
 /** A real calendar day as YYYY-MM-DD (not 2026-10-32, which no date arithmetic survives). */
-const isDay = (s: string | null): s is string => {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-};
+const isDay = (s: string | null): s is string => !!s && isDate(s);
 
 export function BriefView() {
   // The masthead is the layout's (app/(ui)/chrome.tsx): the layout comes from it, the week strip goes into it.
@@ -62,11 +59,14 @@ export function BriefView() {
   showing.current = date || null;
   const day = date ? dayOf(date) : null;
   // An earlier day that could not be loaded says so, with a way to try again, rather than "Loading…" for good.
+  // Only for the visit it failed on: a day left and come back to is tried again.
   const [unloaded, setUnloaded] = useState<string | null>(null);
+  if (unloaded && unloaded !== date) setUnloaded(null);
   useEffect(() => {
     if (!date || day || unloaded === date) return;
-    void loadDay(date).then((ok) => void (ok || setUnloaded(date)));
-  }, [date, day, loadDay, unloaded]);
+    // A failure that answers after the person has moved on says nothing about the day now shown.
+    void loadDay(date).then((ok) => void (ok || (showing.current === date && setUnloaded(date))));
+  }, [date, day, loadDay, unloaded, showing]);
 
   /** Goes to a day: in the address (today is the bare /brief), so Back from a card comes back to it. */
   const go = useCallback(
@@ -198,13 +198,22 @@ export function BriefView() {
 
   // Keys: ← and → move between days at every width; on a wide screen j/k move between cards, enter opens, d dismisses a
   // decision (after the undo window).
+  // What was last pressed: a wide table or a code block takes no focus, so a click in it leaves the keys' target on the
+  // card or the page, while the browser scrolls it with the arrows.
+  const pressed = useRef<Element | null>(null);
+  useEffect(() => {
+    const down = (e: PointerEvent) => void (pressed.current = e.target instanceof Element ? e.target : null);
+    addEventListener('pointerdown', down, { passive: true });
+    return () => removeEventListener('pointerdown', down);
+  }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (e.metaKey || e.ctrlKey || e.altKey || target.closest('input, textarea, select, [role="dialog"], [role="menu"]')) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         // A control that moves with the arrows, or something that scrolls sideways (a wide table), keeps them.
-        if (e.defaultPrevented || scrollsSideways(target)) return;
+        const at = pressed.current;
+        if (e.defaultPrevented || scrollsSideways(target) || (at?.isConnected && target.contains(at) && scrollsSideways(at))) return;
         e.preventDefault();
         return step.current(e.key === 'ArrowRight' ? 1 : -1);
       }
@@ -297,12 +306,13 @@ export function BriefView() {
           {shown ? (
             <DaySection day={shown} name={dayName(shown, today)} wide={wide} tz={tz} decision={decision} update={update} onChange={change} />
           ) : unloaded === date ? (
-            <p className="py-6 text-lead text-muted-foreground" role="alert" data-day-unloaded>
+            // Below the day buttons, which take no room of their own (a day's header line is under them).
+            <p className="mt-9 py-6 text-lead text-muted-foreground" role="alert" data-day-unloaded>
               This day could not be loaded.{' '}
               <Button size="sm" variant="outline" className="h-7 px-2.5" onClick={() => setUnloaded(null)}>Try again</Button>
             </p>
           ) : (
-            <p className="py-6 text-lead text-muted-foreground">Loading…</p>
+            <p className="mt-9 py-6 text-lead text-muted-foreground">Loading…</p>
           )}
         </div>
       </main>

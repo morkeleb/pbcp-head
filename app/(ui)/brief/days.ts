@@ -73,11 +73,7 @@ export function aheadOf(date: string, cards: MeCard[]): Day {
   };
 }
 
-export const addDays = (date: string, n: number) => {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
+export { addDays } from '../../../lib/time';
 
 /** Cards sharing producer and thread together, newest last (§8); a card without a thread is its own. */
 export function threads(cards: MeCard[]): UpdateThread[] {
@@ -136,6 +132,9 @@ export function referencedBy(cards: Iterable<MeCard>): Map<string, MeCard[]> {
 export const localDay = (at: string, timezone: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(at));
 
+/** A decision with a recorded decision to show: decided, or superseded after it was decided (§8: the decision is kept). */
+export const hasDecision = (c: Pick<MeCard, 'state' | 'decision'>): boolean => c.state === 'decided' || (c.state === 'superseded' && !!c.decision);
+
 export const isUpdate = (c: MeCard) => c.kind === 'artifact' || c.kind === 'signal';
 export const split = (ts: UpdateThread[]) => ({ updates: ts.filter((t) => t.latest.kind === 'artifact'), signals: ts.filter((t) => t.latest.kind === 'signal') });
 
@@ -171,7 +170,7 @@ export function pastOf(date: string, cards: MeCard[]): Day {
     paragraph: daily?.rendered_lead ? { html: daily.rendered_lead, soFar: false, ...(daily.paragraph ? { parts: daily.paragraph } : {}) } : null,
     // What was decided that day, a decision later superseded included (§8: its decision stays intact); a card superseded
     // undecided is reachable through its thread and its successor, not listed.
-    decisions: cards.filter((c) => c.kind === 'decision' && (c.state === 'decided' || (c.state === 'superseded' && !!c.decision)) && rowed(c)),
+    decisions: cards.filter((c) => c.kind === 'decision' && hasDecision(c) && rowed(c)),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && rowed(c)))),
     ...(cards.length === 0 ? { nothing: true } : {}),
     rail: railCards(cards),
