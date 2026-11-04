@@ -523,6 +523,12 @@ describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
     expect(r.status).toBe(409);
     expect(r.body).toMatchObject({ id: chain[1], state: 'superseded', replaced_by: { id: chain[3], title: 'Triage 4' }, message: 'This card was replaced by “Triage 4”.' });
     expect(r.body).not.toHaveProperty('decision');
+    // The RFC route (§7.3) answers with the stored card and nothing of the head's own.
+    const rfc = await me('POST', `/api/cards/${encodeURIComponent(chain[1]!)}/decision`, { decision: 'archive' });
+    expect(rfc.status).toBe(409);
+    expect(rfc.body).toMatchObject({ id: chain[1], state: 'superseded' });
+    expect(rfc.body).not.toHaveProperty('replaced_by');
+    expect(rfc.body).not.toHaveProperty('message');
     expect((await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, chain[1]!))))[0]!.state).toBe('superseded');
   });
 

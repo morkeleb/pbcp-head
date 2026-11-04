@@ -7,6 +7,7 @@ import { authenticateSession, type Session, type SessionPolicy } from './auth/se
 import { decodeId, handle, json, rawSegment, readJson, readObject } from './http';
 import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, unsnoozeCard, type OwnerContext, type Outcome } from './protocol';
 import { snoozeUntil } from './settings-me';
+import { replacedBy } from './store';
 
 function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req: Request) => Promise<Outcome>, policy: SessionPolicy = {}) {
   return (req: Request): Promise<Response> =>
@@ -18,8 +19,20 @@ function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req
 }
 
 // `policy`: `{ assistant: true }` on exactly the routes packages/owner-mcp's tools call (lib/auth/session.ts).
-export const decisionHandler = (idSegment: number, policy?: SessionPolicy) =>
-  ownerAction(idSegment, async (ctx, id, req) => decideCard(db(), ctx, id, await readJson(req)), policy);
+// `explain`: on the owner's API only, a 409 on a superseded card also names what replaced it and says so in words, so the
+// interface can offer the successor instead of quietly showing the card unchanged (§8). The RFC route (§7.3) answers with
+// the stored card and nothing else.
+export const decisionHandler = (idSegment: number, policy?: SessionPolicy, { explain = false }: { explain?: boolean } = {}) =>
+  ownerAction(
+    idSegment,
+    async (ctx, id, req) => {
+      const r = await decideCard(db(), ctx, id, await readJson(req));
+      if (!explain || r.status !== 409 || r.card.state !== 'superseded') return r;
+      const replaced_by = await replacedBy(db(), ctx.headId, r.card);
+      return replaced_by ? { ...r, card: { ...r.card, replaced_by, message: `This card was replaced by “${replaced_by.title}”.` } as typeof r.card } : r;
+    },
+    policy,
+  );
 
 export const seenHandler = (idSegment: number, policy?: SessionPolicy) => ownerAction(idSegment, (ctx, id) => markCardSeen(db(), ctx, id), policy);
 

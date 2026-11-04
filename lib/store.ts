@@ -65,6 +65,15 @@ export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Ca
   }
 }
 
+/** The card that replaced a superseded one: enough to name it and link to it. */
+export type Successor = { id: string; title: string; state: Card['state']; decision?: string };
+
+/** §8: a superseded card's newest successor, shaped as `replaced_by`; null when none is found. */
+export async function replacedBy(tx: Tx | Db, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Successor | null> {
+  const s = await newestSuccessor(tx, headId, card);
+  return s ? { id: s.id, title: s.title, state: s.state, ...(s.decision ? { decision: s.decision } : {}) } : null;
+}
+
 export interface PersistOptions {
   /** For a new `*` order: the eligibility snapshot (A.1); written once, at mint. */
   eligible?: readonly string[] | null;

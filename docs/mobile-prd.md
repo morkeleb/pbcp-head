@@ -85,7 +85,7 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | Endpoint | Returns | Notes |
 | --- | --- | --- |
 | `GET /api/me/brief` | The current `head:daily` card, open decisions, today's folded threads, the last-visit cursor | One call paints the Brief screen |
-| `GET /api/me/cards?date=`, `?from=&to=&state=` | An earlier day when it is shown; the days ahead in one request | Paginated by `change_seq`; `before` names the latest earlier day with a card |
+| `GET /api/me/cards?date=`, `?from=&to=&state=` | An earlier day when it is shown; the days ahead in one request | Paginated by `change_seq`; with `from`/`to`, `before` names the latest earlier day with a card |
 | `GET /api/me/cards/{id}` | One card with its thread (predecessors, references, progress) |  |
 | `POST /api/me/cards/{id}/decision` | The core decide operation, actor = device | Same semantics as RFC §7.3 |
 | `POST /api/me/cards/{id}/ack` | Sets `acknowledged_at` | Artifacts and signals |

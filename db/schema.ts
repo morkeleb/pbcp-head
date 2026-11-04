@@ -140,6 +140,7 @@ export const cards = pgTable(
     index('cards_received').on(t.headId, t.receivedAt),
     index('cards_day').on(t.headId, t.day), // the timeline by day (§8), and where it begins
     index('cards_thread').on(t.headId, t.producer, sql`(${t.producerDoc}->>'thread')`),
+    index('cards_supersedes').on(t.headId, t.producer, sql`(${t.producerDoc}->>'supersedes')`), // a successor chain (§8)
     index('cards_orders').on(t.headId, t.toProducer, t.changeSeq),
   ],
 );
