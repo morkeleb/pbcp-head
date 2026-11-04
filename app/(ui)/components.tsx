@@ -425,13 +425,15 @@ export const SWIPE_UNDO_MS = 4000;
  * A swipe commits after SWIPE_UNDO_MS behind an undo toast; Undo cancels it before anything is sent. Only one
  * swipe waits at a time; a second commits the first at once.
  */
-export function useDeferred() {
+export function useDeferred({ commitOnUnmount = false }: { commitOnUnmount?: boolean } = {}) {
   const [pending, setPending] = useState<{ label: string; run: () => void } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flush = useRef<(() => void) | null>(null);
+  // Unmounted while one waits: sent at once with `commitOnUnmount` (nothing undid it), otherwise dropped.
   useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
+    if (commitOnUnmount && flush.current) flush.current();
+    else if (timer.current) clearTimeout(timer.current);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- fixed for the component's life
   const schedule = (label: string, run: () => void) => {
     flush.current?.();
     const go = () => {
@@ -463,6 +465,18 @@ export function useDeferred() {
 }
 
 /**
+ * Whether `target`, or what holds it up to `stop`, scrolls sideways itself (a producer's wide table, a code block): a
+ * touch that starts there, or an arrow key pressed there, is its scroll, not a swipe or a move between days.
+ */
+export function scrollsSideways(target: Element, stop: Element | null = null): boolean {
+  for (let n: Element | null = target; n && n !== stop; n = n.parentElement) {
+    const overflow = getComputedStyle(n).overflowX;
+    if ((overflow === 'auto' || overflow === 'scroll') && n.scrollWidth > n.clientWidth) return true;
+  }
+  return false;
+}
+
+/**
  * A horizontal swipe on a touch screen (a finger, or a pencil, which iOS reports as touch; never a mouse drag, which
  * selects text): left or right past 80 px. Built on touch events rather than pointer events: iOS Safari cancels a
  * touch's pointer stream as soon as it suspects a scroll, so a swipe that drifts a little vertically never ended.
@@ -488,21 +502,12 @@ export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
       x = 0;
       setDx(0);
     };
-    // Inside the card, something that scrolls sideways itself (a producer's wide table, a code block): a touch that
-    // starts there is its scroll, not the card's swipe.
-    const scrollsSideways = (target: Element) => {
-      for (let n: Element | null = target; n && n !== el; n = n.parentElement) {
-        const overflow = getComputedStyle(n).overflowX;
-        if ((overflow === 'auto' || overflow === 'scroll') && n.scrollWidth > n.clientWidth) return true;
-      }
-      return false;
-    };
     const down = (e: TouchEvent) => {
       const t = e.touches[0];
       const target = e.target as Element;
       // A sideways drag never presses a button or follows a link (the browser takes a moved touch for no tap), so only
       // what is typed into keeps its touches, with what scrolls sideways.
-      if (e.touches.length !== 1 || !t || target.closest('input, textarea, select, [contenteditable]') || scrollsSideways(target)) return reset();
+      if (e.touches.length !== 1 || !t || target.closest('input, textarea, select, [contenteditable]') || scrollsSideways(target, el)) return reset();
       start = { x: t.clientX, y: t.clientY };
       axis = null;
       x = 0;

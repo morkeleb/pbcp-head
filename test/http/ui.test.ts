@@ -3,7 +3,7 @@
 // a card is opened.
 
 import { and, eq } from 'drizzle-orm';
-import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type ElementHandle, type HTTPRequest, type Page } from 'puppeteer';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
@@ -30,6 +30,11 @@ afterEach(() => page?.close());
 const decisionCard = (title: string) => page.$(`xpath/.//article[@data-kind="decision"][contains(., "${title}")]`);
 const row_ = (title: string) => page.$(`xpath/.//article[contains(@class,"update-row")][.//h4[contains(., "${title}")]]`);
 const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+/** Clicks (or taps) an element from the middle of the screen: one at the bottom edge sits under the fixed footer. */
+async function press(el: ElementHandle<Element> | null, how: 'click' | 'tap' = 'click') {
+  await el!.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await el![how]();
+}
 async function until(check: () => Promise<boolean>, ms = 10_000) {
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 100))) if (await check()) return;
   throw new Error('timed out');
@@ -268,7 +273,7 @@ describe('the brief: lead, proposal, More', () => {
     expect(await reply.$('[aria-label="unseen"]')).not.toBeNull();
     await new Promise((r) => setTimeout(r, 1500));
     expect((await row('hermes:gmail:anna:reply')).seenAt).toBeNull(); // the lead alone does not present the card
-    await (await reply.$('.more-trigger'))!.click();
+    await press(await reply.$('.more-trigger'));
     expect(await (await reply.waitForSelector('.more-body'))!.evaluate((e) => e.textContent)).toContain('Cash flow covers it.');
     await until(async () => (await row('hermes:gmail:anna:reply')).seenAt !== null);
     expect(await reply.$('[aria-label="unseen"]')).toBeNull();
@@ -458,7 +463,10 @@ describe('the brief: one day at a time', () => {
     expect(await shownDay()).toBe(dayAt(0));
     expect(await sections()).toEqual([dayAt(0)]); // nothing above it, nothing below
     expect(await page.$eval(`[data-day="${dayAt(0)}"]`, (h) => h.textContent)).toMatch(/^Today · /);
-    expect(await page.$('[data-day-nav] [data-today]')).toBeNull(); // already today
+    // Today is always there, on the day's header line at the right; on today it does nothing.
+    expect(await page.$eval('[data-day-nav] [data-today]', (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    const [nav, head] = await Promise.all([page.$eval('[data-day-nav]', (n) => n.getBoundingClientRect().toJSON()), page.$eval(`[data-day="${dayAt(0)}"]`, (h) => h.getBoundingClientRect().toJSON())]);
+    expect(Math.abs(nav.top + nav.height / 2 - (head.top + head.height / 2))).toBeLessThan(2);
     await (await page.$('[data-day-nav] button[aria-label="Previous day"]'))!.click();
     await wait(yesterday);
     expect(await sections()).toEqual([yesterday]);
@@ -500,6 +508,26 @@ describe('the brief: one day at a time', () => {
     await page.waitForFunction((d) => document.querySelector('main[data-brief-day]')!.getAttribute('data-brief-day')! > d, {}, weekBack);
   });
 
+  it('goes to today for a day that does not exist in the address, and says when an earlier day cannot be loaded', async () => {
+    await page.goto(`${headUrl()}/brief?day=${dayAt(0).slice(0, 8)}32`, { waitUntil: 'networkidle0' });
+    await wait(dayAt(0));
+    expect(errors).toEqual([]);
+    const day = await earlier(3, 1);
+    // The page's own requests, not the service worker's, which interception does not see.
+    await page.setBypassServiceWorker(true);
+    await page.setRequestInterception(true);
+    const refuse = (r: HTTPRequest) => void (r.url().includes(`/api/me/cards?date=${day}`) ? r.respond({ status: 503, body: '{}' }) : r.continue());
+    page.on('request', refuse);
+    await page.goto(`${headUrl()}/brief?day=${day}`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-day-unloaded]');
+    page.off('request', refuse);
+    await page.setRequestInterception(false);
+    await page.setBypassServiceWorker(false);
+    await (await page.$('xpath/.//*[@data-day-unloaded]//button[.="Try again"]'))!.click();
+    await wait(day);
+    expect(await page.$eval('main', (m) => m.textContent)).toContain('Overdue item 1');
+  });
+
   it('comes back from a card to the same day, where it was scrolled to', async () => {
     const day = await earlier(2, 14);
     await page.setViewport({ width: 390, height: 600 });
@@ -512,6 +540,12 @@ describe('the brief: one day at a time', () => {
     await new Promise((r) => setTimeout(r, 400));
     const y = await page.evaluate(() => scrollY);
     expect(y).toBeGreaterThan(200);
+    // Scrolled down, the day buttons are still on screen, on the day's header line, which is held under the masthead.
+    const [nav, head] = await Promise.all([page.$eval('[data-day-nav]', (n) => n.getBoundingClientRect().toJSON()), page.$eval(`[data-day="${day}"]`, (h) => h.getBoundingClientRect().toJSON())]);
+    expect(nav.top).toBeGreaterThan(0);
+    expect(Math.abs(nav.top + nav.height / 2 - (head.top + head.height / 2))).toBeLessThan(2);
+    const previous = await page.$eval('[data-day-nav] button[aria-label="Previous day"]', (b) => { const r = b.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b || b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
+    expect(previous).toBe(true); // nothing scrolls over it
     await (await page.$(link))!.click();
     await page.waitForSelector('[data-card-page]');
     await page.goBack({ waitUntil: 'networkidle0' });
@@ -590,6 +624,17 @@ describe('the brief: one day at a time', () => {
     await page.keyboard.press('d');
     await page.waitForSelector('.toast');
     await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 8000);
+  });
+
+  it('sends a dismiss still in its undo window when the person moves to another day: nothing undid it', async () => {
+    await page.setViewport({ width: 1100, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.keyboard.press('j');
+    await page.keyboard.press('d');
+    await page.waitForSelector('.toast');
+    await page.keyboard.press('ArrowRight');
+    await wait(dayAt(1));
+    await until(async () => (await row('goalpath:item:1:ship')).decision === 'dismissed', 2000); // well inside the window
   });
 });
 
@@ -688,14 +733,14 @@ describe('a day’s schedule (RFC 0.8 §4.5, §8)', () => {
     expect(await page.$eval(`${row} [data-schedule-row]`, (b) => [b.textContent, Math.round(b.getBoundingClientRect().height)])).toEqual(['11:00–12:00Design review', expect.any(Number)]);
     expect((await page.$eval(`${row} [data-schedule-row]`, (b) => b.getBoundingClientRect().height))).toBeLessThan(30); // one line
     expect(await page.$(`${row} [data-schedule-detail]`)).toBeNull();
-    await page.tap(`${row} [data-schedule-row]`);
+    await press(await page.$(`${row} [data-schedule-row]`), 'tap');
     const detail = `${row} [data-schedule-detail]`;
     await page.waitForSelector(detail);
     expect(await page.$eval(`${detail} .lead`, (l) => l.textContent)).toBe('Room 3, second floor.');
     expect(await page.$eval(`${detail} [data-source]`, (a) => a.getAttribute('href'))).toBe('https://calendar.example/e/1');
     expect(await page.$eval(detail, (d) => d.textContent)).toContain('1 earlier in this thread');
     expect(await page.$(`${detail} button[aria-label^="More actions"]`)).not.toBeNull();
-    await (await page.$(`xpath/.//*[@data-schedule-detail="cal:occ:review"]//button[.="Acknowledge"]`))!.tap();
+    await press(await page.$(`xpath/.//*[@data-schedule-detail="cal:occ:review"]//button[.="Acknowledge"]`), 'tap');
     await page.waitForFunction((sel) => document.querySelector(sel)?.textContent?.startsWith('Acknowledged · '), {}, `${detail} .state-line`);
     await until(async () => (await row_db('cal:occ:review')).acknowledgedAt !== null);
     expect(errors).toEqual([]);
@@ -1534,7 +1579,7 @@ describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
     expect(await page.$eval(`${first} [data-decide-notice]`, (n) => n.textContent)).toBe('This card was replaced by “Triage 2”. Open it');
     expect(await page.$eval(`${first} [data-decide-notice] a`, (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent(chain[1]!)}`);
     expect(await page.$$(`${first} button[data-action]`)).toEqual([]); // no controls left to press again
-    expect(await page.$(`${first} [data-replaced-by]`)).not.toBeNull();
+    expect(await page.$(`${first} [data-replaced-by]`)).toBeNull(); // the notice says it, once
     expect((await row(chain[0]!)).state).toBe('superseded');
     expect(await testDb().select().from(decisionLog)).toEqual([]);
   });

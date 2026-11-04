@@ -10,6 +10,7 @@
 import { ChevronDown, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { addDays } from './days';
 import { DatePicker } from './DatePicker';
 
 export interface WeekDay {
@@ -32,19 +33,13 @@ export interface WeekStripProps {
   className?: string;
 }
 
-const plus = (date: string, n: number) => {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-
 const part = (date: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { ...o, timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 
 export function WeekStrip({ days, selected, today, min, max, onSelect, className }: WeekStripProps) {
   const [picking, setPicking] = useState(false);
   // A week back or on: the same weekday, kept within what the brief reaches.
   const week = (n: number) => {
-    const d = plus(selected, 7 * n);
+    const d = addDays(selected, 7 * n);
     return d < min ? min : d > max ? max : d;
   };
   const arrow = 'grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40';

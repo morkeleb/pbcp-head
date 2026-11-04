@@ -31,7 +31,7 @@ import {
   type MeCard,
 } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
-import { rowId } from './days';
+import { hasDecision, rowId } from './days';
 
 export { clock };
 
@@ -86,7 +86,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   const { decide: post, error, notice } = useDecide(card, onChange);
   const decide = (decision: string, extra: { edited_proposal?: string } = {}) =>
     post({ decision, ...extra, ...(comment.trim() ? { comment: comment.trim() } : {}) });
-  const deferred = useDeferred();
+  // A dismiss waiting out its undo window still happens if the card leaves the screen (another day, a card opened).
+  const deferred = useDeferred({ commitOnUnmount: true });
 
   // The proposal and the rest, from the body the head rendered (the lead is the head's: rendered_lead).
   const [parts, setParts] = useState<{ proposal: string; rest: string } | null>(null);
@@ -149,7 +150,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
 
   // §4.5 confirmation: the decision recorded, in words and time, in place of the controls; §8 the later cards that
   // reference the card, beside it.
-  const stateLine = decided && (
+  // A card superseded after it was decided keeps its decision (§8), and says so.
+  const stateLine = hasDecision(card) && (
     <div className="state-line mt-3 text-lead text-muted-foreground" role="status">
       <span>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</span>
       {paired.length > 0 && (
@@ -280,7 +282,9 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
         </Collapsible>
       )}
       {stateLine}
-      {replaced}
+      {/* After a refused choice the notice names the successor and links it: the line would say it twice. Without a
+          successor the notice cannot, and the line still says why. */}
+      {!(told && card.replaced_by) && replaced}
       {told}
       {controls}
       {deferred.toast}

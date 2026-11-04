@@ -134,6 +134,13 @@
       "when": 1793374768161,
       "tag": "0018_order_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793817034274,
+      "tag": "0019_cards_supersedes",
+      "breakpoints": true
     }
   ]
 }

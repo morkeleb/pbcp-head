@@ -1,0 +1,1 @@
+CREATE INDEX "cards_supersedes" ON "cards" USING btree ("head_id","producer",("producer_doc"->>'supersedes'));
