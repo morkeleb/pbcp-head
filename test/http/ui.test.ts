@@ -1809,6 +1809,22 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     const size = (sel: string) => page.$eval(sel, (e) => getComputedStyle(e).fontSize);
     expect(await size(`${taskRow(ids.pass)} [data-task-line]`)).toBe(await size(`[data-marker="${ids.pass}"] span.truncate`));
     expect(await size(`${taskRow(ids.pass)} [data-due]`)).toBe(await size(`[data-marker="${ids.pass}"] time`));
+    // One column with the schedule: the ring centred on the dots' line and no larger than one, the times starting where
+    // the schedule's do, and the link ending where the row does (no room left over for a hidden label).
+    const fit = await page.evaluate((id) => {
+      const box = (e: Element) => e.getBoundingClientRect();
+      const row = document.querySelector(`article[data-card="${id}"]`)!;
+      const ring = box(row.querySelector('[data-done-control]')!);
+      const dot = box(document.querySelector(`[data-rail-entry="${id}"] > span`)!);
+      const [due, time] = [box(row.querySelector('[data-due]')!), box(document.querySelector(`[data-marker="${id}"] time`)!)];
+      return {
+        ring: Math.round(ring.width), dotCentre: Math.abs(ring.left + ring.width / 2 - (dot.left + dot.width / 2)) <= 2,
+        timesAlign: Math.abs(due.left - time.left) <= 2, linkAtEnd: Math.abs(box(row.querySelector('[data-source-icon]')!).right - box(row).right) <= 1,
+      };
+    }, ids.pass);
+    expect(fit).toEqual({ ring: 12, dotCentre: true, timesAlign: true, linkAtEnd: true });
+    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+    await new Promise((r) => setTimeout(r, 600)); // past the theme's transition
     if (process.env.PBCP_SHOTS) await page.screenshot({ path: `${process.env.PBCP_SHOTS}/tasks-wide.png` });
     expect(errors).toEqual([]);
   });
