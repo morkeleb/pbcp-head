@@ -16,7 +16,7 @@ This repo is the **product**: the reference head (Next.js on Vercel, Postgres). 
 
 H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (orders) are done, and the gate passes all 67 cases of the Draft 0.9 suite over HTTP. Since then these have shipped:
 - the brief: the nightly `head:daily` card, and a live `/brief` laid out by day;
-- tasks (RFC 0.9 `kind: task`): a checklist in each day before the decisions, done through the decision routes, and in the daily paragraph;
+- tasks (RFC 0.9 `kind: task`): a checklist in each day under the schedule, done through the decision routes, and in the daily paragraph;
 - Settings: producers with ceilings, pairing codes, devices and preferences, plus the `/connect` reference page;
 - the owner's MCP server at `/api/mcp`, with OAuth;
 - Web Push for the daily notification and for urgent cards;

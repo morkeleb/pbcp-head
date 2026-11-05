@@ -1,13 +1,11 @@
 'use client';
 
 // A day of the brief, the same component tree in both layouts (brief-view.tsx) and on the front door's demo brief
-// (app/about): the sticky dated header, the day's brief in short paragraphs, its tasks (RFC 0.9 §4.5: together, as a
-// checklist, overdue first), its decisions, the day's schedule (the
-// cards with `at` as an agenda, or on a time rail that shows the free time between them, RFC 0.8 §8), and its updates
-// and signals as threads. On the timeline (a phone) they
-// follow each other in that order (the tasks before the decisions), each decision beside the time it came; on the
-// broadsheet the decisions stand on the left, and on the right the schedule, the tasks under it, then the updates and
-// signals.
+// (app/about): the sticky dated header, the day's brief in short paragraphs, its decisions, the day's schedule (the
+// cards with `at` as an agenda, or on a time rail that shows the free time between them, RFC 0.8 §8), its tasks (RFC
+// 0.9 §4.5: together, as a checklist, overdue first), and its updates and signals as threads. On the timeline (a phone)
+// they follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on
+// the left, and on the right the schedule, the tasks under it, then the updates and signals.
 
 import Link from 'next/link';
 import { useLayoutEffect, useState, type ReactNode } from 'react';
@@ -23,6 +21,9 @@ import type { UpdateThread } from './UpdateRow';
 
 /** Updates are folded after this many, behind "More updates (N)". */
 const FOLD_AT = 6;
+
+/** On the timeline, the schedule and the tasks under it stand on one rail, in line with the decisions' times. */
+const ON_RAIL = 'ml-[2.75rem] border-l pl-3';
 
 export const dayName = (d: Day, today: string): string => {
   const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d.date}T00:00:00Z`));
@@ -57,8 +58,8 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
   const p = day.paragraph;
   const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
   const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} />;
-  // RFC 0.9 §4.5: the day's tasks together, overdue first and marked; only when there are any. Before the decisions on
-  // the timeline, under the schedule on the broadsheet.
+  // RFC 0.9 §4.5: the day's tasks together, overdue first and marked; only when there are any. Under the schedule in
+  // both layouts.
   const now = new Date();
   const late = day.tasks.filter((c) => wasOverdue(c, now, tz));
   const due = day.tasks.filter((c) => !late.includes(c));
@@ -66,19 +67,22 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
   const overdue = day.tasks.filter((c) => isOverdue(c, now, tz)).length;
   const tasks = task && day.tasks.length > 0 && (
     <Group title={`Tasks · ${open} open${overdue > 0 ? `, ${overdue} overdue` : ''}`} data="tasks">
-      {late.length > 0 && (
-        <>
-          <h4 className="pb-1 text-meta font-semibold uppercase tracking-meta text-destructive">Overdue</h4>
-          <div className="divide-y border-y" data-overdue>{late.map((c) => task(c, true))}</div>
-        </>
-      )}
-      {due.length > 0 && (
-        <>
-          {/* Under the overdue ones, the rest has its own heading: two rules with nothing between them read as a stray line. */}
-          {late.length > 0 && <h4 className="mt-3 pb-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-due-heading>{day.kind === 'today' ? 'Today' : 'Due'}</h4>}
-          <div className="divide-y border-y" data-due-tasks>{due.map((c) => task(c, false))}</div>
-        </>
-      )}
+      {/* On the timeline, on the rail of the schedule above it: each ring under the schedule's dots, as on the broadsheet. */}
+      <div className={cn(!wide && ON_RAIL)}>
+        {late.length > 0 && (
+          <>
+            <h4 className="pb-1 text-meta font-semibold uppercase tracking-meta text-destructive">Overdue</h4>
+            <div className="divide-y border-y" data-overdue>{late.map((c) => task(c, true))}</div>
+          </>
+        )}
+        {due.length > 0 && (
+          <>
+            {/* Under the overdue ones, the rest has its own heading: two rules with nothing between them read as a stray line. */}
+            {late.length > 0 && <h4 className="mt-3 pb-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-due-heading>{day.kind === 'today' ? 'Today' : 'Due'}</h4>}
+            <div className="divide-y border-y" data-due-tasks>{due.map((c) => task(c, false))}</div>
+          </>
+        )}
+      </div>
     </Group>
   );
   const decisions = day.decisions.length > 0 && (
@@ -89,7 +93,7 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
   // The day's cards with a time, every producer, `log` included; a card shown above or below is a marker linking to it.
   const schedule = !!day.rail?.length && (
     <Group title="Schedule" tools={<ScheduleToggle />}>
-      <div className={cn(!wide && 'ml-[2.75rem] border-l pl-3')} data-schedule>
+      <div className={cn(!wide && ON_RAIL)} data-schedule>
         <TimeRail cards={day.rail} date={day.date} timezone={tz} anchors={anchors(day)} dayCards={day.cards ?? []} {...(onChange ? { onChange } : {})} />
       </div>
     </Group>
@@ -126,9 +130,9 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
       ) : (
         <div className="pt-1">
           {brief}
-          {tasks}
           {decisions}
           {schedule}
+          {tasks}
           {updates}
           {signals}
         </div>
