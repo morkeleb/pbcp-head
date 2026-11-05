@@ -7,6 +7,7 @@
 // paragraph of its own in a view, one run of prose in the card's lead:
 //
 //   "2 decisions, 1 snoozed: <entry>; <entry>."                     (or "Nothing waiting for you.")
+//   "Tasks: 3 due, 1 overdue: <entry>; <entry>; <entry>."            (RFC 0.9 §8; none when no task is due)
 //   "Yesterday you decided: <title> — decided <value>; …; and your orders came back: <order> — done: <lead>."
 //   "What mattered yesterday: <entry>; …; and 3 more."              (at most MATTERED_SHOWN entries)
 //   "And 9 updates from mail, goalpath, hermes and obsidian."        (counted, no titles)
@@ -32,7 +33,9 @@ export interface ParagraphParts {
   decisions: ParagraphEntry[];
   /** Snoozed decisions, counted and never listed (§8): only their labels, so a filtered count stays right. */
   snoozed: string[][];
-  /** Decisions the owner made the day before: "<title> — decided <value>". */
+  /** Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "<title> — <lead>", and whether overdue. */
+  tasks?: Array<ParagraphEntry & { overdue: boolean }>;
+  /** Decisions the owner made the day before: "<title> — decided <value>" ("<title> — done" for a task). */
   decided?: ParagraphEntry[];
   /** The day before's signals delivered immediate or brief, and its brief artifacts from quiet producers, newest first. */
   mattered?: ParagraphEntry[];
@@ -71,9 +74,15 @@ export function composeParagraphs(parts: ParagraphParts, chosen: readonly string
   const keep = <T extends { labels: readonly string[] }>(xs: readonly T[] | undefined) => (xs ?? []).filter((x) => matchesLabels(x.labels, chosen));
   const decisions = keep(parts.decisions);
   const snoozed = parts.snoozed.filter((l) => matchesLabels(l, chosen)).length;
+  const tasks = keep(parts.tasks);
   const out: string[] = [];
   if (decisions.length > 0) out.push(`${plural(decisions.length, 'decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}: ${decisions.map((e) => e.text).join('; ')}.`);
-  else out.push(snoozed > 0 ? `Nothing waiting for you; ${plural(snoozed, 'decision')} snoozed.` : 'Nothing waiting for you.');
+  else if (tasks.length === 0) out.push(snoozed > 0 ? `Nothing waiting for you; ${plural(snoozed, 'decision')} snoozed.` : 'Nothing waiting for you.');
+  else if (snoozed > 0) out.push(`No decisions; ${snoozed} snoozed.`);
+  if (tasks.length > 0) {
+    const overdue = tasks.filter((t) => t.overdue).length;
+    out.push(`Tasks: ${tasks.length} due${overdue > 0 ? `, ${overdue} overdue` : ''}: ${tasks.map((e) => e.text).join('; ')}.`);
+  }
 
   const before = keep(parts.yesterday);
   if (before.length > 0) out.push(`Yesterday: ${before.map((e) => e.text).join('; ')}.`);

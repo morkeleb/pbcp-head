@@ -1732,3 +1732,146 @@ describe('web orders', () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
+  const ids = { bins: 'todoist:task:bins', pass: 'todoist:task:pass', dentist: 'todoist:task:dentist' };
+  const today = () => new Date().toISOString().slice(0, 10);
+  const yesterday = () => new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  let todoist: string;
+  const put = (id: string, extra: Record<string, unknown>) => call('PUT', cardPath(id), { auth: todoist, body: card(id, { kind: 'task', ...extra }) });
+  const taskRow = (id: string) => `article[data-kind="task"][data-card="${id}"]`;
+  /** The screen as the person sees it, scrolled so the Tasks section starts under the masthead (PBCP_SHOTS: a directory). */
+  const shot = async (name: string) => {
+    await page.evaluate(() => {
+      const t = document.querySelector('[data-tasks]')!;
+      scrollTo(0, scrollY + t.getBoundingClientRect().top - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--masthead-h') || '0') - 44);
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    await page.screenshot({ path: `${process.env.PBCP_SHOTS}/${name}.png` });
+  };
+
+  /** Three tasks: one overdue (its day was yesterday), one due later today at a time, one with neither. */
+  async function threeTasks() {
+    todoist = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todoist' })}`;
+    const at = new Date(Math.min(Date.now() + 2 * 3_600_000, Date.parse(`${today()}T23:45:00Z`))).toISOString().replace(/\.\d+Z$/, 'Z');
+    await call('POST', '/api/test', { body: { clock: `${yesterday()}T09:00:00Z` } });
+    await put(ids.bins, { title: 'Put the bins out', summary: 'Grey bin this week.', about: yesterday(), labels: ['home'], source: { url: 'https://todoist.example/task/1' } });
+    await call('POST', '/api/test', { body: { clock: null } });
+    await put(ids.pass, { title: 'Renew the passport', summary: 'Form and photo at the town hall.', at, labels: ['errands'], source: { url: 'https://todoist.example/task/2' } });
+    await put(ids.dentist, { title: 'Call the dentist', body: 'To move the appointment to next week.\n\n- Ask for a morning\n- Mention the crown', actions: ['tomorrow'], source: { url: 'https://todoist.example/task/3' } });
+    for (const id of Object.values(ids)) await until(async () => (await row(id)).renderedHtml !== null);
+  }
+
+  it('lists the day’s tasks before the decisions, overdue first and marked with their day; never among the decisions; a timed one is also a schedule marker, not a second row', async () => {
+    await threeTasks();
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-tasks]');
+    expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 3 open, 1 overdue');
+    // Before the decisions, in the day's order.
+    expect(await page.evaluate(() => {
+      const [t, d] = [document.querySelector('[data-tasks]')!, document.querySelector('article[data-kind="decision"]')!];
+      return !!(t.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+    expect(await page.$$eval('[data-overdue] article', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual([ids.bins]);
+    expect(await page.$$eval('[data-due-tasks] article', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual([ids.pass, ids.dentist]);
+    const day = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(new Date(`${yesterday()}T00:00:00Z`));
+    const part = (t: string) => day.find((p) => p.type === t)!.value;
+    expect(await page.$eval(`${taskRow(ids.bins)} [data-due]`, (d) => d.textContent)).toBe(`${part('weekday')} ${part('day')} ${part('month')}`);
+    expect(await page.$eval(`${taskRow(ids.pass)} [data-due]`, (d) => d.textContent)).toMatch(/^\d\d:\d\d$/);
+    expect(await page.$(`${taskRow(ids.dentist)} [data-due]`)).toBeNull();
+    // Title, lead, the first label and the source host, on one line.
+    expect(await page.$eval(taskRow(ids.pass), (a) => a.textContent)).toMatch(/Renew the passport — Form and photo at the town hall\.·?errands/);
+    // On a phone the source is its arrow, to the task's own page in the tool.
+    expect(await page.$eval(`${taskRow(ids.pass)} [data-source-icon]`, (a) => [a.getAttribute('href'), a.getAttribute('target')])).toEqual(['https://todoist.example/task/2', '_blank']);
+    const heights = await page.$$eval('[data-tasks] article[data-kind="task"] > div:first-child', (ds) => ds.map((d) => d.getBoundingClientRect().height));
+    for (const h of heights) expect(h).toBeLessThan(32);
+    // None is a decision; the timed one is a marker on the schedule that links to its row, and has one row.
+    expect(await page.$$(`article[data-kind="decision"][data-card^="todoist:"]`)).toEqual([]);
+    expect(await page.$$eval(`article[data-card="${ids.pass}"]`, (as) => as.length)).toBe(1);
+    expect(await page.$eval(`[data-schedule] [data-marker="${ids.pass}"]`, (a) => a.getAttribute('href'))).toBe(`#brief-${ids.pass}`);
+    if (process.env.PBCP_SHOTS) await shot('tasks-360');
+    expect(errors).toEqual([]);
+  });
+
+  it('records done with the circle, and the row stays, ticked and dimmed, after the brief loads again; tapping the line opens the card in place with Done primary', async () => {
+    await threeTasks();
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    // Opened in place: the body, Done the one primary control, the listed action beside it, Dismiss, a comment.
+    await press(await page.waitForSelector(`${taskRow(ids.dentist)} [data-task-line]`));
+    await page.waitForSelector(`${taskRow(ids.dentist)} [data-task-open]`);
+    expect(await page.$eval(`${taskRow(ids.dentist)} [data-task-open]`, (d) => d.textContent)).toContain('Mention the crown');
+    expect(await page.$eval(`${taskRow(ids.dentist)} [data-task-open]`, (d) => d.textContent)).not.toContain('To move the appointment'); // the lead, once, on the line
+    expect(await page.$$eval(`${taskRow(ids.dentist)} [data-task-open] button[data-action]`, (bs) => bs.map((b) => [b.getAttribute('data-action'), b.hasAttribute('data-primary')]))).toEqual([['done', true], ['tomorrow', false], ['dismissed', false]]);
+    expect(await page.$(`${taskRow(ids.dentist)} .comment`)).not.toBeNull();
+    if (process.env.PBCP_SHOTS) await shot('tasks-360-open');
+    await press(await page.$(`${taskRow(ids.dentist)} [data-task-line]`)); // closed again
+
+    await press(await page.$(`${taskRow(ids.pass)} [data-done-control]`));
+    await until(async () => (await row(ids.pass)).decision === 'done');
+    expect((await row(ids.pass)).state).toBe('decided');
+    await page.waitForSelector(`${taskRow(ids.pass)} [data-done-control][aria-checked="true"]`);
+    expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 2 open, 1 overdue');
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${taskRow(ids.pass)} [data-done-control][aria-checked="true"]`);
+    expect(await page.$eval(taskRow(ids.pass), (a) => getComputedStyle(a).opacity)).toBe('0.6');
+    expect(await page.$eval(`${taskRow(ids.pass)} [data-task-closed]`, (s) => s.textContent)).toMatch(/— Done · \d\d:\d\d$/);
+    expect(errors).toEqual([]);
+  });
+
+  it('shows a task its producer closed ticked, with the producer’s words, for the rest of the day; then it drops', async () => {
+    await threeTasks();
+    await call('PUT', cardPath('todoist:task:bins:done'), { auth: todoist, body: card('todoist:task:bins:done', { kind: 'artifact', urgency: 'log', title: 'Done in Todoist', body: 'Completed in Todoist.', supersedes: ids.bins }) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector(`${taskRow(ids.bins)} [data-done-control][aria-checked="true"]`);
+    expect(await page.$eval(`${taskRow(ids.bins)} [data-task-closed]`, (s) => s.textContent)).toBe(' — Done in Todoist');
+    expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 2 open');
+    // The head's next day: it has dropped.
+    await call('POST', '/api/test', { body: { clock: new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z') } });
+    expect(((await call('GET', '/api/me/brief', { auth: `Session ${session.access_token}` })).body.tasks as Array<{ id: string }>).map((t) => t.id)).not.toContain(ids.bins);
+    await call('POST', '/api/test', { body: { clock: null } });
+    expect(errors).toEqual([]);
+  });
+
+  it('marks done with a swipe right and dismisses with a swipe left, each behind the undo; the swipe does not move the day', async () => {
+    await threeTasks();
+    await page.setViewport({ width: 390, height: 844, hasTouch: true, isMobile: true });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    const swipe = async (sel: string, dx: number) => {
+      const el = (await page.waitForSelector(sel))!;
+      await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 200));
+      const box = (await el.boundingBox())!;
+      const [x, y] = [box.x + box.width / 2 - dx / 2, box.y + box.height / 2];
+      await page.touchscreen.touchStart(x, y);
+      for (let i = 1; i <= 6; i++) await page.touchscreen.touchMove(x + (dx * i) / 6, y);
+      await page.touchscreen.touchEnd();
+    };
+    await swipe(taskRow(ids.dentist), 160);
+    await page.waitForSelector('.toast');
+    expect(await page.$eval('.toast', (t) => t.textContent)).toContain('Done: Call the dentist');
+    expect(await page.$eval('main', (m) => m.getAttribute('data-brief-day'))).toBe(today()); // still today
+    await until(async () => (await row(ids.dentist)).decision === 'done', 8000);
+    await swipe(taskRow(ids.bins), -160);
+    await until(async () => (await row(ids.bins)).decision === 'dismissed', 8000);
+    expect(await page.$eval('main', (m) => m.getAttribute('data-brief-day'))).toBe(today());
+    expect(errors).toEqual([]);
+  });
+
+  it('on its own page: Done the primary control, its listed actions beside it, and the decision log below once done', async () => {
+    await threeTasks();
+    await page.goto(`${headUrl()}/card/${encodeURIComponent(ids.dentist)}`, { waitUntil: 'networkidle0' });
+    const page_ = 'main[data-card-page] article[data-kind="task"]';
+    await page.waitForSelector(`${page_} button[data-action="done"]`);
+    expect(await page.$$eval(`${page_} button[data-action]`, (bs) => bs.map((b) => [b.textContent, b.hasAttribute('data-primary')]))).toEqual([['Done', true], ['tomorrow', false], ['Dismiss', false]]);
+    expect(await page.$eval(page_, (a) => a.textContent)).toContain('Mention the crown');
+    await press(await page.$(`${page_} button[data-action="tomorrow"]`));
+    await until(async () => (await row(ids.dentist)).decision === 'tomorrow');
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-decision-log], table');
+    expect(await page.$eval('main[data-card-page]', (m) => m.textContent)).toMatch(/tomorrow/);
+    expect(await page.$(`${page_} button[data-action]`)).toBeNull();
+    expect(errors).toEqual([]);
+  });
+});

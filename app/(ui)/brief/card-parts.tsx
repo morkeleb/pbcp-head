@@ -26,8 +26,10 @@ export function cardTime(card: Pick<MeCard, 'at' | 'until' | 'received_at' | 'da
 }
 
 /** What the card wants of the person, in their words (§4.1a: never the kind's name): decide, acknowledge, or nothing. */
-export function wants(card: MeCard): 'decide' | 'acknowledge' | null {
+export function wants(card: MeCard): 'decide' | 'acknowledge' | 'do' | null {
   if (card.kind === 'decision') return card.state === 'open' ? 'decide' : null;
+  // RFC 0.9 §4.1a: a task asks the person to do something; it is decided (done), never acknowledged.
+  if (card.kind === 'task') return card.state === 'open' ? 'do' : null;
   if (card.kind === 'artifact' || card.kind === 'signal') return card.state === 'open' && !card.acknowledged_at ? 'acknowledge' : null;
   return null;
 }
@@ -37,7 +39,7 @@ export function wants(card: MeCard): 'decide' | 'acknowledge' | null {
  * first, then the labels truncate; the producer, the time and the host keep their room (§4.1 `labels`, `source`, §12).
  */
 export function CardMeta({ card, timezone, showTime = true, want, extra, unseen }: {
-  card: MeCard; timezone: string; showTime?: boolean; want: 'decide' | 'acknowledge' | null; extra?: ReactNode; unseen?: boolean;
+  card: MeCard; timezone: string; showTime?: boolean; want: 'decide' | 'acknowledge' | 'do' | null; extra?: ReactNode; unseen?: boolean;
 }) {
   const locale = useLocale();
   const time = cardTime(card, timezone, locale);

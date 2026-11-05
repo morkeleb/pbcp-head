@@ -67,7 +67,8 @@ const ParagraphEntry = z.object({
 export const ParagraphParts = z.object({
   decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed'),
   snoozed: z.array(z.array(z.string())).describe('The labels of each snoozed decision: counted, never listed (§8)'),
-  decided: z.array(ParagraphEntry).optional().describe('Decisions made the day before: "<title> — decided <value>"'),
+  tasks: z.array(ParagraphEntry.extend({ overdue: z.boolean().describe('Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded') })).optional().describe('Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "Tasks: 3 due, 1 overdue: <entry>; …."'),
+  decided: z.array(ParagraphEntry).optional().describe('Decisions made the day before: "<title> — decided <value>" ("<title> — done" for a task)'),
   orders: z.array(ParagraphEntry).optional().describe('Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3)'),
   mattered: z.array(ParagraphEntry).optional().describe('The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more"'),
   rest: z.array(z.object({ producer: z.string(), labels: z.array(z.string()) })).optional().describe('Every other thread of the day before, counted by producer: "And 9 updates from mail, goalpath and hermes."'),
@@ -76,7 +77,7 @@ export const ParagraphParts = z.object({
 
 export const MeCard = Card.extend({
   replaced_by: z
-    .object({ id: z.string(), title: z.string(), state: z.enum(STATES), decision: z.string().optional() })
+    .object({ id: z.string(), title: z.string(), kind: z.enum([...KINDS, 'order']), state: z.enum(STATES), decision: z.string().optional() })
     .optional()
     .describe('On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.'),
   message: z.string().optional().describe('On a 409 from the decision route for a superseded card: “This card was replaced by …”'),
@@ -175,6 +176,9 @@ export const Brief = z.object({
     .object({ date: z.string().describe('YYYY-MM-DD in `timezone`'), cards: z.array(MeCard).describe('Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)') })
     .describe('What is already set for tomorrow'),
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
+  tasks: z
+    .array(MeCard.extend({ overdue: z.literal(true).optional().describe('An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card') }))
+    .describe('Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day'),
   threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
   snoozed: z.number().int().nonnegative(),
   late_outcomes: z.array(MeCard).describe('Order outcomes that came late or from an earlier claim (A.3)'),

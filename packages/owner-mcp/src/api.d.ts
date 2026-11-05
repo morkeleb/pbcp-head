@@ -682,7 +682,7 @@ export interface components {
             protocol: "pbcp/1";
             id: string;
             /** @enum {string} */
-            kind: "decision" | "artifact" | "signal" | "order";
+            kind: "decision" | "artifact" | "signal" | "task" | "order";
             /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
             to_person?: string;
             producer: string;
@@ -763,7 +763,18 @@ export interface components {
             }[];
             /** @description The labels of each snoozed decision: counted, never listed (§8) */
             snoozed: string[][];
-            /** @description Decisions made the day before: "<title> — decided <value>" */
+            /** @description Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "Tasks: 3 due, 1 overdue: <entry>; …." */
+            tasks?: {
+                /** @description The card the entry is */
+                id: string;
+                /** @description Its labels (§4.1), for filtering */
+                labels: string[];
+                /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
+                text: string;
+                /** @description Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded */
+                overdue: boolean;
+            }[];
+            /** @description Decisions made the day before: "<title> — decided <value>" ("<title> — done" for a task) */
             decided?: {
                 /** @description The card the entry is */
                 id: string;
@@ -810,7 +821,7 @@ export interface components {
             protocol: "pbcp/1";
             id: string;
             /** @enum {string} */
-            kind: "decision" | "artifact" | "signal" | "order";
+            kind: "decision" | "artifact" | "signal" | "task" | "order";
             /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
             to_person?: string;
             producer: string;
@@ -874,6 +885,8 @@ export interface components {
                 id: string;
                 title: string;
                 /** @enum {string} */
+                kind: "decision" | "artifact" | "signal" | "task" | "order";
+                /** @enum {string} */
                 state: "open" | "decided" | "superseded";
                 decision?: string;
             };
@@ -912,7 +925,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            kind: "decision" | "artifact" | "signal" | "order";
+            kind: "decision" | "artifact" | "signal" | "task" | "order";
             producer: string;
             /** @enum {string} */
             state: "open" | "decided" | "superseded";
@@ -932,7 +945,7 @@ export interface components {
                 protocol: "pbcp/1";
                 id: string;
                 /** @enum {string} */
-                kind: "decision" | "artifact" | "signal" | "order";
+                kind: "decision" | "artifact" | "signal" | "task" | "order";
                 /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
                 to_person?: string;
                 producer: string;
@@ -995,6 +1008,8 @@ export interface components {
                 replaced_by?: {
                     id: string;
                     title: string;
+                    /** @enum {string} */
+                    kind: "decision" | "artifact" | "signal" | "task" | "order";
                     /** @enum {string} */
                     state: "open" | "decided" | "superseded";
                     decision?: string;
@@ -1119,6 +1134,117 @@ export interface components {
             };
             /** @description Open decisions, newest first, snoozed ones left out */
             decisions: components["schemas"]["MeCard"][];
+            /** @description Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day */
+            tasks: ({
+                /** @constant */
+                protocol: "pbcp/1";
+                id: string;
+                /** @enum {string} */
+                kind: "decision" | "artifact" | "signal" | "task" | "order";
+                /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
+                to_person?: string;
+                producer: string;
+                title: string;
+                summary?: string;
+                body: string;
+                /** @enum {string} */
+                urgency?: "immediate" | "brief" | "log";
+                thread?: string;
+                labels?: string[];
+                about?: string;
+                at?: string;
+                until?: string;
+                references?: string[];
+                supersedes?: string;
+                actions?: (string | ({
+                    id: string;
+                    label?: string;
+                    body?: string;
+                    default?: boolean;
+                } & {
+                    [key: string]: unknown;
+                }))[];
+                emitted_at: string;
+                source?: {
+                    url: string;
+                    label?: string;
+                } & {
+                    [key: string]: unknown;
+                };
+                /** @enum {string} */
+                state: "open" | "decided" | "superseded";
+                change_seq: number;
+                received_at: string;
+                changed_at: string;
+                /** @enum {string} */
+                delivery: "immediate" | "brief" | "log";
+                seen_at?: string;
+                acknowledged_at?: string;
+                snoozed_until?: string;
+                decision?: string;
+                edited_proposal?: string;
+                comment?: string;
+                decided_at?: string;
+                delegated_to?: string;
+                to_producer?: string;
+                /** @enum {string} */
+                exec_state?: "open" | "claimed" | "done" | "failed" | "cancelled";
+                claimed_by?: string;
+                claim_expires_at?: string;
+                claim_seq?: number;
+                /** @description On an executor’s outcome card: the claim it reports on (A.3) */
+                "orders.claim_seq"?: number;
+                /**
+                 * @description On an executor’s outcome card: how the run ended (A.3)
+                 * @enum {string}
+                 */
+                "orders.result"?: "done" | "failed";
+                /** @description On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words. */
+                replaced_by?: {
+                    id: string;
+                    title: string;
+                    /** @enum {string} */
+                    kind: "decision" | "artifact" | "signal" | "task" | "order";
+                    /** @enum {string} */
+                    state: "open" | "decided" | "superseded";
+                    decision?: string;
+                };
+                /** @description On a 409 from the decision route for a superseded card: “This card was replaced by …” */
+                message?: string;
+                /** @description The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself. */
+                rendered_html: string;
+                /** @description The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none. */
+                lead: string;
+                /**
+                 * @description Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown
+                 * @enum {string}
+                 */
+                lead_source: "summary" | "body";
+                /** @description The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself. */
+                rendered_lead: string;
+                /** @description Rendered bodies of choice options (§4.4), by action id */
+                rendered_actions?: {
+                    [key: string]: string;
+                };
+                /** @description The first diagram or image in the body, for a thumbnail */
+                first_visual?: components["schemas"]["Visual"];
+                /**
+                 * @description On an outcome card: whether it moved its order, or came late or from an earlier claim
+                 * @enum {string}
+                 */
+                order_outcome?: "applied" | "stale";
+                /** @description The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored */
+                day: string;
+                /** @description On a `head:daily` card: its paragraph in parts */
+                paragraph?: components["schemas"]["ParagraphParts"];
+                /**
+                 * @description An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card
+                 * @constant
+                 */
+                overdue?: true;
+            } & {
+                [key: string]: unknown;
+            })[];
             /** @description Today’s artifacts and signals, folded by thread; immediate first */
             threads: components["schemas"]["Fold"][];
             snoozed: number;
@@ -1150,7 +1276,7 @@ export interface components {
             protocol: "pbcp/1";
             id: string;
             /** @enum {string} */
-            kind: "decision" | "artifact" | "signal" | "order";
+            kind: "decision" | "artifact" | "signal" | "task" | "order";
             /** @description The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1) */
             to_person?: string;
             producer: string;
@@ -1213,6 +1339,8 @@ export interface components {
             replaced_by?: {
                 id: string;
                 title: string;
+                /** @enum {string} */
+                kind: "decision" | "artifact" | "signal" | "task" | "order";
                 /** @enum {string} */
                 state: "open" | "decided" | "superseded";
                 decision?: string;

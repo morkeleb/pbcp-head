@@ -5,6 +5,7 @@ import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
 import { dailyLines, dailyParagraph, escapeMarkdown, foldDaily, paragraphParts } from '../lib/brief/fold';
 import { composeParagraphs } from '../lib/brief/paragraph';
+import { FOLD_VERSION } from '../lib/brief/fold-version';
 
 let seq = 0;
 function stored(id: string, extra: Partial<Card> = {}): Card {
@@ -215,5 +216,71 @@ describe('the nightly fold', () => {
 
   it('still writes a day folded before fold 6 its own way', () => {
     expect(composeParagraphs({ decisions: [], snoozed: [], yesterday: [{ id: 'x', labels: [], text: 'Old' }] })).toEqual(['Nothing waiting for you.', 'Yesterday: Old.']);
+  });
+});
+
+describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
+  const url = (id: string) => `https://head.example/card/${encodeURIComponent(id)}`;
+  const task = (id: string, extra: Partial<Card> = {}) => stored(id, { kind: 'task', ...extra } as Partial<Card>);
+  // 7 Nov in Copenhagen; the brief is folded at 05:30 local.
+  const base = {
+    owner: 'morten', date: '2026-11-07', emittedAt: '2026-11-07T04:30:00Z', cardUrl: url, timezone: 'Europe/Copenhagen',
+    openDecisions: [stored('mail:d:1', { kind: 'decision', title: 'Archive the newsletter?', summary: 'Archive it.' } as Partial<Card>)],
+    yesterday: [],
+    tasks: [
+      task('todo:task:pass', { title: 'Renew the passport', summary: 'Form and photo at the town hall.', at: '2026-11-07T16:00:00Z' } as Partial<Card>),
+      task('todo:task:bins', { title: 'Put the bins out', summary: 'Grey bin this week.', about: '2026-11-06' } as Partial<Card>),
+      task('todo:task:call', { title: 'Call the dentist', body: 'To move the appointment.' }),
+      task('todo:task:later', { title: 'Snoozed one', snoozed_until: '2026-11-08T05:00:00Z' } as Partial<Card>),
+    ],
+  };
+
+  it('says "Tasks: N due, M overdue: <title> — <lead>; …" after the decisions, by when they are due, a snoozed one left out', () => {
+    const lines = dailyLines({ ...base, at: base.emittedAt, date: base.date });
+    expect(lines.tasks.map((t) => [t.id, t.due, t.overdue])).toEqual([
+      ['todo:task:bins', 'Fri 6 Nov', true],
+      ['todo:task:pass', '17:00', false],
+      ['todo:task:call', 'no due date', false],
+    ]);
+    const [first, second] = composeParagraphs(paragraphParts(lines, url));
+    expect(first).toMatch(/^1 decision: \[Archive the newsletter\?\]/);
+    expect(second).toBe(
+      `Tasks: 3 due, 1 overdue: [Put the bins out](<${url('todo:task:bins')}>) — Grey bin this week; [Renew the passport](<${url('todo:task:pass')}>) — Form and photo at the town hall; [Call the dentist](<${url('todo:task:call')}>) — To move the appointment.`,
+    );
+  });
+
+  it('lists each with when it is due in the card, overdue first and marked, and references them; fold 8', () => {
+    const card = foldDaily(base);
+    const body = card.body;
+    expect(body).toContain('**Tasks**');
+    const listed = body.split('**Tasks**')[1]!.split('\n').filter((l) => l.startsWith('- '));
+    expect(listed[0]).toMatch(/^- \[Put the bins out\]\(.*\) — overdue, due Fri 6 Nov — Grey bin this week\\\.$/);
+    expect(listed[1]).toMatch(/^- \[Renew the passport\]\(.*\) — due 17:00 — Form and photo at the town hall\\\.$/);
+    expect(listed[2]).toMatch(/^- \[Call the dentist\]\(.*\) — no due date — To move the appointment\.$/);
+    expect(body).not.toContain('Snoozed one');
+    expect(card.references).toEqual(['mail:d:1', 'todo:task:bins', 'todo:task:pass', 'todo:task:call']);
+    expect(FOLD_VERSION).toBe(8);
+    expect((card as Record<string, unknown>)['x-pbcp-fold']).toBe(8);
+  });
+
+  it('tells a task done the day before as "<title> — done", and never as a thread of the day before', () => {
+    const done = task('todo:task:old', { title: 'Water the plants', state: 'decided', decision: 'done', decided_at: '2026-11-06T18:00:00Z' } as Partial<Card>);
+    const lines = dailyLines({ ...base, tasks: [], openDecisions: [], yesterday: [done], decidedYesterday: [done], at: base.emittedAt, date: base.date });
+    expect(lines.threads).toEqual([]);
+    expect(composeParagraphs(paragraphParts(lines, url))).toEqual(['Nothing waiting for you.', `Yesterday you decided: [Water the plants](<${url('todo:task:old')}>) — done.`]);
+  });
+
+  it('does not count a producer’s tasks towards its being busy: its one brief artifact is still named', () => {
+    const yesterday = [
+      ...[1, 2, 3, 4].map((n) => task(`todo:task:y${n}`)),
+      stored('todo:digest:1', { title: 'Weekly digest', summary: 'Four done, two left.' } as Partial<Card>),
+    ];
+    const lines = dailyLines({ ...base, tasks: [], openDecisions: [], yesterday, at: base.emittedAt, date: base.date });
+    expect(lines.mattered.map((l) => l.id)).toEqual(['todo:digest:1']);
+  });
+
+  it('with tasks and no decision opens with the tasks, not "Nothing waiting for you."', () => {
+    const lines = dailyLines({ ...base, openDecisions: [], at: base.emittedAt, date: base.date });
+    expect(composeParagraphs(paragraphParts(lines, url))[0]).toMatch(/^Tasks: 3 due, 1 overdue: /);
   });
 });

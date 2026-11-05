@@ -333,7 +333,7 @@ function Details({ card, timezone, earlier, onChange }: { card: MeCard; timezone
     announce(`Snoozed until ${label.toLowerCase()}: ${card.title}`);
   };
   let state: ReactNode = null;
-  if (card.kind === 'decision' && card.state === 'decided') state = <>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</>;
+  if ((card.kind === 'decision' || card.kind === 'task') && card.decision) state = <>{decidedLine(card)}{card.decided_at && <> · {clock(card.decided_at, timezone, locale)}</>}</>;
   else if (card.acknowledged_at) state = <>Acknowledged · {clock(card.acknowledged_at, timezone, locale)}</>;
   return (
     <div className="my-1.5 rounded-md border p-3" data-schedule-detail={card.id}>

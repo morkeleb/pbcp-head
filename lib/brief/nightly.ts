@@ -39,6 +39,11 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
     .from(cards)
     // Received by now, as above: a card about yesterday that arrives after the brief is in no brief of it.
     .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), eq(cards.day, addDays(date, -1)), lte(cards.receivedAt, new Date(now()))));
+  // RFC 0.9 §8: every open task whose day is the brief's or earlier; the fold leaves the snoozed ones out.
+  const tasks = await db
+    .select()
+    .from(cards)
+    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'task'`, lte(cards.day, date), lte(cards.receivedAt, new Date(now()))));
   const [from, to] = dayRange(addDays(date, -1), timezone);
   const decided = await db
     .select()
@@ -47,7 +52,7 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
   // A.3: the orders whose threads moved that day, so their cards are told as the order's.
   const orderIds = [...new Set(yesterday.map((r) => (r.producerDoc as { thread?: string }).thread).filter((t): t is string => !!t && t.startsWith('head:order:')))];
   const orders = orderIds.length ? await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, orderIds), isNotNull(cards.toProducer))) : [];
-  return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), decidedYesterday: decided.map(toCard), orders: orders.map(toCard) };
+  return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), decidedYesterday: decided.map(toCard), orders: orders.map(toCard), tasks: tasks.map(toCard), timezone };
 }
 
 /**
@@ -55,14 +60,14 @@ export async function gatherDaily(db: Db, headId: string, timezone: string, date
  * parts, each entry rendered to safe inline HTML (lib/brief/paragraph.ts composes them).
  */
 export async function dailyParagraphNow(db: Db, headId: string, timezone: string, date: string): Promise<ParagraphParts> {
-  return renderParts(db, paragraphParts(dailyLines({ ...(await gatherDaily(db, headId, timezone, date)), at: now() }), cardUrl));
+  return renderParts(db, paragraphParts(dailyLines({ ...(await gatherDaily(db, headId, timezone, date)), at: now(), date }), cardUrl));
 }
 
 /** Each entry's markdown rendered inline by the same pipeline and sanitiser as bodies. */
 export async function renderParts(db: Db, parts: ParagraphParts): Promise<ParagraphParts> {
   const inline = async (md: string) => (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
-  const each = (es: ParagraphParts['decisions'] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
-  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
+  const each = <E extends { text: string }>(es: E[] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
+  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, tasks: await each(parts.tasks), decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
 }
 
 /** Mints `head:daily:<date>`; a quiet day's says "Nothing waiting for you." */
@@ -74,7 +79,7 @@ export async function mintDailyCard(db: Db, headId: string, timezone: string, da
   await renderAfterCommit(db, headId, r.card);
   // The paragraph in parts, beside the card's own rendering: head-owned display state, never synced, so a view can
   // show only the entries of the labels the owner filters by.
-  const parts = await renderParts(db, paragraphParts(dailyLines({ ...gathered, at: emittedAt }), cardUrl));
+  const parts = await renderParts(db, paragraphParts(dailyLines({ ...gathered, at: emittedAt, date }), cardUrl));
   await db.update(cards).set({ renderedParagraph: parts }).where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
   return r;
 }
