@@ -26,7 +26,7 @@ import { dueDay } from '../../../lib/brief/tasks';
 import { addDays, instant, localDate } from '../../../lib/time';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, useDecide, useDeferred, useLocale, useSwipe,
+  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, sourceLink, splitBody, useDecide, useDeferred, useLocale, useSwipe,
   type MeCard,
 } from '../components';
 import { CardMeta, clock, wants } from './card-parts';
@@ -138,12 +138,15 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       data-done-control
       data-primary
       className={cn(
-        'flex size-[1.375rem] flex-none items-center justify-center rounded-full border-2 transition-colors',
-        done ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/60 hover:border-primary',
+        // The schedule's dot's size (10 px there, 12 px here with its ring), so the two lists read as one column; the tap
+        // area is larger than the ring (40 px tall), without taking room on the line: it stops at the gap, so a tap on the
+        // time or the title opens the row rather than marking it done.
+        'relative flex size-3 flex-none items-center justify-center rounded-full border-[1.5px] transition-colors after:absolute after:-inset-y-3 after:-left-[14px] after:-right-1 after:content-[""]',
+        done ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground hover:border-primary',
         open && 'disabled:opacity-50',
       )}
     >
-      {done && <Check className="size-3.5" strokeWidth={3} aria-hidden />}
+      {done && <Check className="size-2" strokeWidth={4} aria-hidden />}
     </button>
   );
 
@@ -204,7 +207,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
           {menu}
         </div>
         <div className="mt-1 flex items-start gap-3">
-          <span className="pt-1">{circle}</span>
+          {/* Centred on the title's first line. */}
+          <span className="flex h-[1lh] flex-none items-center font-serif text-title">{circle}</span>
           <div className="min-w-0 flex-1">
             <h3 className={cn('font-serif text-title font-semibold tracking-editorial', done && 'text-muted-foreground line-through decoration-1')}>{card.title}</h3>
             {card.rendered_lead && <p className="lead mt-1 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
@@ -234,7 +238,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
         focused && 'rounded-md ring-2 ring-ring',
       )}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
+      {/* The ring and a 4 px gap: the time starts where the schedule's times do (16 px in). */}
+      <div className="flex min-w-0 items-center gap-1">
         {circle}
         <button
           // The schedule's sizes (TimeRail's agenda line): the time in the meta size, the title in the lead's.
@@ -254,19 +259,20 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
             )}
           </span>
         </button>
-        {/* The first label, small, and the source: its host where there is room, its arrow alone on a phone (the title first). */}
+        {/* The first label, small, and the source as its host and arrow (the arrow alone on a phone), as wide as they are, at
+            the end of the line. The producer's label for the link is in its name, not on the line (§12: the host shows). */}
         <span className="flex max-w-[35%] flex-none items-center gap-2 whitespace-nowrap text-meta text-muted-foreground [&>[aria-hidden]:first-child]:hidden [&_[data-labels]]:max-w-[5.5rem]">
           <CardLabels labels={card.labels} first />
-          {link && <SourceLink source={card.source} className="max-[599px]:hidden" />}
           {link && (
-            <a href={link.href} target="_blank" rel="noopener" title={link.host} aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`} className="min-[600px]:hidden hover:text-foreground" data-source-icon>
-              <ArrowUpRight className="size-3.5" aria-hidden />
+            <a href={link.href} target="_blank" rel="noopener" title={link.host} aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`} className="relative flex min-w-0 items-center gap-0.5 after:absolute after:-inset-2 after:content-[''] hover:text-foreground hover:underline" data-source-icon>
+              <span className="truncate max-[599px]:hidden" data-source-host>{link.host}</span>
+              <ArrowUpRight className="size-3 flex-none" aria-hidden />
             </a>
           )}
         </span>
       </div>
       {opened && (
-        <div className="ml-[2.0rem] pb-1" data-task-open>
+        <div className="ml-4 pb-1" data-task-open>
           <div className="flex items-start justify-between gap-2 pt-1">
             <CardMeta card={card} timezone={timezone} want={wants(card)} />
             {menu}
