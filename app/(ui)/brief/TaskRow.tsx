@@ -237,7 +237,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       <div className="flex min-w-0 items-center gap-2.5">
         {circle}
         <button
-          className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
+          // The schedule's sizes (TimeRail's agenda line): the time in the meta size, the title in the lead's.
+          className="flex min-w-0 flex-1 items-baseline gap-2 text-left text-lead"
           onClick={() => toggle()}
           aria-expanded={opened}
           aria-label={`${card.title}${due ? `, due ${due}` : ''}${overdue && open ? ', overdue' : ''}`}

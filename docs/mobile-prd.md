@@ -34,7 +34,7 @@ Three screens, and a deliberate list of what the phone does not do. All three sh
 
 **The nightly card's day.** The `head:daily` card dated D is the morning paper for D and reports on D−1; the brief shows it at the top of D.
 
-Under 900 px a day is one column, with a rail of times beside its decisions; from 900 px a broadsheet with decisions on the left (60 %) and the schedule above updates and signals on the right (40 %), with j/k/enter/d. The phone is the first.
+Under 900 px a day is one column, with a rail of times beside its decisions; from 900 px a broadsheet with decisions on the left (60 %) and on the right (40 %) the schedule, the tasks under it, then updates and signals, with j/k/enter/d. The phone is the first.
 
 **Visuals** (RFC §3.1 Presentation). Diagrams and images in a card are thumbnails fitted to the card width, captioned, in reading order; the Brief shows at most the first visual of a folded card. Tap opens a full-screen viewer with pinch-zoom and pan on the cached SVG or image at native size, a share action, and the fence source behind a disclosure. The viewer is the same component for mermaid output and for producer images, so there is one zoom experience to get right.
 

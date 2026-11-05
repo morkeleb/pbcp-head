@@ -1794,6 +1794,25 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     expect(errors).toEqual([]);
   });
 
+  it('on a wide screen stands in the right column, under the schedule and above the updates; the decisions keep the left', async () => {
+    await threeTasks();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-tasks]');
+    const at = await page.evaluate(() => {
+      const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      const [tasks, schedule, decision, update] = [box('[data-tasks]'), box('[data-schedule]'), box('article[data-kind="decision"]'), box('article.update-row')];
+      return { right: tasks.left > decision.right, underSchedule: tasks.top >= schedule.bottom, aboveUpdates: tasks.bottom <= update.top, sameColumn: Math.abs(tasks.left - schedule.left) < 60 };
+    });
+    expect(at).toEqual({ right: true, underSchedule: true, aboveUpdates: true, sameColumn: true });
+    // Set as the schedule above it: the title in the agenda's size, the time in its time's.
+    const size = (sel: string) => page.$eval(sel, (e) => getComputedStyle(e).fontSize);
+    expect(await size(`${taskRow(ids.pass)} [data-task-line]`)).toBe(await size(`[data-marker="${ids.pass}"] span.truncate`));
+    expect(await size(`${taskRow(ids.pass)} [data-due]`)).toBe(await size(`[data-marker="${ids.pass}"] time`));
+    if (process.env.PBCP_SHOTS) await page.screenshot({ path: `${process.env.PBCP_SHOTS}/tasks-wide.png` });
+    expect(errors).toEqual([]);
+  });
+
   it('records done with the circle, and the row stays, ticked and dimmed, after the brief loads again; tapping the line opens the card in place with Done primary', async () => {
     await threeTasks();
     await page.setViewport({ width: 360, height: 844 });
