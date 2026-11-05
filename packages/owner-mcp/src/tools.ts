@@ -33,6 +33,29 @@ export function choices(card: Pick<MeCard, 'actions'>): Array<{ id: string; labe
     .filter((a) => a.id !== 'edit');
 }
 
+/** A task's choices (RFC 0.9 §4.1, §4.3): `done`, always its default, then its listed actions; `dismissed` is always open too. */
+export function taskChoices(card: Pick<MeCard, 'actions'>): Array<{ id: string; label: string; default?: true }> {
+  return [{ id: 'done', label: 'done', default: true as const }, ...choices({ actions: card.actions ?? [] })];
+}
+
+/** A task as the assistant reads it out: its title, lead and when it is due (`at`, else its `about` day); overdue as the head says (§4.5). */
+const taskRow = (c: MeCard & { overdue?: true }) => {
+  const overdue = c.overdue === true;
+  return {
+    id: c.id,
+    producer: c.producer,
+    title: c.title,
+    lead: c.lead ?? '',
+    ...(c.labels?.length ? { labels: c.labels } : {}),
+    ...(c.about ? { about: c.about } : {}),
+    ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
+    ...(overdue ? { overdue: true } : {}),
+    // Only an open task takes a decision; a closed one says how it closed, or what its producer recorded (§4.3, §8).
+    ...(c.state === 'open' ? { actions: taskChoices(c) } : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
+    ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
+  };
+};
+
 const editable = (card: Pick<MeCard, 'actions'>) => (card.actions ?? []).some((a) => a === 'edit');
 
 const decisionRow = (c: MeCard) => ({
@@ -111,7 +134,8 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
         'The owner’s brief for today, or for an earlier `day` (YYYY-MM-DD). Start here when the owner asks what is new or what needs them. ' +
         '`paragraph` is the day’s summary in one paragraph, written to be read aloud as it is. `decisions` are the questions waiting for the owner, newest first: ' +
         'read each one’s title and lead, then its choices (`actions`, the one marked `default` is what the producer proposes); never decide on the owner’s behalf ' +
-        'without asking them. `updates` (artifacts) and `signals` are folded by thread, the newest card of each with how many came in it. `snoozed` counts decisions ' +
+        'without asking them. `tasks` are what the owner has to do themselves, due today or overdue (overdue ones marked), by when they are due, and those ' +
+        'closed today; read each title, lead and when it is due; one is marked done with decide `done`. `updates` (artifacts) and `signals` are folded by thread, the newest card of each with how many came in it. `snoozed` counts decisions ' +
         'set aside until later; they are not listed. For an earlier day, `decisions` are those decided that day.',
       inputSchema: { day: z.string().regex(DATE).optional().describe('YYYY-MM-DD; today when omitted') },
       annotations: { readOnlyHint: true },
@@ -125,6 +149,7 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
             date: b.date,
             paragraph: b.daily_paragraph ? plainText(b.daily_paragraph.html) : null,
             decisions: b.decisions.map(decisionRow),
+            tasks: (b.tasks ?? []).map(taskRow),
             updates: split(b.threads, 'artifact'),
             signals: split(b.threads, 'signal'),
             snoozed: b.snoozed,
@@ -151,14 +176,14 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
       description:
         'Cards by their day (an `about` date when the producer gave one, else the day of its time `at`, else the day they arrived), as compact rows: id, day, kind, producer, title, state, labels. ' +
         'Use it to answer questions such as “what did GoalPath send this week” or “which billing decisions are still open”: give a day range and narrow by ' +
-        '`label`, `producer`, `kind` (decision, artifact, signal, order) or `state` (open, decided, superseded). Without a range it covers the last seven days. ' +
+        '`label`, `producer`, `kind` (decision, task, artifact, signal, order) or `state` (open, decided, superseded). Without a range it covers the last seven days. ' +
         'Then call get_card for the one the owner wants to hear in full.',
       inputSchema: {
         from: z.string().regex(DATE).optional().describe('First day, YYYY-MM-DD'),
         to: z.string().regex(DATE).optional().describe('Last day, YYYY-MM-DD; defaults to `from`, or today'),
         label: z.string().optional(),
         producer: z.string().optional(),
-        kind: z.enum(['decision', 'artifact', 'signal', 'order']).optional(),
+        kind: z.enum(['decision', 'task', 'artifact', 'signal', 'order']).optional(),
         state: z.enum(['open', 'decided', 'superseded']).optional(),
         limit: z.number().int().min(1).max(200).optional().describe('At most this many rows, newest first (default 50)'),
       },
@@ -213,6 +238,7 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
             ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
             ...(c.source ? { source: c.source } : {}),
             ...(c.kind === 'decision' && c.state === 'open' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : {}),
+            ...(c.kind === 'task' && c.state === 'open' ? { actions: taskChoices(c) } : {}),
             ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
             ...(c.decision ? { decision: c.decision, decided_at: c.decided_at } : {}),
             ...(c.snoozed_until ? { snoozed_until: c.snoozed_until } : {}),
@@ -231,13 +257,14 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
     {
       title: 'Record a decision',
       description:
-        'Record the owner’s decision on an open decision card, and only once they have said what they decide. `decision` is one of the card’s action ids ' +
-        '(see brief or get_card), or `dismissed` to set it aside unanswered. To answer with different words than the proposal, pass `edited` with the owner’s ' +
+        'Record the owner’s decision on an open decision card or task, and only once they have said what they decide. `decision` is one of the card’s action ids ' +
+        '(see brief or get_card), or `dismissed` to set it aside unanswered. A task takes `done` when the owner has done it (its default), or one of its own ' +
+        'actions such as `tomorrow`; `done` is refused on a decision card that does not offer it, and a task is never edited. To answer with different words than the proposal, pass `edited` with the owner’s ' +
         'text (only when the card is editable). `comment` passes a note to the producer. The producer acts on the decision; it cannot be changed afterwards. ' +
         'If the card is no longer open, the head says so and what was decided.',
       inputSchema: {
         id: z.string(),
-        decision: z.string().describe('An action id from the card, or `dismissed`'),
+        decision: z.string().describe('An action id from the card, `done` on a task, or `dismissed`'),
         comment: z.string().optional(),
         edited: z.string().optional().describe('The owner’s own version of the proposal; records the decision `edited`'),
       },

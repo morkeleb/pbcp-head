@@ -2576,6 +2576,7 @@
               "decision",
               "artifact",
               "signal",
+              "task",
               "order"
             ]
           },
@@ -2856,8 +2857,43 @@
             },
             "description": "The labels of each snoozed decision: counted, never listed (§8)"
           },
+          "tasks": {
+            "description": "Open tasks due on the day or before, by when they are due (RFC 0.9 §8): \"Tasks: 3 due, 1 overdue: <entry>; ….\"",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The card the entry is"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its labels (§4.1), for filtering"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "overdue": {
+                  "type": "boolean",
+                  "description": "Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded"
+                }
+              },
+              "required": [
+                "id",
+                "labels",
+                "text",
+                "overdue"
+              ],
+              "additionalProperties": false
+            }
+          },
           "decided": {
-            "description": "Decisions made the day before: \"<title> — decided <value>\"",
+            "description": "Decisions made the day before: \"<title> — decided <value>\" (\"<title> — done\" for a task)",
             "type": "array",
             "items": {
               "type": "object",
@@ -3022,6 +3058,7 @@
               "decision",
               "artifact",
               "signal",
+              "task",
               "order"
             ]
           },
@@ -3227,6 +3264,16 @@
               "title": {
                 "type": "string"
               },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "decision",
+                  "artifact",
+                  "signal",
+                  "task",
+                  "order"
+                ]
+              },
               "state": {
                 "type": "string",
                 "enum": [
@@ -3242,6 +3289,7 @@
             "required": [
               "id",
               "title",
+              "kind",
               "state"
             ],
             "additionalProperties": false
@@ -3337,6 +3385,7 @@
               "decision",
               "artifact",
               "signal",
+              "task",
               "order"
             ]
           },
@@ -3409,6 +3458,7 @@
                   "decision",
                   "artifact",
                   "signal",
+                  "task",
                   "order"
                 ]
               },
@@ -3614,6 +3664,16 @@
                   "title": {
                     "type": "string"
                   },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "decision",
+                      "artifact",
+                      "signal",
+                      "task",
+                      "order"
+                    ]
+                  },
                   "state": {
                     "type": "string",
                     "enum": [
@@ -3629,6 +3689,7 @@
                 "required": [
                   "id",
                   "title",
+                  "kind",
                   "state"
                 ],
                 "additionalProperties": false
@@ -4057,6 +4118,343 @@
             },
             "description": "Open decisions, newest first, snoozed ones left out"
           },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "protocol": {
+                  "type": "string",
+                  "const": "pbcp/1"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "decision",
+                    "artifact",
+                    "signal",
+                    "task",
+                    "order"
+                  ]
+                },
+                "to_person": {
+                  "description": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "producer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "body": {
+                  "type": "string"
+                },
+                "urgency": {
+                  "type": "string",
+                  "enum": [
+                    "immediate",
+                    "brief",
+                    "log"
+                  ]
+                },
+                "thread": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "labels": {
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "about": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "until": {
+                  "type": "string"
+                },
+                "references": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "supersedes": {
+                  "type": "string"
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "default": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    ]
+                  }
+                },
+                "emitted_at": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "additionalProperties": {}
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "decided",
+                    "superseded"
+                  ]
+                },
+                "change_seq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "received_at": {
+                  "type": "string"
+                },
+                "changed_at": {
+                  "type": "string"
+                },
+                "delivery": {
+                  "type": "string",
+                  "enum": [
+                    "immediate",
+                    "brief",
+                    "log"
+                  ]
+                },
+                "seen_at": {
+                  "type": "string"
+                },
+                "acknowledged_at": {
+                  "type": "string"
+                },
+                "snoozed_until": {
+                  "type": "string"
+                },
+                "decision": {
+                  "type": "string"
+                },
+                "edited_proposal": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "decided_at": {
+                  "type": "string"
+                },
+                "delegated_to": {
+                  "type": "string"
+                },
+                "to_producer": {
+                  "type": "string"
+                },
+                "exec_state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "claimed",
+                    "done",
+                    "failed",
+                    "cancelled"
+                  ]
+                },
+                "claimed_by": {
+                  "type": "string"
+                },
+                "claim_expires_at": {
+                  "type": "string"
+                },
+                "claim_seq": {
+                  "type": "integer"
+                },
+                "orders.claim_seq": {
+                  "description": "On an executor’s outcome card: the claim it reports on (A.3)",
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "orders.result": {
+                  "description": "On an executor’s outcome card: how the run ended (A.3)",
+                  "type": "string",
+                  "enum": [
+                    "done",
+                    "failed"
+                  ]
+                },
+                "replaced_by": {
+                  "description": "On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "decision",
+                        "artifact",
+                        "signal",
+                        "task",
+                        "order"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "decided",
+                        "superseded"
+                      ]
+                    },
+                    "decision": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "kind",
+                    "state"
+                  ],
+                  "additionalProperties": false
+                },
+                "message": {
+                  "description": "On a 409 from the decision route for a superseded card: “This card was replaced by …”",
+                  "type": "string"
+                },
+                "rendered_html": {
+                  "type": "string",
+                  "description": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself."
+                },
+                "lead": {
+                  "type": "string",
+                  "description": "The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none."
+                },
+                "lead_source": {
+                  "type": "string",
+                  "enum": [
+                    "summary",
+                    "body"
+                  ],
+                  "description": "Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown"
+                },
+                "rendered_lead": {
+                  "type": "string",
+                  "description": "The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself."
+                },
+                "rendered_actions": {
+                  "description": "Rendered bodies of choice options (§4.4), by action id",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "first_visual": {
+                  "description": "The first diagram or image in the body, for a thumbnail",
+                  "$ref": "#/components/schemas/Visual"
+                },
+                "order_outcome": {
+                  "description": "On an outcome card: whether it moved its order, or came late or from an earlier claim",
+                  "type": "string",
+                  "enum": [
+                    "applied",
+                    "stale"
+                  ]
+                },
+                "day": {
+                  "type": "string",
+                  "description": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored"
+                },
+                "paragraph": {
+                  "description": "On a `head:daily` card: its paragraph in parts",
+                  "$ref": "#/components/schemas/ParagraphParts"
+                },
+                "overdue": {
+                  "description": "An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card",
+                  "type": "boolean",
+                  "const": true
+                }
+              },
+              "required": [
+                "protocol",
+                "id",
+                "kind",
+                "producer",
+                "title",
+                "body",
+                "emitted_at",
+                "state",
+                "change_seq",
+                "received_at",
+                "changed_at",
+                "delivery",
+                "rendered_html",
+                "lead",
+                "lead_source",
+                "rendered_lead",
+                "day"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day"
+          },
           "threads": {
             "type": "array",
             "items": {
@@ -4132,6 +4530,7 @@
           "daily_paragraph",
           "tomorrow",
           "decisions",
+          "tasks",
           "threads",
           "snoozed",
           "late_outcomes",
@@ -4176,6 +4575,7 @@
               "decision",
               "artifact",
               "signal",
+              "task",
               "order"
             ]
           },
@@ -4381,6 +4781,16 @@
               "title": {
                 "type": "string"
               },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "decision",
+                  "artifact",
+                  "signal",
+                  "task",
+                  "order"
+                ]
+              },
               "state": {
                 "type": "string",
                 "enum": [
@@ -4396,6 +4806,7 @@
             "required": [
               "id",
               "title",
+              "kind",
               "state"
             ],
             "additionalProperties": false

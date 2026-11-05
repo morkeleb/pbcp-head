@@ -11,7 +11,7 @@ export type ActionEntry = string | { id: string; label?: string; body?: string; 
 
 export interface MeCard {
   id: string;
-  kind: 'decision' | 'artifact' | 'signal' | 'order';
+  kind: 'decision' | 'artifact' | 'signal' | 'task' | 'order';
   producer: string;
   title: string;
   body: string;
@@ -26,6 +26,8 @@ export interface MeCard {
   state: 'open' | 'decided' | 'superseded';
   change_seq: number;
   received_at: string;
+  /** §4.2: when a head-owned field last changed (for a task its producer closed: when it was superseded). */
+  changed_at?: string;
   seen_at?: string;
   acknowledged_at?: string;
   snoozed_until?: string;
@@ -63,7 +65,7 @@ export interface MeCard {
   /** §8 the card's day, from the head: `about`, else the day of `at`, else the day it was received, in the head's timezone. */
   day?: string;
   /** On a superseded card: the newest card of its successor chain (§8); it takes no decision. */
-  replaced_by?: { id: string; title: string; state: 'open' | 'decided' | 'superseded'; decision?: string };
+  replaced_by?: { id: string; title: string; kind?: MeCard['kind']; state: 'open' | 'decided' | 'superseded'; decision?: string };
   /** On a 409 from the decision route: what happened, in words. */
   message?: string;
   /** On a `head:daily` card: its paragraph in parts, for the label filter. */
@@ -507,7 +509,9 @@ export function useSwipe(onSwipe: (direction: 'left' | 'right') => void) {
       const target = e.target as Element;
       // A sideways drag never presses a button or follows a link (the browser takes a moved touch for no tap), so only
       // what is typed into keeps its touches, with what scrolls sideways.
-      if (e.touches.length !== 1 || !t || target.closest('input, textarea, select, [contenteditable]') || scrollsSideways(target, el)) return reset();
+      // A row that takes its own swipes (a task: done, dismiss) keeps them from what holds it (the brief's move between days).
+      const owner = target.closest('[data-swipes]');
+      if (e.touches.length !== 1 || !t || target.closest('input, textarea, select, [contenteditable]') || scrollsSideways(target, el) || (owner && owner !== el && el.contains(owner))) return reset();
       start = { x: t.clientX, y: t.clientY };
       axis = null;
       x = 0;
@@ -554,7 +558,8 @@ export interface Option {
 }
 
 export function options(card: MeCard): { list: Option[]; edit: boolean; byDefault: Option | null } {
-  const actions = card.actions ?? ['approve', 'reject'];
+  // A task lists only its further actions: `done` is implicit and its default (RFC 0.9 §4.1); a decision defaults to approve, reject.
+  const actions = card.actions ?? (card.kind === 'task' ? [] : ['approve', 'reject']);
   const list = actions
     .filter((a) => (typeof a === 'string' ? a : a.id) !== 'edit')
     .map((a) => (typeof a === 'string' ? { id: a, label: a, isDefault: false, hasBody: false } : { id: a.id, label: a.label ?? a.id, isDefault: a.default === true, hasBody: !!a.body }));
@@ -568,7 +573,7 @@ export function options(card: MeCard): { list: Option[]; edit: boolean; byDefaul
 /** What a recorded decision reads as: the option's label, or the protocol decision's name (§4.3). */
 export function decisionLabel(card: MeCard): string {
   const { list } = options(card);
-  const named: Record<string, string> = { dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated' };
+  const named: Record<string, string> = { dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated', ...(card.kind === 'task' ? { done: 'Done' } : {}) };
   return list.find((o) => o.id === card.decision)?.label ?? named[card.decision ?? ''] ?? card.decision ?? '';
 }
 
@@ -615,7 +620,7 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
 
 /** "Approved", "Rejected", "Dismissed", "Edited", or the option's label: what the state line says was decided. */
 export function decidedLine(card: MeCard): string {
-  const past: Record<string, string> = { approve: 'Approved', reject: 'Rejected', dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated' };
+  const past: Record<string, string> = { approve: 'Approved', reject: 'Rejected', dismissed: 'Dismissed', edited: 'Edited', delegated: 'Delegated', ...(card.kind === 'task' ? { done: 'Done' } : {}) };
   return past[card.decision ?? ''] ?? decisionLabel(card);
 }
 

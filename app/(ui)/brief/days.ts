@@ -18,6 +18,8 @@ export interface BriefResponse {
   daily_paragraph: { html: string; so_far: boolean; parts: ParagraphParts } | null;
   tomorrow: { date: string; cards: MeCard[] };
   decisions: MeCard[];
+  /** Open tasks due today or earlier, and those closed today (RFC 0.9 §4.5, §8), by when they are due. */
+  tasks?: MeCard[];
   threads: Array<{ producer: string; thread: string | null; count: number; latest: MeCard; cards: UpdateThread['earlier'] }>;
   snoozed: number;
   late_outcomes: MeCard[];
@@ -41,6 +43,8 @@ export interface Day {
   /** The day's paragraph; `parts` when the head kept its entries apart, so the label filter can follow it. */
   paragraph: { html: string; soFar: boolean; parts?: ParagraphParts; /** The label filter's choice, when one is on. */ chosen?: string[] } | null;
   decisions: MeCard[];
+  /** The day's tasks (RFC 0.9 §4.5): today's, the overdue among them, and those closed today; a later day's open ones. */
+  tasks: MeCard[];
   updates: UpdateThread[];
   signals: UpdateThread[];
   /** An earlier day the person jumped to on which nothing arrived: shown, with a line saying so. */
@@ -66,6 +70,7 @@ export function aheadOf(date: string, cards: MeCard[]): Day {
     kind: 'ahead',
     paragraph: null,
     decisions: [],
+    tasks: openTasks(cards),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && c.state === 'open' && c.delivery !== 'log' && rowed(c)))),
     rail: railCards(cards),
     cards,
@@ -105,6 +110,10 @@ export const shortDay = (date: string) => {
 export const timed = (c: Pick<MeCard, 'at'>): boolean => c.at !== undefined;
 export const rowed = (c: MeCard): boolean => !timed(c) || (c.kind === 'decision' && c.state === 'open');
 
+/** A day's open tasks, by when they are due; a task is only ever a row of the Tasks section (§4.5), timed or not. */
+const openTasks = (cards: MeCard[]): MeCard[] =>
+  cards.filter((c) => c.kind === 'task' && c.state === 'open' && !(c.snoozed_until && Date.parse(c.snoozed_until) > Date.now())).sort(byTime);
+
 /**
  * The schedule's cards: the day's cards that carry `at`, from every producer, `log` included, in the day's order (§8).
  * Not a superseded one (a cancelled occurrence: the signal that cancelled it is there), nor one snoozed for now.
@@ -119,6 +128,7 @@ export const rowId = (id: string) => `brief-${id}`;
 export function anchors(day: Day): Map<string, string> {
   const out = new Map<string, string>();
   for (const c of day.decisions) out.set(c.id, rowId(c.id));
+  for (const c of day.tasks) out.set(c.id, rowId(c.id));
   for (const t of [...day.updates, ...day.signals]) for (const id of [t.latest.id, ...t.earlier.map((e) => e.id)]) out.set(id, rowId(t.latest.id));
   return out;
 }
@@ -158,6 +168,7 @@ export function todayOf(b: BriefResponse, cards?: MeCard[]): Day {
     kind: 'today',
     paragraph: b.daily_paragraph ? { html: b.daily_paragraph.html, soFar: b.daily_paragraph.so_far, parts: b.daily_paragraph.parts } : null,
     decisions: b.decisions,
+    tasks: b.tasks ?? [],
     ...split(ts),
     orders: b.order_updates ?? [],
   };
@@ -174,6 +185,8 @@ export function pastOf(date: string, cards: MeCard[]): Day {
     // What was decided that day, a decision later superseded included (§8: its decision stays intact); a card superseded
     // undecided is reachable through its thread and its successor, not listed.
     decisions: cards.filter((c) => c.kind === 'decision' && hasDecision(c) && rowed(c)),
+    // An earlier day's open tasks are today's, overdue (§4.5); what was done that day is on its schedule, if timed.
+    tasks: [],
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && rowed(c)))),
     ...(cards.length === 0 ? { nothing: true } : {}),
     rail: railCards(cards),
@@ -182,6 +195,6 @@ export function pastOf(date: string, cards: MeCard[]): Day {
 }
 
 export function tomorrowOf(b: BriefResponse): Day {
-  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision' && rowed(c)), ...split(threads(b.tomorrow.cards.filter((c) => isUpdate(c) && rowed(c)))) };
+  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision' && rowed(c)), tasks: openTasks(b.tomorrow.cards), ...split(threads(b.tomorrow.cards.filter((c) => isUpdate(c) && rowed(c)))) };
 }
 

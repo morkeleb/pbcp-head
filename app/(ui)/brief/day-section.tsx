@@ -1,7 +1,8 @@
 'use client';
 
 // A day of the brief, the same component tree in both layouts (brief-view.tsx) and on the front door's demo brief
-// (app/about): the sticky dated header, the day's brief in short paragraphs, its decisions, the day's schedule (the
+// (app/about): the sticky dated header, the day's brief in short paragraphs, its tasks (RFC 0.9 §4.5: together, as a
+// checklist, overdue first), its decisions, the day's schedule (the
 // cards with `at` as an agenda, or on a time rail that shows the free time between them, RFC 0.8 §8), and its updates
 // and signals as threads. On the timeline (a phone) they
 // follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on the
@@ -11,6 +12,7 @@ import Link from 'next/link';
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { composeParagraphs } from '../../../lib/brief/paragraph';
+import { isOverdue, wasOverdue } from '../../../lib/brief/tasks';
 import { useLocale, type MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
 import { clock } from './DecisionCard';
@@ -38,20 +40,39 @@ export const weekOf = (date: string): string[] => {
 
 export { shortDay } from './days';
 
-export function DaySection({ day, name, wide, tz, decision, update, onChange }: {
+export function DaySection({ day, name, wide, tz, decision, update, task, onChange }: {
   day: Day; name: string; wide: boolean; tz: string;
+  /** A task's row; `overdue` when it is listed under "Overdue". Without it the day shows no tasks (the demo sends none). */
+  task?: (c: MeCard, overdue: boolean) => ReactNode;
   /** A card changed on the schedule (acknowledged, snoozed). */
   onChange?: (card: MeCard) => void;
   decision: (c: MeCard, under: string) => ReactNode; update: (t: UpdateThread) => ReactNode;
 }) {
   // An earlier day opens with its nightly card (the morning paper for that day); today's is the same fold, so far.
   const heading = day.kind === 'today' ? 'Today’s brief' : day.kind === 'past' ? 'Morning brief' : '';
-  const empty = day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0 && !day.rail?.length;
+  const empty = day.tasks.length === 0 && day.decisions.length === 0 && day.updates.length === 0 && day.signals.length === 0 && !day.rail?.length;
   // One short paragraph per part of the brief (lib/brief/paragraph.ts), filtered by the chosen labels; a paragraph the
   // head did not keep in parts is the one run of prose it was written as.
   const p = day.paragraph;
   const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
   const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} />;
+  // RFC 0.9 §4.5: the day's tasks together, overdue first and marked, before the decisions; only when there are any.
+  const now = new Date();
+  const late = day.tasks.filter((c) => wasOverdue(c, now, tz));
+  const due = day.tasks.filter((c) => !late.includes(c));
+  const open = day.tasks.filter((c) => c.state === 'open').length;
+  const overdue = day.tasks.filter((c) => isOverdue(c, now, tz)).length;
+  const tasks = task && day.tasks.length > 0 && (
+    <Group title={`Tasks · ${open} open${overdue > 0 ? `, ${overdue} overdue` : ''}`} data="tasks">
+      {late.length > 0 && (
+        <>
+          <h4 className="pb-1 text-meta font-semibold uppercase tracking-meta text-destructive">Overdue</h4>
+          <div className="divide-y border-y" data-overdue>{late.map((c) => task(c, true))}</div>
+        </>
+      )}
+      {due.length > 0 && <div className={cn('divide-y border-y', late.length > 0 && 'mt-3')} data-due-tasks>{due.map((c) => task(c, false))}</div>}
+    </Group>
+  );
   const decisions = day.decisions.length > 0 && (
     <Group title="Decisions" count={day.decisions.length}>
       <Rail wide={wide} tz={tz} items={day.decisions.map((c) => ({ key: c.id, at: c.received_at, node: decision(c, day.date) }))} gap="gap-3" />
@@ -85,6 +106,7 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] gap-6 pt-3">
           <div className="min-w-0">
             {brief}
+            {tasks}
             {decisions}
           </div>
           <div className="min-w-0">
@@ -96,6 +118,7 @@ export function DaySection({ day, name, wide, tz, decision, update, onChange }: 
       ) : (
         <div className="pt-1">
           {brief}
+          {tasks}
           {decisions}
           {schedule}
           {updates}
@@ -134,9 +157,9 @@ function OrderUpdateRow({ order, tz }: { order: OrderUpdate; tz: string }) {
 
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (ch) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' } as Record<string, string>)[ch]};`);
 
-function Group({ title, count, tools, children }: { title: string; count?: number; tools?: ReactNode; children: ReactNode }) {
+function Group({ title, count, tools, children, data }: { title: string; count?: number; tools?: ReactNode; children: ReactNode; data?: string }) {
   return (
-    <div className="pt-3">
+    <div className="pt-3" {...(data ? { [`data-${data}`]: '' } : {})}>
       <div className="flex items-center justify-between gap-2 pb-2">
         <h3 className="text-meta font-semibold uppercase tracking-meta text-muted-foreground">
           {title}

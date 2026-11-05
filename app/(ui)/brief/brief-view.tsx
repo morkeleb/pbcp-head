@@ -24,6 +24,7 @@ import { matchesLabels } from '../../../lib/brief/paragraph';
 import { isDate } from '../../../lib/time';
 import { LabelFilter, useLabelFilter } from './LabelFilter';
 import { DecisionCard, type DecisionCardHandle } from './DecisionCard';
+import { TaskRow, type TaskRowHandle } from './TaskRow';
 import { UpdateRow, type UpdateRowHandle, type UpdateThread } from './UpdateRow';
 import { addDays, useBrief, type Day } from './use-brief';
 import { dayName, DaySection, shortDay, weekOf } from './day-section';
@@ -48,7 +49,7 @@ export function BriefView() {
   const [hint, setHint] = useState(false);
   /** Which way the last move went, for the slide: the next day comes in from the right, the day before from the left. */
   const [from, setFrom] = useState<'left' | 'right' | null>(null);
-  const handles = useRef(new Map<string, DecisionCardHandle | UpdateRowHandle | null>());
+  const handles = useRef(new Map<string, DecisionCardHandle | UpdateRowHandle | TaskRowHandle | null>());
   const today = brief?.date ?? '';
 
   // The range the brief reaches: any day of the past year (or back to the first card, if earlier), and two weeks ahead.
@@ -240,7 +241,7 @@ export function BriefView() {
     return () => removeEventListener('keydown', key);
   }, [wide, focus]);
 
-  const onScreen: MeCard[] = day ? [...day.decisions, ...day.updates.map((t) => t.latest), ...day.signals.map((t) => t.latest)] : [];
+  const onScreen: MeCard[] = day ? [...day.tasks, ...day.decisions, ...day.updates.map((t) => t.latest), ...day.signals.map((t) => t.latest)] : [];
   useChromeCards(onScreen, { at: cachedAt, timezone: brief?.timezone });
   const [chosen, setChosen] = useLabelFilter();
 
@@ -248,7 +249,7 @@ export function BriefView() {
   if (!brief || wide === null) return <main className="mx-auto max-w-xl p-4 text-muted-foreground">Loading…</main>;
 
   const tz = brief.timezone;
-  const openOn = new Set(brief.decisions.map((c) => c.day ?? c.received_at.slice(0, 10))); // §8: a card's day
+  const openOn = new Set([...brief.decisions, ...(brief.tasks ?? []).filter((c) => c.state === 'open')].map((c) => c.day ?? c.received_at.slice(0, 10))); // §8: a card's day
   const week: WeekDay[] = weekOf(date).map((d) => ({ date: d, open: openOn.has(d), reachable: d >= firstDay && d <= lastDay }));
   // The labels on the day's cards, each with how many carry it.
   const counts = new Map<string, number>();
@@ -261,7 +262,7 @@ export function BriefView() {
     </MastheadTools>
   );
   const shown = day && chosen.length ? filtered(day, chosen) : day;
-  const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | null) => void handles.current.set(id, h);
+  const register = (id: string) => (h: DecisionCardHandle | UpdateRowHandle | TaskRowHandle | null) => void handles.current.set(id, h);
 
   // §8: a decision whose day is later than the day it is listed under (an open one, under today) says which day it is for.
   const decision = (c: MeCard, under: string) => (
@@ -270,6 +271,9 @@ export function BriefView() {
       paired={(references.get(c.id) ?? []).filter((r) => r.received_at >= c.received_at)}
       {...(c.day && c.day > under ? { forDay: shortDay(c.day) } : {})}
     />
+  );
+  const task = (c: MeCard, overdue: boolean) => (
+    <TaskRow key={c.id} card={c} timezone={tz} today={today} onChange={change} overdue={overdue} focused={focus === c.id} handle={register(c.id)} />
   );
   const update = (t: UpdateThread) => (
     <UpdateRow key={t.latest.id} thread={t} timezone={tz} focused={focus === t.latest.id} handle={register(t.latest.id)} />
@@ -304,7 +308,7 @@ export function BriefView() {
           className={cn('motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200', from === 'right' && 'motion-safe:slide-in-from-right-8', from === 'left' && 'motion-safe:slide-in-from-left-8')}
         >
           {shown ? (
-            <DaySection day={shown} name={dayName(shown, today)} wide={wide} tz={tz} decision={decision} update={update} onChange={change} />
+            <DaySection day={shown} name={dayName(shown, today)} wide={wide} tz={tz} decision={decision} update={update} task={task} onChange={change} />
           ) : unloaded === date ? (
             // Below the day buttons, which take no room of their own (a day's header line is under them).
             <p className="mt-9 py-6 text-lead text-muted-foreground" role="alert" data-day-unloaded>
@@ -339,6 +343,7 @@ function filtered(day: Day, chosen: string[]): Day {
   const parts = day.paragraph?.parts;
   return {
     ...day,
+    tasks: day.tasks.filter(keep),
     decisions: day.decisions.filter(keep),
     updates: day.updates.filter((t) => keep(t.latest)),
     signals: day.signals.filter((t) => keep(t.latest)),

@@ -12,9 +12,11 @@
 //      rest counted by producer; "Nothing waiting for you." on a quiet day
 //   7  orders (A.3): an order whose outcome arrived is told with what was decided ("<order> — done: <lead>"), an order
 //      that only progressed is counted among the rest; their cards are not threads of their own
+//   8  tasks (RFC 0.9 §8): "Tasks: N due, M overdue: <title> — <lead>; …" after the decisions, a Tasks list with when
+//      each is due; a task done the day before is "<title> — done" among what was decided, never a thread
 
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 7;
+export const FOLD_VERSION = 8;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

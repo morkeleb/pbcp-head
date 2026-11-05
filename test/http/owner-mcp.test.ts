@@ -211,6 +211,23 @@ describe('every tool, over /api/mcp', () => {
     await call('POST', '/api/test', { body: { clock: '2026-10-08T09:00:00Z' } });
     expect(parse(await tool('brief', { day: '2026-10-07' }))).toMatchObject({ date: '2026-10-07', decisions: [expect.objectContaining({ id: 'hermes:mail:anna', state: 'decided', decision: 'edited' })] });
   });
+
+  it('reads tasks out with when they are due, overdue marked, and marks one done with decide; its description says so (RFC 0.9 §4.3)', async () => {
+    const todo = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todo' })}`;
+    await call('PUT', cardPath('todo:task:bins'), { auth: todo, body: card('todo:task:bins', { kind: 'task', title: 'Put the bins out', summary: 'Grey bin.', about: '2026-10-06' }) });
+    await call('PUT', cardPath('todo:task:pass'), { auth: todo, body: card('todo:task:pass', { kind: 'task', title: 'Renew the passport', at: '2026-10-07T16:00:00Z', actions: ['tomorrow'] }) });
+    const client = await mcpClient((await tokens()).tokens.access_token);
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === 'decide')!.description).toMatch(/task takes `done`/);
+    const b = parse(await client.callTool({ name: 'brief', arguments: {} }));
+    expect(b.tasks).toEqual([
+      expect.objectContaining({ id: 'todo:task:bins', about: '2026-10-06', overdue: true, actions: [{ id: 'done', label: 'done', default: true }] }),
+      expect.objectContaining({ id: 'todo:task:pass', at: '2026-10-07T16:00:00Z', actions: [{ id: 'done', label: 'done', default: true }, { id: 'tomorrow', label: 'tomorrow' }] }),
+    ]);
+    expect(b.tasks[1]).not.toHaveProperty('overdue');
+    expect(parse(await client.callTool({ name: 'list_cards', arguments: { from: '2026-10-06', to: '2026-10-07', kind: 'task' } })).cards.map((c: { id: string }) => c.id).sort()).toEqual(['todo:task:bins', 'todo:task:pass']);
+    expect(parse(await client.callTool({ name: 'decide', arguments: { id: 'todo:task:bins', decision: 'done' } }))).toMatchObject({ id: 'todo:task:bins', state: 'decided', decision: 'done' });
+  });
 });
 
 describe('scoped tokens are confined to the tools', () => {

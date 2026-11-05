@@ -11,6 +11,8 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { clock, DecisionCard } from '../../brief/DecisionCard';
+import { localDay } from '../../brief/days';
+import { TaskRow } from '../../brief/TaskRow';
 import { UpdateRow } from '../../brief/UpdateRow';
 import { PageRow, useChromeCards } from '../../chrome';
 import { api, cardHref, useFresh, when } from '../../client';
@@ -51,7 +53,8 @@ interface Detail {
 /** Progress in an order's thread is folded: the order, the latest few updates, the rest behind a disclosure (§8). */
 const SHOWN = 3;
 
-const KIND: Record<string, string> = { decision: 'Decision', artifact: 'Update', signal: 'Signal', order: 'Order' };
+// What the card asks, in the person's words (RFC 0.9 §4.1a: a task is something to do).
+const KIND: Record<string, string> = { decision: 'Decision', artifact: 'Update', signal: 'Signal', task: 'To do', order: 'Order' };
 
 /** The id from the raw path, decoded once, so an id with %XX in it survives (§5). */
 /** The route's own id segment, decoded once (a card id has no `%` of its own, §5). */
@@ -116,6 +119,9 @@ export function CardView() {
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-4 min-[900px]:px-6" data-card-page>
         {card.kind === 'decision' ? (
           <DecisionCard card={card} timezone={timezone} onChange={update} expanded />
+        ) : card.kind === 'task' ? (
+          // §4.5 presenting a task: Done the primary control, the listed actions beside it; the decision log below.
+          <TaskRow card={card} timezone={timezone} today={localDay(new Date().toISOString(), timezone)} onChange={update} expanded />
         ) : card.kind === 'order' ? (
           <OrderBlock order={card} timezone={timezone} onChanged={(c) => (c ? update(c) : reload())} />
         ) : (

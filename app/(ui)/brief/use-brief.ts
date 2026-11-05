@@ -163,7 +163,9 @@ export function useBrief() {
       const tomorrowCards = intoTomorrow ? [...b.tomorrow.cards, c] : b.tomorrow.cards.map((t) => (t.id === c.id ? c : t));
       // The head's counter moved by this change alone: the brief is still current, and the live check need not reload it.
       const seq = c.change_seq === b.seq + 1 ? c.change_seq : b.seq;
-      return { ...b, seq, decisions, tomorrow: { ...b.tomorrow, cards: tomorrowCards } };
+      // A task closed here stays in today's list, ticked, as the brief lists it again (RFC 0.9 §4.5); snoozed, it leaves.
+      const tasks = c.kind !== 'task' || !b.tasks ? b.tasks : hidden ? b.tasks.filter((t) => t.id !== c.id) : b.tasks.map((t) => (t.id === c.id ? c : t));
+      return { ...b, seq, decisions, ...(tasks ? { tasks } : {}), tomorrow: { ...b.tomorrow, cards: tomorrowCards } };
     });
     const swap = (m: Map<string, MeCard[]>) => {
       let touched = false;

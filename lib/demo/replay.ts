@@ -33,6 +33,8 @@ export interface DemoDay {
   kind: 'today' | 'tomorrow';
   paragraph: { html: string; soFar: boolean; parts: ParagraphParts } | null;
   decisions: MeCard[];
+  /** The demo sends no tasks (RFC 0.9); the day still has the list, empty. */
+  tasks: MeCard[];
   updates: DemoThread[];
   signals: DemoThread[];
   /** The day's cards with `at`, for its schedule (RFC 0.8 §8), `log` included. */
@@ -201,6 +203,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       kind: 'today',
       paragraph: { html: composeParagraph(parts), soFar: true, parts },
       decisions,
+      tasks: [],
       updates: todayUpdates.filter((t) => t.latest.kind === 'artifact'),
       signals: todayUpdates.filter((t) => t.latest.kind === 'signal'),
       rail: rail(date),
@@ -211,6 +214,7 @@ async function build(db: Db, date: string): Promise<DemoHead> {
       kind: 'tomorrow',
       paragraph: null,
       decisions: tomorrowCards.filter((c) => c.kind === 'decision'),
+      tasks: [],
       updates: threads(tomorrowCards.filter((c) => c.kind === 'artifact')),
       signals: threads(tomorrowCards.filter((c) => c.kind === 'signal')),
       rail: rail(tomorrowDate),

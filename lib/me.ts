@@ -17,6 +17,7 @@ import type { Visual } from './render/markdown';
 import { replacedBy, toCard, type Successor } from './store';
 import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
+import { byDue, isOverdue } from './brief/tasks';
 import { formatTime } from './push/daily';
 
 type Row = typeof cards.$inferSelect;
@@ -194,6 +195,32 @@ export async function brief(db: Db, headId: string) {
     .orderBy(desc(cards.receivedAt), desc(cards.changeSeq))
     .limit(200);
 
+  // §8, §4.5: every open task that is not snoozed and whose day is today or earlier (an earlier one is overdue), and the
+  // tasks closed today: decided here (done, a listed action, dismissed) or superseded by the producer's record of what
+  // came of them (§4.3: "Done in Todoist"), which stay, ticked, for the rest of the day. A task replaced by another task
+  // is that one's to show.
+  const [dayStart, dayEnd] = dayRange(today, head.timezone);
+  const taskRows = await db
+    .select()
+    .from(cards)
+    .where(
+      and(
+        eq(cards.headId, headId),
+        sql`${cards.producerDoc}->>'kind' = 'task'`,
+        or(
+          and(eq(cards.state, 'open'), lte(cards.day, today), notSnoozed(at)),
+          and(ne(cards.state, 'open'), or(and(gte(cards.decidedAt, dayStart), lt(cards.decidedAt, dayEnd)), and(eq(cards.state, 'superseded'), gte(cards.changedAt, dayStart), lt(cards.changedAt, dayEnd)))),
+        ),
+      ),
+    )
+    .orderBy(asc(cards.receivedAt), asc(cards.id)) // ties in when they are due keep the order they came in
+    .limit(200);
+  const tasks = (await presentCards(db, taskRows))
+    .filter((c) => c.state !== 'superseded' || c.replaced_by?.kind !== 'task')
+    .sort(byDue(head.timezone))
+    // §4.5: overdue as the head presents it now, on the response only; never a field of the card.
+    .map((c) => (isOverdue(c, at, head.timezone) ? { ...c, overdue: true as const } : c));
+
   const attention = await db
     .select()
     .from(cards)
@@ -316,7 +343,7 @@ export async function brief(db: Db, headId: string) {
 
   const [oldest] = await db.select({ day: cards.day }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.day)).limit(1);
 
-  const shown = [...decisions, ...loose, ...late, ...(daily ? [daily] : [])];
+  const shown = [...decisions, ...taskRows.filter((r) => r.state === 'open'), ...loose, ...late, ...(daily ? [daily] : [])];
   return {
     date: today,
     timezone: head.timezone,
@@ -327,6 +354,7 @@ export async function brief(db: Db, headId: string) {
     daily_paragraph: paragraph,
     tomorrow: { date: tomorrow, cards: await presentCards(db, ahead) },
     decisions: await presentCards(db, decisions),
+    tasks,
     threads: folds.map(({ immediate: _i, order: _o, ...f }) => f),
     snoozed,
     late_outcomes: await presentCards(db, late),

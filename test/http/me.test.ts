@@ -540,3 +540,63 @@ describe('a superseded card (RFC 0.8 §7.3, §8)', () => {
     expect(b.daily_paragraph.html).not.toContain('Triage 1');
   });
 });
+
+describe('tasks (RFC 0.9 §4.1, §4.3, §4.5, §8)', () => {
+  let todo: string;
+  const task = (id: string, extra: Record<string, unknown> = {}) => put(id, { kind: 'task', title: id.split(':').at(-1), ...extra }, todo);
+  const decide = (id: string, body: unknown) => me('POST', `/api/me/cards/${encodeURIComponent(id)}/decision`, body);
+  beforeEach(async () => {
+    todo = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todo', ceiling: 'immediate' })}`;
+  });
+
+  it('takes done on a task, through core; refuses it on a decision that does not list it, and on an artifact', async () => {
+    expect((await task('todo:task:1', { actions: ['tomorrow'] })).status).toBe(201);
+    const r = await decide('todo:task:1', { decision: 'done', comment: 'Posted it.' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ state: 'decided', decision: 'done', comment: 'Posted it.' });
+    expect((await task('todo:task:2', { actions: ['tomorrow'] })).status).toBe(201);
+    expect((await decide('todo:task:2', { decision: 'tomorrow' })).body).toMatchObject({ decision: 'tomorrow' });
+    expect((await task('todo:task:3')).status).toBe(201);
+    expect((await decide('todo:task:3', { decision: 'edited', edited_proposal: 'x' })).body.error).toBe('invalid_decision');
+    await put('hermes:gmail:q');
+    expect((await decide('hermes:gmail:q', { decision: 'done' })).body.error).toBe('invalid_decision');
+    await put('hermes:gmail:art', { kind: 'artifact' });
+    expect((await decide('hermes:gmail:art', { decision: 'done' })).body.error).toBe('not_decidable');
+    // The RFC route takes it too (§7.3).
+    expect((await task('todo:task:4')).status).toBe(201);
+    expect((await call('POST', `/api/cards/${encodeURIComponent('todo:task:4')}/decision`, { auth: owner.auth, body: { decision: 'done' } })).body).toMatchObject({ decision: 'done' });
+  });
+
+  it('lists in the brief every open task due today or earlier, by when it is due, and those closed today; not a later one, a snoozed one, nor a task among the decisions', async () => {
+    await clock('2026-10-05T09:00:00Z');
+    await task('todo:task:overdue', { about: '2026-10-05' });
+    await clock('2026-10-07T07:00:00Z');
+    await task('todo:task:noon', { at: '2026-10-07T12:00:00Z' });
+    await task('todo:task:undated');
+    await task('todo:task:tomorrow', { about: '2026-10-08' });
+    await task('todo:task:snoozed');
+    await task('todo:task:ticked');
+    await task('todo:task:closed');
+    await me('POST', `/api/me/cards/${encodeURIComponent('todo:task:snoozed')}/snooze`, { preset: 'tomorrow' });
+    await decide('todo:task:ticked', { decision: 'done' });
+    // Completed in the tool: the producer supersedes it with its record (§4.3).
+    await put('todo:task:closed:done', { kind: 'artifact', urgency: 'log', title: 'Done in Todoist', supersedes: 'todo:task:closed' }, todo);
+    const b = (await me('GET', '/api/me/brief')).body;
+    // By when they are due; those due alike, as they came (here at once: then by id).
+    expect(ids(b.tasks)).toEqual(['todo:task:overdue', 'todo:task:noon', 'todo:task:closed', 'todo:task:ticked', 'todo:task:undated']);
+    expect(b.tasks.find((c: { id: string }) => c.id === 'todo:task:closed')).toMatchObject({ state: 'superseded', replaced_by: { id: 'todo:task:closed:done', kind: 'artifact', title: 'Done in Todoist' } });
+    expect(ids(b.decisions)).toEqual([]);
+    expect(ids(b.tomorrow.cards)).toContain('todo:task:tomorrow');
+    // The paragraph counts and names them (§8).
+    expect(b.daily_paragraph.html).toMatch(/^Tasks: 3 due, 1 overdue: <a [^>]*>overdue<\/a> — Evidence; <a [^>]*>noon<\/a> — Evidence; <a [^>]*>undated<\/a> — Evidence\.$/);
+    // The next day, what was closed today has dropped.
+    await clock('2026-10-08T07:00:00Z');
+    // The next morning: what was closed has dropped, the snooze has run out, and the task about that day is due today.
+    expect(ids((await me('GET', '/api/me/brief')).body.tasks)).toEqual(['todo:task:overdue', 'todo:task:noon', 'todo:task:tomorrow', 'todo:task:snoozed', 'todo:task:undated']);
+  });
+
+  it('pushes an open task the producer sent immediate, as any card (§9); nothing new for tasks', async () => {
+    const r = await task('todo:task:soon', { urgency: 'immediate', at: '2026-10-07T10:30:00Z' });
+    expect(r.body).toMatchObject({ kind: 'task', delivery: 'immediate', state: 'open' });
+  });
+});
