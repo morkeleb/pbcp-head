@@ -5,8 +5,9 @@
 // checklist, overdue first), its decisions, the day's schedule (the
 // cards with `at` as an agenda, or on a time rail that shows the free time between them, RFC 0.8 §8), and its updates
 // and signals as threads. On the timeline (a phone) they
-// follow each other in that order, each decision beside the time it came; on the broadsheet the decisions stand on the
-// left, and the schedule above the updates and signals on the right.
+// follow each other in that order (the tasks before the decisions), each decision beside the time it came; on the
+// broadsheet the decisions stand on the left, and on the right the schedule, the tasks under it, then the updates and
+// signals.
 
 import Link from 'next/link';
 import { useLayoutEffect, useState, type ReactNode } from 'react';
@@ -106,11 +107,11 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] gap-6 pt-3">
           <div className="min-w-0">
             {brief}
-            {tasks}
             {decisions}
           </div>
           <div className="min-w-0">
             {schedule}
+            {tasks}
             {updates}
             {signals}
           </div>

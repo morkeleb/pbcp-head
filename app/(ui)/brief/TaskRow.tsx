@@ -237,13 +237,15 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       <div className="flex min-w-0 items-center gap-2.5">
         {circle}
         <button
-          className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
+          // The schedule's sizes (TimeRail's agenda line): the time in the meta size, the title in the lead's.
+          className="flex min-w-0 flex-1 items-baseline gap-2 text-left text-lead"
           onClick={() => toggle()}
           aria-expanded={opened}
           aria-label={`${card.title}${due ? `, due ${due}` : ''}${overdue && open ? ', overdue' : ''}`}
           data-task-line
         >
-          {due && <span className={cn('flex-none text-meta tabular-nums', overdue && open ? 'text-destructive' : 'text-muted-foreground')} data-due>{due}</span>}
+          {/* Not through cn: tailwind-merge takes the custom text-meta size and a text colour for one group and keeps the colour. */}
+          {due && <span className={`flex-none text-meta tabular-nums ${overdue && open ? 'text-destructive' : 'text-muted-foreground'}`} data-due>{due}</span>}
           <span className="min-w-0 truncate">
             <span className={cn('font-medium', done && 'line-through decoration-1')}>{card.title}</span>
             {closed ? (
