@@ -57,7 +57,8 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
   const p = day.paragraph;
   const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
   const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} />;
-  // RFC 0.9 §4.5: the day's tasks together, overdue first and marked, before the decisions; only when there are any.
+  // RFC 0.9 §4.5: the day's tasks together, overdue first and marked; only when there are any. Before the decisions on
+  // the timeline, under the schedule on the broadsheet.
   const now = new Date();
   const late = day.tasks.filter((c) => wasOverdue(c, now, tz));
   const due = day.tasks.filter((c) => !late.includes(c));

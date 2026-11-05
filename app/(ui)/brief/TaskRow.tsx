@@ -244,8 +244,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
           aria-label={`${card.title}${due ? `, due ${due}` : ''}${overdue && open ? ', overdue' : ''}`}
           data-task-line
         >
-          {/* Not through cn: tailwind-merge takes the custom text-meta size and a text colour for one group and keeps the colour. */}
-          {due && <span className={`flex-none text-meta tabular-nums ${overdue && open ? 'text-destructive' : 'text-muted-foreground'}`} data-due>{due}</span>}
+          {due && <span className={cn('flex-none text-meta tabular-nums', overdue && open ? 'text-destructive' : 'text-muted-foreground')} data-due>{due}</span>}
           <span className="min-w-0 truncate">
             <span className={cn('font-medium', done && 'line-through decoration-1')}>{card.title}</span>
             {closed ? (
