@@ -139,13 +139,14 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       data-primary
       className={cn(
         // The schedule's dot's size (10 px there, 12 px here with its ring), so the two lists read as one column; the tap
-        // area is larger than the ring (40 px), without taking room on the line.
-        'relative flex size-3 flex-none items-center justify-center rounded-full border-[1.5px] transition-colors after:absolute after:-inset-[14px] after:content-[""]',
+        // area is larger than the ring (40 px tall), without taking room on the line: it stops at the gap, so a tap on the
+        // time or the title opens the row rather than marking it done.
+        'relative flex size-3 flex-none items-center justify-center rounded-full border-[1.5px] transition-colors after:absolute after:-inset-y-3 after:-left-[14px] after:-right-1 after:content-[""]',
         done ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground hover:border-primary',
         open && 'disabled:opacity-50',
       )}
     >
-      {done && <Check className="size-2.5" strokeWidth={3.5} aria-hidden />}
+      {done && <Check className="size-2" strokeWidth={4} aria-hidden />}
     </button>
   );
 
@@ -206,7 +207,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
           {menu}
         </div>
         <div className="mt-1 flex items-start gap-3">
-          <span className="pt-1">{circle}</span>
+          {/* Centred on the title's first line. */}
+          <span className="flex h-[1lh] flex-none items-center font-serif text-title">{circle}</span>
           <div className="min-w-0 flex-1">
             <h3 className={cn('font-serif text-title font-semibold tracking-editorial', done && 'text-muted-foreground line-through decoration-1')}>{card.title}</h3>
             {card.rendered_lead && <p className="lead mt-1 text-lead text-muted-foreground" dangerouslySetInnerHTML={{ __html: card.rendered_lead }} />}
@@ -262,7 +264,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
         <span className="flex max-w-[35%] flex-none items-center gap-2 whitespace-nowrap text-meta text-muted-foreground [&>[aria-hidden]:first-child]:hidden [&_[data-labels]]:max-w-[5.5rem]">
           <CardLabels labels={card.labels} first />
           {link && (
-            <a href={link.href} target="_blank" rel="noopener" title={link.host} aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`} className="flex min-w-0 items-center gap-0.5 hover:text-foreground hover:underline" data-source-icon>
+            <a href={link.href} target="_blank" rel="noopener" title={link.host} aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`} className="relative flex min-w-0 items-center gap-0.5 after:absolute after:-inset-2 after:content-[''] hover:text-foreground hover:underline" data-source-icon>
               <span className="truncate max-[599px]:hidden" data-source-host>{link.host}</span>
               <ArrowUpRight className="size-3 flex-none" aria-hidden />
             </a>

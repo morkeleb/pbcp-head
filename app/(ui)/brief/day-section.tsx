@@ -72,7 +72,13 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
           <div className="divide-y border-y" data-overdue>{late.map((c) => task(c, true))}</div>
         </>
       )}
-      {due.length > 0 && <div className={cn('divide-y border-y', late.length > 0 && 'mt-3')} data-due-tasks>{due.map((c) => task(c, false))}</div>}
+      {due.length > 0 && (
+        <>
+          {/* Under the overdue ones, the rest has its own heading: two rules with nothing between them read as a stray line. */}
+          {late.length > 0 && <h4 className="mt-3 pb-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-due-heading>{day.kind === 'today' ? 'Today' : 'Due'}</h4>}
+          <div className="divide-y border-y" data-due-tasks>{due.map((c) => task(c, false))}</div>
+        </>
+      )}
     </Group>
   );
   const decisions = day.decisions.length > 0 && (
