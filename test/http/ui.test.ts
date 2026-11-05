@@ -1762,16 +1762,16 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     for (const id of Object.values(ids)) await until(async () => (await row(id)).renderedHtml !== null);
   }
 
-  it('lists the day’s tasks before the decisions, overdue first and marked with their day; never among the decisions; a timed one is also a schedule marker, not a second row', async () => {
+  it('lists the day’s tasks under the schedule, as on a wide screen, overdue first and marked with their day; never among the decisions; a timed one is also a schedule marker, not a second row', async () => {
     await threeTasks();
     await page.setViewport({ width: 360, height: 844 });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('[data-tasks]');
     expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 3 open, 1 overdue');
-    // Before the decisions, in the day's order.
+    // The decisions, the schedule, the tasks under it, then the updates: the broadsheet's right column, in one.
     expect(await page.evaluate(() => {
-      const [t, d] = [document.querySelector('[data-tasks]')!, document.querySelector('article[data-kind="decision"]')!];
-      return !!(t.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const els = ['article[data-kind="decision"]', '[data-schedule]', '[data-tasks]', 'article.update-row'].map((s) => document.querySelector(s)!);
+      return els.every((e, i) => i === 0 || !!(els[i - 1]!.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING));
     })).toBe(true);
     expect(await page.$$eval('[data-overdue] article', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual([ids.bins]);
     expect(await page.$$eval('[data-due-tasks] article', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual([ids.pass, ids.dentist]);
@@ -1791,6 +1791,15 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     expect(await page.$$(`article[data-kind="decision"][data-card^="todoist:"]`)).toEqual([]);
     expect(await page.$$eval(`article[data-card="${ids.pass}"]`, (as) => as.length)).toBe(1);
     expect(await page.$eval(`[data-schedule] [data-marker="${ids.pass}"]`, (a) => a.getAttribute('href'))).toBe(`#brief-${ids.pass}`);
+    // On the schedule's rail, as on a wide screen: the ring centred on the dots, the time where the schedule's starts.
+    expect(await page.evaluate((id) => {
+      const box = (e: Element) => e.getBoundingClientRect();
+      const row = document.querySelector(`article[data-card="${id}"]`)!;
+      const ring = box(row.querySelector('[data-done-control]')!);
+      const dot = box(document.querySelector(`[data-rail-entry="${id}"] > span`)!);
+      const [due, time] = [box(row.querySelector('[data-due]')!), box(document.querySelector(`[data-marker="${id}"] time`)!)];
+      return { dotCentre: Math.abs(ring.left + ring.width / 2 - (dot.left + dot.width / 2)) <= 2, timesAlign: Math.abs(due.left - time.left) <= 2 };
+    }, ids.pass)).toEqual({ dotCentre: true, timesAlign: true });
     if (process.env.PBCP_SHOTS) await shot('tasks-360');
     expect(errors).toEqual([]);
   });
