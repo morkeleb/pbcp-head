@@ -66,9 +66,8 @@ export async function dailyParagraphNow(db: Db, headId: string, timezone: string
 /** Each entry's markdown rendered inline by the same pipeline and sanitiser as bodies. */
 export async function renderParts(db: Db, parts: ParagraphParts): Promise<ParagraphParts> {
   const inline = async (md: string) => (await renderBody(db, md)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
-  const each = (es: ParagraphParts['decisions'] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
-  const tasks = await Promise.all((parts.tasks ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
-  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, tasks, decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
+  const each = <E extends { text: string }>(es: E[] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
+  return { decisions: await each(parts.decisions), snoozed: parts.snoozed, tasks: await each(parts.tasks), decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
 }
 
 /** Mints `head:daily:<date>`; a quiet day's says "Nothing waiting for you." */

@@ -176,8 +176,12 @@ const hhmm = (ts: string, timezone: string) =>
  * "today" or "Tue 4 Nov" for a day without a time, "no due date" with neither.
  */
 export function dueText(t: Pick<Card, 'at' | 'about'>, date: string, timezone: string): string {
+  if (t.at !== undefined) {
+    // A time is said with its own day, whatever `about` says.
+    const on = localDate(instant(t.at), timezone);
+    return on === date ? hhmm(t.at, timezone) : `${dayAndMonth(on)} ${hhmm(t.at, timezone)}`;
+  }
   const day = dueDay(t, timezone);
-  if (t.at !== undefined) return day === date ? hhmm(t.at, timezone) : `${dayAndMonth(localDate(instant(t.at), timezone))} ${hhmm(t.at, timezone)}`;
   if (day !== null) return day === date ? 'today' : dayAndMonth(day);
   return NO_DUE;
 }
@@ -206,7 +210,8 @@ export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' 
   // A task is told among the tasks (or, decided, among what was decided), never as a thread of the day before.
   const threads = foldThreads(input.yesterday.filter((c) => !ofOrder(c) && c.kind !== 'task'), input.at);
   const sent = new Map<string, number>();
-  for (const c of input.yesterday) sent.set(c.producer, (sent.get(c.producer) ?? 0) + 1);
+  // How busy a producer was counts its threads' cards: its tasks are told apart, and do not make it busy.
+  for (const c of input.yesterday) if (c.kind !== 'task') sent.set(c.producer, (sent.get(c.producer) ?? 0) + 1);
   const others = threads.filter((l) => l.kind !== 'decision');
   const decided = [...(input.decidedYesterday ?? [])]
     .sort((a, b) => Date.parse(a.decided_at ?? '') - Date.parse(b.decided_at ?? ''))

@@ -5,6 +5,7 @@
 import type { MeCard } from '../components';
 import { hasParagraph } from '../../../lib/brief/fold-version';
 import type { ParagraphParts } from '../../../lib/brief/paragraph';
+import { byDue } from '../../../lib/brief/tasks';
 import { byTime } from '../../../lib/time';
 import type { UpdateThread } from './UpdateRow';
 
@@ -64,13 +65,13 @@ export const AHEAD = 14;
  * A day after tomorrow: what is set for it (§8: a card about a later day appears on that day). Its artifacts and signals
  * as threads, and its schedule; its open decisions are under today, marked with their day.
  */
-export function aheadOf(date: string, cards: MeCard[]): Day {
+export function aheadOf(date: string, cards: MeCard[], timezone: string): Day {
   return {
     date,
     kind: 'ahead',
     paragraph: null,
     decisions: [],
-    tasks: openTasks(cards),
+    tasks: openTasks(cards, timezone),
     ...split(threads(cards.filter((c) => isUpdate(c) && c.producer !== 'head' && c.state === 'open' && c.delivery !== 'log' && rowed(c)))),
     rail: railCards(cards),
     cards,
@@ -111,8 +112,8 @@ export const timed = (c: Pick<MeCard, 'at'>): boolean => c.at !== undefined;
 export const rowed = (c: MeCard): boolean => !timed(c) || (c.kind === 'decision' && c.state === 'open');
 
 /** A day's open tasks, by when they are due; a task is only ever a row of the Tasks section (§4.5), timed or not. */
-const openTasks = (cards: MeCard[]): MeCard[] =>
-  cards.filter((c) => c.kind === 'task' && c.state === 'open' && !(c.snoozed_until && Date.parse(c.snoozed_until) > Date.now())).sort(byTime);
+const openTasks = (cards: MeCard[], timezone: string, shownBy: (snoozedUntil: string) => boolean = (s) => Date.parse(s) <= Date.now()): MeCard[] =>
+  cards.filter((c) => c.kind === 'task' && c.state === 'open' && (!c.snoozed_until || shownBy(c.snoozed_until))).sort(byDue(timezone));
 
 /**
  * The schedule's cards: the day's cards that carry `at`, from every producer, `log` included, in the day's order (§8).
@@ -195,6 +196,6 @@ export function pastOf(date: string, cards: MeCard[]): Day {
 }
 
 export function tomorrowOf(b: BriefResponse): Day {
-  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision' && rowed(c)), tasks: openTasks(b.tomorrow.cards), ...split(threads(b.tomorrow.cards.filter((c) => isUpdate(c) && rowed(c)))) };
+  return { date: b.tomorrow.date, kind: 'tomorrow', paragraph: null, decisions: b.tomorrow.cards.filter((c) => c.kind === 'decision' && rowed(c)), tasks: openTasks(b.tomorrow.cards, b.timezone, (s) => Date.parse(s) <= Date.now() || localDay(s, b.timezone) <= b.tomorrow.date), ...split(threads(b.tomorrow.cards.filter((c) => isUpdate(c) && rowed(c)))) };
 }
 

@@ -200,7 +200,7 @@ export function useBrief() {
     if (!brief) return null;
     if (date === brief.date) return withRail(todayOf(brief, near.get(brief.date)));
     if (date === addDays(brief.date, 1)) return withRail(tomorrowOf(brief));
-    if (date > brief.date) return aheadOf(date, near.get(date) ?? []);
+    if (date > brief.date) return aheadOf(date, near.get(date) ?? [], brief.timezone);
     return past.has(date) ? pastOf(date, past.get(date)!) : null;
   };
   // §8 pairing: the later cards that reference a card, from everything loaded.

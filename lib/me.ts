@@ -209,7 +209,17 @@ export async function brief(db: Db, headId: string) {
         sql`${cards.producerDoc}->>'kind' = 'task'`,
         or(
           and(eq(cards.state, 'open'), lte(cards.day, today), notSnoozed(at)),
-          and(ne(cards.state, 'open'), or(and(gte(cards.decidedAt, dayStart), lt(cards.decidedAt, dayEnd)), and(eq(cards.state, 'superseded'), gte(cards.changedAt, dayStart), lt(cards.changedAt, dayEnd)))),
+          and(
+            ne(cards.state, 'open'),
+            or(
+              and(gte(cards.decidedAt, dayStart), lt(cards.decidedAt, dayEnd)),
+              // Superseded today: by when its successor arrived, not `changed_at`, which presenting or acknowledging moves.
+              and(
+                eq(cards.state, 'superseded'),
+                sql`exists (select 1 from cards s where s.head_id = ${cards.headId} and s.producer = ${cards.producer} and s.producer_doc->>'supersedes' = ${cards.id} and s.received_at >= ${dayStart.toISOString()}::timestamptz and s.received_at < ${dayEnd.toISOString()}::timestamptz)`,
+              ),
+            ),
+          ),
         ),
       ),
     )

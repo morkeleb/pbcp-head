@@ -10,7 +10,8 @@
 // not the brief's (it does not move between days). A tap on the line opens the card in place: the body, Done (the one
 // primary control), the task's listed actions beside it as outlined controls in the card's order, Dismiss, the comment
 // behind a disclosure, and the menu (snooze, open card). A task the producer closed (§4.3: superseded by its record of
-// what came of it, "Done in Todoist") shows ticked with that record's title. Never the word "task" (§4.1a).
+// what came of it, "Done in Todoist") shows ticked with that record's title. The row says what it wants (do), never the
+// kind's name (§4.1a); the day's list of them is headed "Tasks", as the brief's paragraph says them.
 
 import { ArrowUpRight, Check, ChevronDown, EllipsisVertical } from 'lucide-react';
 import Link from 'next/link';
@@ -22,7 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { dueDay } from '../../../lib/brief/tasks';
-import { addDays } from '../../../lib/time';
+import { addDays, instant, localDate } from '../../../lib/time';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
   announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, SourceLink, sourceLink, splitBody, useDecide, useDeferred, useLocale, useSwipe,
@@ -63,7 +64,7 @@ const SNOOZES = [
  * today, or when it is overdue), or its `about` day ("today", "tomorrow", "Mon 3 Nov"); nothing with neither.
  */
 export function dueLabel(card: Pick<MeCard, 'at' | 'about'>, today: string, timezone: string, locale: string | undefined, overdue = false): string | null {
-  const day = dueDay(card, timezone);
+  const day = card.at ? localDate(instant(card.at), timezone) : dueDay(card, timezone);
   const named = (d: string) => (overdue ? shortDay(d) : d === today ? 'today' : d === addDays(today, 1) ? 'tomorrow' : shortDay(d));
   if (card.at) return day === today && !overdue ? clock(card.at, timezone, locale) : `${shortDay(day!)} ${clock(card.at, timezone, locale)}`;
   return day ? named(day) : null;
@@ -132,7 +133,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       role="checkbox"
       aria-checked={done}
       aria-label={done ? `Done: ${card.title}` : `Mark done: ${card.title}`}
-      disabled={!open || !online}
+      disabled={!open || !online || !!deferred.pending}
       onClick={() => void decide('done')}
       data-done-control
       data-primary
@@ -166,15 +167,17 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
     </DropdownMenu>
   );
 
+  // Offline, or a swipe's decision still waiting out its undo: nothing else is sent meanwhile.
+  const busy = !online || !!deferred.pending;
   // §4.5: Done the one primary control; the listed actions beside it, outlined, in the card's order; Dismiss secondary.
   const controls = open && (
     <div className="mt-3 space-y-2">
       <div className="decide-row flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={!online} onClick={() => void decide('done')} data-action="done" data-primary>Done</Button>
+        <Button size="sm" disabled={busy} onClick={() => void decide('done')} data-action="done" data-primary>Done</Button>
         {list.map((o) => (
-          <Button key={o.id} size="sm" variant="outline" disabled={!online} onClick={() => void decide(o.id)} data-action={o.id}>{o.label}</Button>
+          <Button key={o.id} size="sm" variant="outline" disabled={busy} onClick={() => void decide(o.id)} data-action={o.id}>{o.label}</Button>
         ))}
-        <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
+        <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={busy} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
       </div>
       <Collapsible className="comment">
         <CollapsibleTrigger className="group flex items-center gap-1 text-lead text-muted-foreground">

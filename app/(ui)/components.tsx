@@ -26,8 +26,6 @@ export interface MeCard {
   state: 'open' | 'decided' | 'superseded';
   change_seq: number;
   received_at: string;
-  /** §4.2: when a head-owned field last changed (for a task its producer closed: when it was superseded). */
-  changed_at?: string;
   seen_at?: string;
   acknowledged_at?: string;
   snoozed_until?: string;

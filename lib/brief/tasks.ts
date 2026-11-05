@@ -20,12 +20,12 @@ export function pastDue(t: Due, asOf: Date, timezone: string): boolean {
 export const isOverdue = (t: Due & { state: string }, now: Date, timezone: string): boolean => t.state === 'open' && pastDue(t, now, timezone);
 
 /**
- * Whether the task was overdue when it was last open: now for an open one; when it was decided, or else closed by its
- * producer (`changed_at`), for one that is not. A task ticked off in the brief stays in the group it was ticked in, so
- * the list does not move under the person's finger.
+ * Whether the task was overdue when it was last open: now for an open one, when it was decided for a decided one. A
+ * task ticked off in the brief stays in the group it was ticked in, so the list does not move under the person's finger.
+ * One its producer closed is placed as of now: its `changed_at` also moves when it is only seen or acknowledged.
  */
-export function wasOverdue(t: Due & { state: string; decided_at?: string; changed_at?: string }, now: Date, timezone: string): boolean {
-  const closed = t.state === 'open' ? undefined : (t.decided_at ?? t.changed_at);
+export function wasOverdue(t: Due & { state: string; decided_at?: string }, now: Date, timezone: string): boolean {
+  const closed = t.state === 'open' ? undefined : t.decided_at;
   return pastDue(t, closed ? instant(closed) : now, timezone);
 }
 

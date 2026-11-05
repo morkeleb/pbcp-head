@@ -595,6 +595,15 @@ describe('tasks (RFC 0.9 §4.1, §4.3, §4.5, §8)', () => {
     expect(ids((await me('GET', '/api/me/brief')).body.tasks)).toEqual(['todo:task:overdue', 'todo:task:noon', 'todo:task:tomorrow', 'todo:task:snoozed', 'todo:task:undated']);
   });
 
+  it('does not bring back a task its producer closed on an earlier day when it is opened today (seen moves changed_at, not the day it closed)', async () => {
+    await clock('2026-10-01T09:00:00Z');
+    await task('todo:task:old');
+    await put('todo:task:old:done', { kind: 'artifact', urgency: 'log', title: 'Done in Todoist', supersedes: 'todo:task:old' }, todo);
+    await clock('2026-10-07T09:00:00Z');
+    expect((await me('POST', `/api/me/cards/${encodeURIComponent('todo:task:old')}/seen`)).status).toBe(200);
+    expect(ids((await me('GET', '/api/me/brief')).body.tasks)).toEqual([]);
+  });
+
   it('pushes an open task the producer sent immediate, as any card (§9); nothing new for tasks', async () => {
     const r = await task('todo:task:soon', { urgency: 'immediate', at: '2026-10-07T10:30:00Z' });
     expect(r.body).toMatchObject({ kind: 'task', delivery: 'immediate', state: 'open' });

@@ -270,6 +270,15 @@ describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
     expect(composeParagraphs(paragraphParts(lines, url))).toEqual(['Nothing waiting for you.', `Yesterday you decided: [Water the plants](<${url('todo:task:old')}>) — done.`]);
   });
 
+  it('does not count a producer’s tasks towards its being busy: its one brief artifact is still named', () => {
+    const yesterday = [
+      ...[1, 2, 3, 4].map((n) => task(`todo:task:y${n}`)),
+      stored('todo:digest:1', { title: 'Weekly digest', summary: 'Four done, two left.' } as Partial<Card>),
+    ];
+    const lines = dailyLines({ ...base, tasks: [], openDecisions: [], yesterday, at: base.emittedAt, date: base.date });
+    expect(lines.mattered.map((l) => l.id)).toEqual(['todo:digest:1']);
+  });
+
   it('with tasks and no decision opens with the tasks, not "Nothing waiting for you."', () => {
     const lines = dailyLines({ ...base, openDecisions: [], at: base.emittedAt, date: base.date });
     expect(composeParagraphs(paragraphParts(lines, url))[0]).toMatch(/^Tasks: 3 due, 1 overdue: /);
