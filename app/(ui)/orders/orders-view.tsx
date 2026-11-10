@@ -17,6 +17,7 @@ import { UpdateRow } from '../brief/UpdateRow';
 import { PageRow, useChromeCards } from '../chrome';
 import { api, cardHref, OfflineError, OFFLINE_REASON, useLiveChanges, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
+import { requestStepUp } from '../step-up';
 
 export interface Order extends MeCard {
   to_producer: string;
@@ -236,8 +237,12 @@ export function OrderBlock({ order, timezone, onChanged }: { order: MeCard; time
   const [error, setError] = useState<string | null>(null);
   const cancel = async () => {
     setError(null);
+    // RFC 0.9 §4.1 `confirm`: an owner's floor (§9) can make an order one; cancelling is a decision, so it asks first.
+    if (order.effective_sensitivity === 'confirm' && !(await requestStepUp(order.title))) return setError('Not cancelled: confirm with your passkey to cancel this order.');
     try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
+      const post = () => api<MeCard & { message?: string; error?: string }>(`/api/me/cards/${encodeURIComponent(order.id)}/decision`, { method: 'POST', body: { decision: 'dismissed' } });
+      let r = await post();
+      if (r.status === 403 && r.body?.error === 'reauthentication_required' && (await requestStepUp(order.title))) r = await post();
       if (r.status === 200 || r.status === 409) onChanged(r.body);
       else setError(r.body?.message ?? `the head answered ${r.status}`);
     } catch (e) {

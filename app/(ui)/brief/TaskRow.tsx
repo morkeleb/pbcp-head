@@ -13,7 +13,7 @@
 // what came of it, "Done in Todoist") shows ticked with that record's title. The row says what it wants (do), never the
 // kind's name (§4.1a); the day's list of them is headed "Tasks", as the brief's paragraph says them.
 
-import { ArrowUpRight, Check, ChevronDown, EllipsisVertical } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, EllipsisVertical, LockKeyhole } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import {
 } from '../components';
 import { CardMeta, clock, wants } from './card-parts';
 import { rowId, shortDay } from './days';
+import { ConfirmNote } from '../step-up';
 
 export interface TaskRowHandle {
   /** `d`: dismiss, after the undo window. */
@@ -122,6 +123,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
     setBody(proposal + rest);
   }, [card.rendered_html, card.lead_source]);
   const due = dueLabel(card, today, timezone, locale, overdue && open);
+  // RFC 0.9 §4.1 `confirm`: ticking it asks for the passkey first (step-up.tsx); the ring says so (§4.5).
+  const confirm = card.effective_sensitivity === 'confirm';
   const link = sourceLink(card.source);
   // What closed it, in the lead's place: the producer's record ("Done in Todoist"), or the decision and its time.
   const closed = !open && (card.state === 'superseded' && card.replaced_by && !card.decision
@@ -132,7 +135,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
     <button
       role="checkbox"
       aria-checked={done}
-      aria-label={done ? `Done: ${card.title}` : `Mark done: ${card.title}`}
+      aria-label={done ? `Done: ${card.title}` : `Mark done: ${card.title}${confirm ? ' (asks for your passkey)' : ''}`}
+      {...(confirm && open ? { title: 'Confirming asks for your passkey', 'data-confirm': '' } : {})}
       disabled={!open || !online || !!deferred.pending}
       onClick={() => void decide('done')}
       data-done-control
@@ -182,6 +186,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
         ))}
         <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={busy} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
       </div>
+      {confirm && <ConfirmNote />}
       <Collapsible className="comment">
         <CollapsibleTrigger className="group flex items-center gap-1 text-lead text-muted-foreground">
           Add a comment <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
@@ -263,6 +268,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
             the end of the line. The producer's label for the link is in its name, not on the line (§12: the host shows). */}
         <span className="flex max-w-[35%] flex-none items-center gap-2 whitespace-nowrap text-meta text-muted-foreground [&>[aria-hidden]:first-child]:hidden [&_[data-labels]]:max-w-[5.5rem]">
           <CardLabels labels={card.labels} first />
+          {/* §4.5 "Identifying again", beside the ring on the closed row: ticking it asks for the passkey. */}
+          {confirm && open && <LockKeyhole className="size-3 flex-none" role="img" aria-label="Confirming asks for your passkey" data-confirm-mark />}
           {link && (
             <a href={link.href} target="_blank" rel="noopener" title={link.host} aria-label={`${link.label ? `${link.label}, ` : ''}${link.host} (opens in a new tab)`} className="relative flex min-w-0 items-center gap-0.5 after:absolute after:-inset-2 after:content-[''] hover:text-foreground hover:underline" data-source-icon>
               <span className="truncate max-[599px]:hidden" data-source-host>{link.host}</span>

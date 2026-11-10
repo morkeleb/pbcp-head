@@ -4,12 +4,14 @@
 import type { ReactNode } from 'react';
 import { ChromeProvider } from './chrome';
 import { Announcer } from './components';
+import { StepUpPrompt } from './step-up';
 
 export default function UiLayout({ children }: { children: ReactNode }) {
   return (
     <ChromeProvider>
       {children}
       <Announcer />
+      <StepUpPrompt />
     </ChromeProvider>
   );
 }

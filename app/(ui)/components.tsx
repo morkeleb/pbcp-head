@@ -3,6 +3,7 @@
 import { ArrowUpRight } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import type { ParagraphParts } from '../../lib/brief/paragraph';
+import { requestStepUp } from './step-up';
 import { api, OfflineError, when } from './client';
 
 // --- types: the /api/me card shape ----------------------------------------------------
@@ -53,6 +54,13 @@ export interface MeCard {
   lead_source?: 'summary' | 'body';
   /** The lead as safe inline HTML, rendered by the head (a summary escaped and cut at 280 characters). */
   rendered_lead?: string;
+  /** RFC 0.9 §4.1: how carefully the producer asked the card to be handled, as sent. */
+  sensitivity?: 'normal' | 'private' | 'confirm';
+  /**
+   * RFC 0.9 §9: the card's sensitivity raised by the owner's floors. Inside the signed-in brief a private card shows in
+   * full like any other; a `confirm` card's decision asks for the passkey first (step-up.tsx).
+   */
+  effective_sensitivity?: 'normal' | 'private' | 'confirm';
   /** RFC 0.7 §4.1: the producer's categories, in its order; shown on the card and filtered by. */
   labels?: string[];
   /** RFC 0.7 §4.1: the local day the card concerns. */
@@ -587,6 +595,12 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
   const [notice, setNotice] = useState<string | null>(null);
   const decide = async (body: DecisionBody) => {
     const before = card;
+    // RFC 0.9 §4.1 `confirm`: the person confirms with their passkey first; cancelling records nothing.
+    const confirmCard = card.effective_sensitivity === 'confirm';
+    if (confirmCard && !(await requestStepUp(card.title))) {
+      setError('Not recorded: confirm with your passkey to decide this card.');
+      return;
+    }
     const optimistic: MeCard = { ...card, ...body, state: 'decided', decided_at: new Date().toISOString() };
     setError(null);
     setNotice(null);
@@ -598,7 +612,10 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
       announce(`Not recorded: ${message}`);
     };
     try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
+      const post = () => api<MeCard & { message?: string; error?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
+      let r = await post();
+      // The window lapsed, or an owner's floor made the card `confirm` since the page loaded (§9): identify, then retry once.
+      if (r.status === 403 && r.body?.error === 'reauthentication_required' && (await requestStepUp(card.title))) r = await post();
       if (r.status === 200) onChange({ ...before, ...r.body });
       else if (r.status === 409) {
         // The card is no longer open: replaced by a newer card since the page loaded (§8), or decided elsewhere. The

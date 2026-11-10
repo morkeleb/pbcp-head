@@ -7,6 +7,21 @@ import { api, OfflineError } from '../client';
 import { NOT_SENT } from '../components';
 
 export type Urgency = 'log' | 'brief' | 'immediate';
+/** RFC 0.9 §4.1 `sensitivity`, and what each floor (§9) means for the cards it covers, in a select's words. */
+export const SENSITIVITIES = ['normal', 'private', 'confirm'] as const;
+export type Sensitivity = (typeof SENSITIVITIES)[number];
+export const FLOOR_LABEL: Record<Sensitivity, string> = { normal: 'normal', private: 'private', confirm: 'confirm' };
+
+/** A floor select (RFC 0.9 §9): raises how carefully the head handles the cards it covers; never lowers a card's own. */
+export function FloorSelect({ label, value, disabled, onChange, none = 'as sent' }: { label: string; value: Sensitivity | null; disabled?: boolean; onChange: (v: Sensitivity | null) => void; none?: string }) {
+  return (
+    <select aria-label={label} className={field} value={value ?? ''} disabled={disabled} onChange={(e) => onChange((e.target.value || null) as Sensitivity | null)} data-floor>
+      <option value="">{none}</option>
+      {SENSITIVITIES.filter((s) => s !== 'normal').map((s) => <option key={s} value={s}>at least {FLOOR_LABEL[s]}</option>)}
+    </select>
+  );
+}
+
 export const URGENCIES: Urgency[] = ['log', 'brief', 'immediate'];
 
 export const field = 'rounded-md border border-input bg-background px-2 py-1 text-body text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
