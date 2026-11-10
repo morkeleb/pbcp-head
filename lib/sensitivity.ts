@@ -91,11 +91,21 @@ export async function annotateParts(db: Db, headId: string, parts: ParagraphPart
     .where(and(eq(cards.headId, headId), inArray(cards.id, ids)));
   const of = new Map(
     rows.map((r) => {
-      const doc = r.doc as { labels?: string[]; sensitivity?: Sensitivity };
-      return [r.id, { sensitivity: doc.sensitivity ?? ('normal' as const), effective_sensitivity: effectiveOf({ producer: r.producer, labels: doc.labels ?? [], ...(doc.sensitivity ? { sensitivity: doc.sensitivity } : {}) }, p) }];
+      const doc = r.doc as { labels?: string[]; sensitivity?: Sensitivity; title?: string; kind?: string };
+      return [
+        r.id,
+        {
+          producer: r.producer,
+          ...(doc.kind ? { kind: doc.kind } : {}),
+          ...(doc.title !== undefined ? { title: doc.title } : {}),
+          sensitivity: doc.sensitivity ?? ('normal' as const),
+          effective_sensitivity: effectiveOf({ producer: r.producer, labels: doc.labels ?? [], ...(doc.sensitivity ? { sensitivity: doc.sensitivity } : {}) }, p),
+        },
+      ];
     }),
   );
   const mark = <T extends { id: string }>(e: T) => ({ ...e, ...(of.get(e.id) ?? { sensitivity: 'normal' as const, effective_sensitivity: 'normal' as const }) });
+  // (Each entry also gains its card's producer, kind and title, so a private entry can be shown by those alone.)
   const out: ParagraphParts = { ...parts };
   for (const k of PART_LISTS) if (parts[k]) (out as unknown as Record<string, unknown>)[k] = (parts[k] as Array<{ id: string }>).map(mark);
   return out;

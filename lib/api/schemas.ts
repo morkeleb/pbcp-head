@@ -66,6 +66,9 @@ const ParagraphEntry = z.object({
   id: z.string().describe('The card the entry is'),
   labels: z.array(z.string()).describe('Its labels (§4.1), for filtering'),
   text: z.string().describe('Safe inline HTML: "<title> — <lead>", the title linked to the card'),
+  producer: z.string().optional().describe('The card’s producer root'),
+  kind: z.string().optional().describe('The card’s kind'),
+  title: z.string().optional().describe('The card’s title, as plain text'),
   sensitivity: SENSITIVITY.optional().describe('RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)'),
   effective_sensitivity: SENSITIVITY.optional().describe('RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text'),
 });

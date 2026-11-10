@@ -20,6 +20,10 @@ export interface ParagraphEntry {
   labels: string[];
   /** The entry as the paragraph writes it: markdown in the fold, safe inline HTML from the head. */
   text: string;
+  /** The entry's card's producer, kind and title, added by the head when it serves the parts. */
+  producer?: string;
+  kind?: string;
+  title?: string;
   /** RFC 0.9 §4.1: the entry's card's `sensitivity` as sent, added by the head when it serves the parts. */
   sensitivity?: 'normal' | 'private' | 'confirm';
   /** RFC 0.9 §9: the card's sensitivity raised by the owner's floors, added by the head when it serves the parts. */

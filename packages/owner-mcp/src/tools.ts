@@ -13,7 +13,9 @@ type ActionEntry = NonNullable<MeCard['actions']>[number];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // RFC 0.9 §4.1 `sensitivity`: an assistant connector is a surface outside the owner's signed-in session, whose responses
-// may be indexed. A card whose effective sensitivity (§9: the producer's, raised by the owner's floors) is `private` or
+// may be indexed. The head redacts first: it strips a private card's content from every response to an assistant's scoped
+// token (lib/me.ts redactForAssistant), so the rule holds for any client. What follows is a second layer, defence in
+// depth, that shapes what remains; it is not the rule. A card whose effective sensitivity (§9: the producer's, raised by the owner's floors) is `private` or
 // `confirm` reaches the assistant as its id, producer, kind, title, state, when, labels and both sensitivities: never its
 // summary, lead, body, option bodies or rendered HTML. A `confirm` card cannot be decided here at all: the head refuses
 // any decision from an assistant with 403 `reauthentication_required`, because only the person can identify themselves.

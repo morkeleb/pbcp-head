@@ -193,3 +193,113 @@ describe('push payloads (RFC 0.9 §4.1 private)', () => {
     expect(urgentPayload(c, 'normal')).toMatchObject({ title: 'Mortgage offer', body: 'Rate 3.1%.', data: { url: '/card/mail%3Aa%3A2' } });
   });
 });
+
+describe('what an assistant’s scoped token receives: the head redacts (RFC 0.9 §4.1, §12)', () => {
+  const REDIRECT = 'https://assistant.example/oauth/callback';
+
+  /** An assistant's scoped access token, as test/http/owner-mcp.test.ts gets one: registration, consent, PKCE, exchange. */
+  async function scopedToken(): Promise<string> {
+    const reg = await fetch(`${headUrl()}/api/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_name: 'Test assistant', redirect_uris: [REDIRECT] }) });
+    const clientId = ((await reg.json()) as { client_id: string }).client_id;
+    const { createHash, randomBytes } = await import('node:crypto');
+    const verifier = randomBytes(32).toString('base64url');
+    const u = new URL(`${headUrl()}/api/oauth/authorize`);
+    for (const [k, v] of Object.entries({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', state: 's1', scope: 'owner' })) u.searchParams.set(k, v);
+    const a = await fetch(u, { redirect: 'manual' });
+    const request = new URL(a.headers.get('location')!).searchParams.get('request');
+    const consent = await call('POST', '/api/oauth/authorize', { auth: owner.auth, body: { request, allow: true } });
+    const code = new URL(consent.body.redirect).searchParams.get('code')!;
+    const t = await fetch(`${headUrl()}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, code, code_verifier: verifier, redirect_uri: REDIRECT }) });
+    return `Session ${((await t.json()) as { access_token: string }).access_token}`;
+  }
+
+  const CONTENT = ['summary', 'body', 'lead', 'rendered_html', 'rendered_lead', 'first_visual', 'rendered_actions', 'comment', 'edited_proposal'];
+  const secret = /Rate 3\.1|30 years|lawyer's fee|DKK 40,000|the deposit|Only if/;
+
+  async function cardsOfThreeKinds() {
+    // Yesterday: so tonight's fold (the head:daily card) lists them.
+    await clock('2026-10-07T04:00:00Z');
+    await put('mail:bank:offer', {
+      title: 'Mortgage offer', summary: 'Rate 3.1% fixed.', body: 'Rate 3.1% fixed for 30 years.\n\n![chart](https://example.com/c.png)',
+      sensitivity: 'private', actions: [{ id: 'accept', label: 'Accept', body: 'Only if the rate holds.', default: true }, 'reject'],
+    });
+    await put('mail:bank:wire', { kind: 'task', title: 'Pay the lawyer', summary: "The lawyer's fee, DKK 40,000.", sensitivity: 'confirm', actions: ['tomorrow'] });
+    await put('mail:a:anna', { title: 'Reply to Anna', summary: 'About the invoice.' });
+    await clock('2026-10-07T05:30:00Z');
+    expect((await call('GET', '/api/cron/brief', { auth: `Bearer ${(await import('../env')).TEST_CRON_SECRET}` })).status).toBe(200);
+  }
+
+  const hasNoContent = (c: Record<string, unknown>) => {
+    for (const k of CONTENT) expect(c, `${c.id} ${k}`).not.toHaveProperty(k);
+    for (const a of (c.actions as Array<unknown> | undefined) ?? []) if (a && typeof a === 'object') expect(a).not.toHaveProperty('body');
+  };
+
+  it('strips a private or confirm card’s content from the brief, the card lists and a card’s page; a confirm card offers no actions', async () => {
+    await cardsOfThreeKinds();
+    const as = await scopedToken();
+
+    const b = (await call('GET', '/api/me/brief', { auth: as })).body;
+    const offer = b.decisions.find((c: { id: string }) => c.id === 'mail:bank:offer');
+    expect(offer).toMatchObject({ id: 'mail:bank:offer', kind: 'decision', producer: 'mail', title: 'Mortgage offer', state: 'open', sensitivity: 'private', effective_sensitivity: 'private' });
+    hasNoContent(offer);
+    expect(offer.actions).toEqual([{ id: 'accept', label: 'Accept', default: true }, 'reject']); // a private card is still decided by id
+    const wire = b.tasks.find((c: { id: string }) => c.id === 'mail:bank:wire');
+    expect(wire).toMatchObject({ kind: 'task', title: 'Pay the lawyer', sensitivity: 'confirm', effective_sensitivity: 'confirm' });
+    hasNoContent(wire);
+    expect(wire).not.toHaveProperty('actions');
+    // A normal card is untouched.
+    expect(b.decisions.find((c: { id: string }) => c.id === 'mail:a:anna')).toMatchObject({ summary: 'About the invoice.', rendered_lead: expect.stringContaining('About the invoice') });
+    // The paragraph: spoken without asking for it, private entries counted; their entries keep the title, lose the lead.
+    expect(b.daily_paragraph.text).toMatch(/1 private decision/);
+    expect(b.daily_paragraph.html).not.toMatch(/Mortgage/);
+    const entry = b.daily_paragraph.parts.decisions.find((e: { id: string }) => e.id === 'mail:bank:offer');
+    expect(entry).toMatchObject({ id: 'mail:bank:offer', producer: 'mail', kind: 'decision', text: 'Mortgage offer', sensitivity: 'private', effective_sensitivity: 'private' });
+    // The nightly card: its body is the spoken paragraph, which names no private entry.
+    expect(b.daily.body).toBe(b.daily.spoken_paragraph);
+    expect(b.daily.body).toMatch(/private/);
+    expect(b.daily.body).not.toMatch(/Mortgage|Pay the lawyer/);
+    expect(b.daily.rendered_html).not.toMatch(/Mortgage|Pay the lawyer/);
+    expect(JSON.stringify(b)).not.toMatch(secret);
+
+    const list = (await call('GET', '/api/me/cards?date=2026-10-07', { auth: as })).body.cards;
+    for (const id of ['mail:bank:offer', 'mail:bank:wire']) hasNoContent(list.find((c: { id: string }) => c.id === id));
+    const daily = list.find((c: { id: string }) => c.id === 'head:daily:2026-10-07');
+    expect(daily.body).not.toMatch(/Mortgage|Pay the lawyer/);
+    expect(JSON.stringify(list)).not.toMatch(secret);
+
+    for (const id of ['mail:bank:offer', 'mail:bank:wire']) {
+      const d = (await call('GET', `/api/me/cards/${encodeURIComponent(id)}`, { auth: as })).body;
+      expect(d.card).toMatchObject({ id, producer: 'mail', title: expect.any(String), state: 'open', effective_sensitivity: expect.stringMatching(/private|confirm/) });
+      hasNoContent(d.card);
+      expect(JSON.stringify(d)).not.toMatch(secret);
+    }
+
+    // The owner's own session sees everything, as before.
+    const own = (await me('GET', '/api/me/brief')).body;
+    expect(own.decisions.find((c: { id: string }) => c.id === 'mail:bank:offer')).toMatchObject({ summary: 'Rate 3.1% fixed.', body: expect.stringContaining('30 years'), rendered_actions: { accept: expect.stringContaining('Only if') } });
+    expect(own.tasks.find((c: { id: string }) => c.id === 'mail:bank:wire')).toMatchObject({ summary: "The lawyer's fee, DKK 40,000.", actions: ['tomorrow'] });
+    expect(own.daily.body).toMatch(/Mortgage offer/);
+    expect(own.daily_paragraph.html).toMatch(/Mortgage offer/);
+    expect(own.daily_paragraph.text).toBeUndefined();
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent('mail:bank:offer')}`)).body.card.body).toMatch(/30 years/);
+  });
+
+  it('drops a private card’s comment and edited proposal from the decision log and from an action’s answer', async () => {
+    await cardsOfThreeKinds();
+    const as = await scopedToken();
+    expect((await me('POST', `/api/me/cards/${encodeURIComponent('mail:bank:offer')}/decision`, { decision: 'edited', edited_proposal: 'Only at 2.9%.', comment: 'Call the bank first.' })).status).toBe(200);
+    const d = (await call('GET', `/api/me/cards/${encodeURIComponent('mail:bank:offer')}`, { auth: as })).body;
+    expect(d.decisions).toEqual([expect.objectContaining({ decision: 'edited', decided_at: expect.any(String) })]);
+    expect(d.decisions[0]).not.toHaveProperty('comment');
+    expect(d.decisions[0]).not.toHaveProperty('edited_proposal');
+    hasNoContent(d.card);
+    expect(JSON.stringify(d)).not.toMatch(/2\.9%|Call the bank/);
+    // The owner sees the log in full.
+    expect((await me('GET', `/api/me/cards/${encodeURIComponent('mail:bank:offer')}`)).body.decisions[0]).toMatchObject({ comment: 'Call the bank first.', edited_proposal: 'Only at 2.9%.' });
+    // An action's answer to the assistant (seen on the confirm task): the card, without its content.
+    const seen = await call('POST', `/api/me/cards/${encodeURIComponent('mail:bank:wire')}/seen`, { auth: as });
+    expect(seen.status).toBe(200);
+    hasNoContent(seen.body);
+    expect(seen.body).toMatchObject({ id: 'mail:bank:wire', title: 'Pay the lawyer' });
+  });
+});

@@ -2872,6 +2872,18 @@
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
                 },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
+                },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
                   "type": "string",
@@ -2931,6 +2943,18 @@
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
                 },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
+                },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
                   "type": "string",
@@ -2984,6 +3008,18 @@
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
                 },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
+                },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
                   "type": "string",
@@ -3032,6 +3068,18 @@
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
                 },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
+                },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
                   "type": "string",
@@ -3079,6 +3127,18 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
                 },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
@@ -3150,6 +3210,18 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "producer": {
+                  "description": "The card’s producer root",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "The card’s kind",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "The card’s title, as plain text",
+                  "type": "string"
                 },
                 "sensitivity": {
                   "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",

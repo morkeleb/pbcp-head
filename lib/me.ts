@@ -613,3 +613,81 @@ export async function listDevices(db: Db, headId: string, current: string) {
     urgent_notification: { enabled: d.notifyUrgent, subscribed: d.pushEndpoint !== null },
   }));
 }
+
+// --- what an assistant receives (RFC 0.9 §4.1, §12) -------------------------------------------------------------------
+
+/** Card fields an assistant never receives for a `private` or `confirm` card: its content, in any form (§4.1). */
+const CONTENT = ['summary', 'body', 'lead', 'lead_source', 'rendered_html', 'rendered_lead', 'rendered_actions', 'first_visual', 'comment', 'edited_proposal', 'paragraph', 'spoken_paragraph'] as const;
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+type Json = Record<string, unknown>;
+const isCardLike = (v: Json) => typeof v.id === 'string' && typeof v.producer === 'string' && typeof v.kind === 'string';
+
+/**
+ * One card (or a paragraph entry) as an assistant may see it. RFC 0.9 §4.1: a head MUST NOT include a `private` or
+ * `confirm` card's lead or body "in a notification, an assistant index or any surface outside the owner's signed-in
+ * session"; §12: "an assistant connector that holds the owner's credential … cannot approve a confirm card".
+ *
+ * - private or confirm: its content goes (summary, body, lead, rendered HTML, first visual, option bodies, the owner's
+ *   comment and edited proposal); id, kind, producer, title, state, labels, when, source, both sensitivities, the
+ *   decision, its times and what replaced it stay. An open confirm decision or task loses `actions`: the assistant cannot
+ *   decide it, so it is offered no choice. A paragraph entry keeps its title and loses the lead in its `text`.
+ * - a `head:daily:*` card: its body names every entry, private ones too, so the assistant gets the spoken paragraph in
+ *   its place (private entries counted, §4.1), and its parts with private entries reduced the same way.
+ */
+function redactCard(v: Json, policy: SensitivityPolicy): Json {
+  const effective =
+    (v.effective_sensitivity as Sensitivity | undefined) ??
+    effectiveOf({ producer: v.producer as string, labels: (v.labels as string[] | undefined) ?? [], ...(v.sensitivity ? { sensitivity: v.sensitivity as Sensitivity } : {}) }, policy);
+  const out: Json = { ...v };
+  if (typeof v.id === 'string' && v.id.startsWith('head:daily:')) {
+    const spoken = typeof v.spoken_paragraph === 'string' ? v.spoken_paragraph : '';
+    for (const k of ['summary', 'lead_source', 'rendered_actions', 'first_visual'] as const) delete out[k];
+    out.body = spoken;
+    out.lead = spoken;
+    out.rendered_lead = escapeHtml(spoken);
+    out.rendered_html = spoken ? `<p>${escapeHtml(spoken)}</p>` : '';
+    if (out.paragraph) out.paragraph = redactValue(out.paragraph, policy);
+    return out;
+  }
+  if (effective === 'normal') return out;
+  out.effective_sensitivity = effective;
+  for (const k of CONTENT) delete out[k];
+  // A paragraph entry: "<title> — <lead>" becomes the title alone.
+  if (typeof v.text === 'string') out.text = typeof v.title === 'string' ? escapeHtml(v.title) : '';
+  if (Array.isArray(v.actions)) {
+    if (effective === 'confirm' && v.state === 'open') delete out.actions;
+    else out.actions = (v.actions as unknown[]).map((a) => (a && typeof a === 'object' ? (({ body: _b, ...rest }) => rest)(a as Json) : a));
+  }
+  if (Array.isArray(v.options)) out.options = (v.options as Json[]).map(({ body: _b, ...rest }) => rest);
+  if ('editable' in v) out.editable = false;
+  return out;
+}
+
+/** Every card-shaped object in a response, at any depth, as an assistant may see it (redactCard). */
+function redactValue(v: unknown, policy: SensitivityPolicy): unknown {
+  if (Array.isArray(v)) return v.map((x) => redactValue(x, policy));
+  if (!v || typeof v !== 'object') return v;
+  const o = v as Json;
+  const walked: Json = {};
+  for (const [k, x] of Object.entries(o)) walked[k] = redactValue(x, policy);
+  // A paragraph entry before the head annotated it carries no producer: it is a card id with labels and text.
+  return isCardLike(walked) ? redactCard(walked, policy) : walked;
+}
+
+/**
+ * A response body for an assistant's scoped token (session platform `mcp`), with every private and confirm card's
+ * content removed by the head itself, wherever the card sits: the brief's lists and paragraph parts, a card and its
+ * thread, a list of cards, an action's returned card. GET /api/me/cards/{id} also drops the decision log's comment and
+ * edited proposal when the card is private. The owner's own session never goes through this.
+ */
+export async function redactForAssistant<T>(db: Db, headId: string, body: T): Promise<T> {
+  const policy = await loadPolicy(db, headId);
+  const out = redactValue(body, policy) as T;
+  const detail = out as unknown as { card?: Json; decisions?: Json[] };
+  if (detail && typeof detail === 'object' && detail.card && Array.isArray(detail.decisions) && detail.card.effective_sensitivity && detail.card.effective_sensitivity !== 'normal') {
+    detail.decisions = detail.decisions.map(({ comment: _c, edited_proposal: _e, ...rest }) => rest);
+  }
+  return out;
+}

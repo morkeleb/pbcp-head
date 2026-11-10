@@ -243,6 +243,11 @@ describe('scoped tokens are confined to the tools', () => {
     expect(rows['hermes:bank:1']).toMatchObject({ id: 'hermes:bank:1', producer: 'hermes', title: 'Mortgage offer', private: true, effective_sensitivity: 'private', actions: expect.any(Array) });
     expect(rows['hermes:bank:2']).toMatchObject({ title: 'Wire to the lawyer', private: true, effective_sensitivity: 'confirm', confirm_on_device: true });
     expect(rows['hermes:bank:2'].actions).toBeUndefined();
+    // Exactly what the tools gave before the head redacted too: the move is invisible to the assistant.
+    expect(rows['hermes:bank:1']).toEqual({
+      id: 'hermes:bank:1', producer: 'hermes', title: 'Mortgage offer', sensitivity: 'private', effective_sensitivity: 'private', private: true,
+      actions: [{ id: 'approve', label: 'approve' }, { id: 'reject', label: 'reject' }],
+    });
     expect(said(brief)).not.toMatch(/3\.1|40,000|lawyer\./);
     // The paragraph counts the private entries instead of naming them.
     expect(brief.paragraph).toMatch(/and 2 private decisions\./);

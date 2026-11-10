@@ -764,6 +764,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
@@ -785,6 +791,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
@@ -806,6 +818,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
@@ -825,6 +843,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
@@ -844,6 +868,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
@@ -868,6 +898,12 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
                 /**
                  * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
                  * @enum {string}
