@@ -23,6 +23,10 @@ export const MCP_PLATFORM = 'mcp';
 export interface Session {
   headId: string;
   deviceId: string;
+  /** The device's platform: `mcp` for an assistant's (lib/oauth.ts), which can never identify the person again. */
+  platform?: string;
+  /** When the person last identified themselves on this session (RFC 0.9 §4.1 `confirm`); null when never. */
+  reauthenticatedAt?: Date | null;
 }
 
 /** What every sign-in and refresh returns. */
@@ -96,6 +100,11 @@ export interface NewDevice {
   identityId: string | null;
   platform?: unknown;
   name?: unknown;
+  /**
+   * The sign-in was the person identifying themselves (a passkey assertion or registration, Sign in with Apple): the
+   * session starts re-identified (RFC 0.9 §4.1 `confirm`, §4.5 "Identifying again").
+   */
+  identified?: boolean;
 }
 
 /** Signs a device in: a devices row with a fresh refresh token, and the session tokens for it. */
@@ -108,6 +117,7 @@ export async function startSession(db: Db, d: NewDevice): Promise<SessionTokens>
   await db.insert(devices).values({
     id, headId: d.headId, identityId: d.identityId, platform, name,
     refreshTokenHash: hash(refresh.token), refreshFamily: refresh.family, refreshGeneration: 0, refreshExpiresAt: expires, lastSeenAt: new Date(),
+    reauthenticatedAt: d.identified ? new Date(now()) : null,
   });
   return issue(d.headId, id, refresh.token, expires);
 }
@@ -169,6 +179,13 @@ export async function refreshSession(db: Db, refreshToken: unknown): Promise<Ses
   return issue(rotated.device.headId, rotated.device.id, rotated.next, rotated.expires);
 }
 
+/** The person identified themselves again on this session (a passkey step-up): stamps it, without rotating any token. */
+export async function markReauthenticated(db: Db, s: Session): Promise<Date> {
+  const at = new Date(now());
+  await db.update(devices).set({ reauthenticatedAt: at }).where(and(eq(devices.id, s.deviceId), eq(devices.headId, s.headId)));
+  return at;
+}
+
 /** Signs a device out: its refresh token stops working and its access tokens are refused from now on. */
 export async function revokeDevice(db: Db, s: Session): Promise<void> {
   await db
@@ -211,14 +228,17 @@ export async function authenticateSession(db: Db, req: Request, policy: SessionP
   }
   const live = and(eq(devices.id, claims.did), eq(devices.headId, claims.sub), isNull(devices.revokedAt));
   const header = req.headers.get(TIMEZONE_HEADER);
+  const fields = { id: devices.id, platform: devices.platform, reauthenticatedAt: devices.reauthenticatedAt };
   const [device] =
     header === null
-      ? await db.select({ id: devices.id }).from(devices).where(live)
+      ? await db.select(fields).from(devices).where(live)
       : await db
           .update(devices)
           .set({ timezone: canonicalZone(header, 'X-Timezone'), tzSeenAt: new Date(now()) })
           .where(live)
-          .returning({ id: devices.id });
+          .returning(fields);
   if (!device) throw new HttpError(401, 'unauthorized', 'this device has been signed out');
-  return { headId: claims.sub, deviceId: claims.did };
+  // A scoped token is an assistant's whatever its device row says (lib/oauth.ts).
+  const platform = claims.scope !== undefined ? MCP_PLATFORM : device.platform;
+  return { headId: claims.sub, deviceId: claims.did, platform, reauthenticatedAt: device.reauthenticatedAt };
 }

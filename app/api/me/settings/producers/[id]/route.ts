@@ -20,6 +20,7 @@ export const PATCH = meHandler(async (s, req) => {
   // The name first: a bad one refuses the whole request before the ceiling changes.
   if (patch.name !== undefined) await renameToken(db(), s.headId, id, patch.name);
   if (patch.ceiling !== undefined) await updateProducer(db(), s.headId, token.root, { ceiling: patch.ceiling });
+  if (patch.sensitivity_floor !== undefined) await updateProducer(db(), s.headId, token.root, { sensitivity_floor: patch.sensitivity_floor });
   return json((await listTokens(db(), s.headId)).find((t) => t.id === id));
 });
 

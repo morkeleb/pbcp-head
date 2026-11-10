@@ -2,6 +2,7 @@
 // producer): list, mint, revoke. The settings routes (app/api/me/settings/producers) and the scripts
 // (scripts/mint-token.ts, scripts/revoke-token.ts) call these, so there is one way to issue and withdraw a token.
 
+import { loadPolicy, type Sensitivity } from '../sensitivity';
 import { URGENCIES, type Urgency } from '@pbcp/core';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../db/client';
@@ -37,6 +38,8 @@ export interface TokenRow {
   instance: string | null;
   executor: boolean;
   ceiling: Urgency;
+  /** The owner's sensitivity floor on its root (RFC 0.9 §9), or null. */
+  sensitivity_floor: Sensitivity | null;
   created_at: string;
   last_used_at: string | null;
   /** Set when the producer paired itself (lib/settings/pairing.ts): the name it gave, its address, when. */
@@ -50,6 +53,7 @@ export async function listTokens(db: Db, headId: string): Promise<TokenRow[]> {
     .from(producerTokens)
     .where(and(eq(producerTokens.headId, headId), isNull(producerTokens.revokedAt)))
     .orderBy(asc(producerTokens.createdAt));
+  const floors = (await loadPolicy(db, headId)).producers;
   return rows.map((r) => ({
     id: tokenId(r.tokenHash),
     root: r.root,
@@ -57,6 +61,7 @@ export async function listTokens(db: Db, headId: string): Promise<TokenRow[]> {
     instance: r.instance,
     executor: r.executor,
     ceiling: (URGENCIES as readonly string[]).includes(r.urgencyCeiling) ? (r.urgencyCeiling as Urgency) : 'brief',
+    sensitivity_floor: floors.get(r.root) ?? null,
     created_at: iso(r.createdAt),
     last_used_at: r.lastUsedAt ? iso(r.lastUsedAt) : null,
     paired: r.pairedAt ? { name: r.pairedName, address: r.pairedAddress, at: iso(r.pairedAt) } : null,

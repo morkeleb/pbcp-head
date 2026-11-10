@@ -3,7 +3,7 @@
 // `idSegment` is where `{id}` sits in the route's path.
 
 import { db } from '../db/client';
-import { authenticateSession, type Session, type SessionPolicy } from './auth/session';
+import { authenticateSession, MCP_PLATFORM, type Session, type SessionPolicy } from './auth/session';
 import { decodeId, handle, json, rawSegment, readJson, readObject } from './http';
 import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, unsnoozeCard, type OwnerContext, type Outcome } from './protocol';
 import { snoozeUntil } from './settings-me';
@@ -13,7 +13,13 @@ function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req
   return (req: Request): Promise<Response> =>
     handle(async () => {
       const session = await authenticateSession(db(), req, policy);
-      const r = await act({ headId: session.headId, actor: session.deviceId }, decodeId(rawSegment(req, idSegment)), req);
+      const ctx: OwnerContext = {
+        headId: session.headId,
+        actor: session.deviceId,
+        canIdentify: session.platform !== MCP_PLATFORM,
+        reauthenticatedAt: session.reauthenticatedAt ?? null,
+      };
+      const r = await act(ctx, decodeId(rawSegment(req, idSegment)), req);
       return json(r.card, r.status);
     });
 }
