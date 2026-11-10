@@ -6,7 +6,7 @@ What a head holds about its owner is the record the RFC calls "the sensitive rec
 
 Card content is encrypted at rest with a key per head. The head reads a card only to render it when it arrives, to fold it into your brief, or to show it to a signed-in device. The operator holds no index of your content. Deleting your head destroys its key. Self-hosting is one Vercel project and a Postgres.
 
-**How.** Each head has a data key, 32 random bytes, kept in the database only wrapped (AES-256-GCM) under the deployment's master key, `HEAD_MASTER_KEY`, which lives in the host's environment and nowhere in the database. Each value is sealed with AES-256-GCM under the data key, with a random nonce and the head and column bound to it, so a value moved to another head or column, or altered by one bit, fails to open: that card is left out of what is served, and the rest is served. The head unwraps the data key for the request that needs it and keeps it nowhere.
+**How.** Each head has a data key, 32 random bytes, kept in the database only wrapped (AES-256-GCM) under the deployment's master key, `HEAD_MASTER_KEY`, which lives in the host's environment and nowhere in the database. Each value is sealed with AES-256-GCM under the data key, with a random nonce, and bound to its head, its table and column, and its row (the card, the decision-log entry, the diagram, the invite request), so a value moved to another head, column or row, or altered by one bit, fails to open: that card is left out of what is served, and the rest is served. The head unwraps the data key for the request that needs it and keeps it nowhere.
 
 **What is encrypted, and what is not, and why.** One rule: content is encrypted; the metadata the head needs to route, order and sync is not.
 

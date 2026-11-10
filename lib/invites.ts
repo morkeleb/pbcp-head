@@ -3,7 +3,7 @@
 // The list is the deployment's, not a head's, so only the deployment's own head sees it: PBCP_HEAD, or its only head
 // (lib/heads.ts defaultHead). Another head on the same deployment is refused, so it never sees anyone's address.
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { inviteRequests } from '../db/schema';
 import { iso } from './clock';
@@ -25,8 +25,10 @@ export async function requestInvite(db: Db, body: { email?: unknown }, userAgent
   if (email.length > EMAIL_MAX || !EMAIL.test(email)) throw new HttpError(400, 'invalid_email', 'an email address, please');
   const head = await defaultHead(db);
   const key = head ? await dataKey(db, head, { create: true }) : null;
-  const values = key && head
-    ? { email: `d:${digest(key, 'invite.email', email.toLowerCase())}`, content: { email: seal(key, head, 'invite_requests.email', email) } }
+  // Bound to its row: the request's id is taken before it is written, so the sealed address names it.
+  const id = key && head ? Number(((await db.execute(sql`select nextval(pg_get_serial_sequence('invite_requests', 'id'))::bigint as id`)) as unknown as [{ id: string | number }])[0].id) : null;
+  const values = key && head && id !== null
+    ? { id, email: `d:${digest(key, 'invite.email', email.toLowerCase())}`, content: { email: seal(key, head, 'invite_requests.email', String(id), email) } }
     : { email };
   await db
     .insert(inviteRequests)
@@ -39,7 +41,7 @@ function emailOf(r: typeof inviteRequests.$inferSelect, head: string | null, key
   const c = r.content as { email?: string } | null;
   if (!c?.email) return r.email;
   if (!key || !head) throw new Error('an invite request is sealed and the deployment head has no data key');
-  return open(key, head, 'invite_requests.email', c.email);
+  return open(key, head, 'invite_requests.email', String(r.id), c.email);
 }
 
 async function operator(db: Db, headId: string): Promise<void> {

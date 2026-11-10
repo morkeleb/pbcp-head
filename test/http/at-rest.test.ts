@@ -72,6 +72,22 @@ describe('content at rest', () => {
     expect((await call('GET', `/api/me/cards/${encodeURIComponent('mail:x:2')}`, { auth: owner.auth })).status).toBe(404);
   });
 
+  it('binds content to its row: a content column copied in SQL from one card to another makes the second fail closed, the first still reads', async () => {
+    await call('PUT', cardPath('mail:x:1'), { auth: mail, body: card('mail:x:1', { title: 'The original' }) });
+    await call('PUT', cardPath('mail:x:2'), { auth: mail, body: card('mail:x:2', { title: 'The victim' }) });
+    // Both rendered, so nothing writes the rows while the copy is made.
+    for (const end = Date.now() + 10_000; Date.now() < end; await new Promise((r) => setTimeout(r, 100))) {
+      const rows = await testDb().select().from(cards).where(eq(cards.headId, OWNER));
+      if (rows.filter((r) => (r.content as Record<string, unknown> | null)?.html).length >= 2) break;
+    }
+    await testDb().execute(sql`update cards set content = (select content from cards where head_id = ${OWNER} and id = 'mail:x:1') where head_id = ${OWNER} and id = 'mail:x:2'`);
+    const b = await call('GET', '/api/me/brief', { auth: owner.auth });
+    expect(b.status).toBe(200);
+    expect(b.body.decisions.map((d: { id: string; title: string }) => [d.id, d.title])).toEqual([['mail:x:1', 'The original']]);
+    expect((await call('GET', `/api/me/cards/${encodeURIComponent('mail:x:2')}`, { auth: owner.auth })).status).toBe(404);
+    expect((await call('GET', `/api/me/cards/${encodeURIComponent('mail:x:1')}`, { auth: owner.auth })).body.card.title).toBe('The original');
+  });
+
   it('seals a head’s diagrams, serves them only through its own key, and keeps the email of an invite request sealed', async () => {
     await call('PUT', cardPath('mail:x:3'), { auth: mail, body: card('mail:x:3', { title: 'Chart', body: '```mermaid\npie title Kiwi\n  "a" : 1\n  "b" : 2\n```' }) });
     let html = '';

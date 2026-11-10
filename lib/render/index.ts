@@ -53,7 +53,7 @@ async function readDiagram(db: Db, headId: string | null, hash: string): Promise
 
 async function writeDiagram(db: Db, headId: string | null, hash: string, type: string, d: Partial<Drawn>, update = false): Promise<void> {
   const key = headId === null ? null : await dataKey(db, headId, { create: true });
-  const content = sealDiagram(key, headId, d);
+  const content = sealDiagram(key, headId, hash, d);
   if (update) await db.update(diagrams).set({ content: sql`coalesce(${diagrams.content}, '{}'::jsonb) || ${JSON.stringify(content)}::jsonb` }).where(eq(diagrams.hash, hash));
   else await db.insert(diagrams).values({ hash, type, content }).onConflictDoNothing();
 }
@@ -136,7 +136,7 @@ export async function renderCard(db: Db, headId: string, card: Card): Promise<Ca
   // At rest: the rendered output sealed into the card's content (lib/vault.ts); what it was rendered from stays clear.
   const key = await dataKey(db, headId, { create: true });
   if (!key) return { html, actions, meta }; // the head is gone (deleted while this rendered): nothing to store
-  const sealed = { html: sealField(key, headId, 'html', html), actions: sealField(key, headId, 'actions', actions), meta: sealField(key, headId, 'meta', meta) };
+  const sealed = { html: sealField(key, headId, card.id, 'html', html), actions: sealField(key, headId, card.id, 'actions', actions), meta: sealField(key, headId, card.id, 'meta', meta) };
   await db
     .update(cards)
     .set({ content: sql`coalesce(${cards.content}, '{"v":1}'::jsonb) || ${JSON.stringify(sealed)}::jsonb`, renderedFrom: renderSource(card) })

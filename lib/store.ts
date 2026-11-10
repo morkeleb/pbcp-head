@@ -128,20 +128,20 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   // At rest (lib/vault.ts): the content sealed under the head's data key, the metadata in clear. Only the new form is
   // written; a row's plaintext columns from before encryption are left for the drop-columns migration.
   const key = (await dataKey(tx, headId, { create: true }))!;
-  const sealed = sealDoc(key, headId, doc);
+  const sealed = sealDoc(key, headId, stored.id, doc);
   const content: Record<string, unknown> = {
     v: 1,
     mac: sealed.mac,
     doc: sealed.doc,
-    ...(opts.decidedDoc !== undefined ? { decided: sealField(key, headId, 'decided', opts.decidedDoc) } : {}),
-    ...(stored.comment !== undefined ? { comment: sealField(key, headId, 'comment', stored.comment) } : {}),
-    ...(stored.edited_proposal !== undefined ? { edited: sealField(key, headId, 'edited', stored.edited_proposal) } : {}),
+    ...(opts.decidedDoc !== undefined ? { decided: sealField(key, headId, stored.id, 'decided', opts.decidedDoc) } : {}),
+    ...(stored.comment !== undefined ? { comment: sealField(key, headId, stored.id, 'comment', stored.comment) } : {}),
+    ...(stored.edited_proposal !== undefined ? { edited: sealField(key, headId, stored.id, 'edited', stored.edited_proposal) } : {}),
   };
   const gone = [...(stored.comment === undefined ? ['comment'] : []), ...(stored.edited_proposal === undefined ? ['edited'] : [])];
   // The same content as stored: compared by its keyed digest, or (a row from before encryption) as it was.
   const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and (${cards.content}->>'mac' = ${sealed.mac} or (${cards.content} is null and ${cards.producerDoc} = ${JSON.stringify(doc)}::jsonb))`;
   const merged = sql`(coalesce(${cards.content}, '{}'::jsonb)${sql.raw(gone.map((k) => ` - '${k}'`).join(''))}) || ${JSON.stringify(content)}::jsonb`;
-  const clearDecided = opts.decidedDoc !== undefined ? sealDoc(key, headId, opts.decidedDoc).clear : undefined;
+  const clearDecided = opts.decidedDoc !== undefined ? sealDoc(key, headId, stored.id, opts.decidedDoc).clear : undefined;
   const updated = await tx
     .update(cards)
     .set({

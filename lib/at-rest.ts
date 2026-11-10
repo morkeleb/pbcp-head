@@ -90,7 +90,7 @@ export async function backfill(db: Db, progress: (line: string) => void = () => 
     const rows = await db.select().from(decisionLog).where(isNull(decisionLog.content)).orderBy(asc(decisionLog.seq)).limit(BATCH);
     for (const r of rows) {
       const key = (await dataKey(db, r.headId, { create: true }))!;
-      const s = sealLog(key, r.headId, { decidedDoc: r.decidedDoc as Record<string, unknown>, comment: r.comment, editedProposal: r.editedProposal });
+      const s = sealLog(key, r.headId, r.seq, { decidedDoc: r.decidedDoc as Record<string, unknown>, comment: r.comment, editedProposal: r.editedProposal });
       await db.update(decisionLog).set({ content: s.content }).where(eq(decisionLog.seq, r.seq));
     }
     if (rows.length > 0) progress(`decision log: ${rows.length} sealed`);
@@ -105,7 +105,7 @@ export async function backfill(db: Db, progress: (line: string) => void = () => 
     for (const d of olds) {
       await db
         .insert(diagrams)
-        .values({ hash: scopedHash(headId, d.hash), type: d.type, content: sealDiagram(key, headId, d) })
+        .values({ hash: scopedHash(headId, d.hash), type: d.type, content: sealDiagram(key, headId, scopedHash(headId, d.hash), d) })
         .onConflictDoNothing();
     }
   }
@@ -117,7 +117,7 @@ export async function backfill(db: Db, progress: (line: string) => void = () => 
   if (head) {
     const key = (await dataKey(db, head, { create: true }))!;
     const rows = await db.select().from(inviteRequests).where(isNull(inviteRequests.content));
-    for (const r of rows) await db.update(inviteRequests).set({ content: { email: seal(key, head, 'invite_requests.email', r.email) } }).where(eq(inviteRequests.id, r.id));
+    for (const r of rows) await db.update(inviteRequests).set({ content: { email: seal(key, head, 'invite_requests.email', String(r.id), r.email) } }).where(eq(inviteRequests.id, r.id));
     if (rows.length) progress(`invite requests: ${rows.length} sealed`);
   }
   return remaining(db);

@@ -13,23 +13,35 @@ const flip = (sealed: string, at: number) => {
 describe('values', () => {
   it('round-trips, with a fresh nonce each time', () => {
     const k = newDataKey();
-    const a = seal(k, 'morten', 'cards.doc', 'Reply to Anna');
-    const b = seal(k, 'morten', 'cards.doc', 'Reply to Anna');
+    const a = seal(k, 'morten', 'cards.doc', 'mail:x:1', 'Reply to Anna');
+    const b = seal(k, 'morten', 'cards.doc', 'mail:x:1', 'Reply to Anna');
     expect(isSealed(a)).toBe(true);
     expect(a).not.toBe(b);
     expect(a).not.toContain('Anna');
-    expect(open(k, 'morten', 'cards.doc', a)).toBe('Reply to Anna');
+    expect(open(k, 'morten', 'cards.doc', 'mail:x:1', a)).toBe('Reply to Anna');
   });
 
   it('fails closed on a flipped byte anywhere, another key, another head or another column', () => {
     const k = newDataKey();
-    const s = seal(k, 'morten', 'cards.doc', 'Reply to Anna');
+    const s = seal(k, 'morten', 'cards.doc', 'mail:x:1', 'Reply to Anna');
     const n = Buffer.from(s.slice(3), 'base64').length;
-    for (const at of [0, 11, 12, n - 17, n - 1]) expect(() => open(k, 'morten', 'cards.doc', flip(s, at))).toThrow(CryptoError);
-    expect(() => open(newDataKey(), 'morten', 'cards.doc', s)).toThrow(CryptoError);
-    expect(() => open(k, 'lena', 'cards.doc', s)).toThrow(CryptoError);
-    expect(() => open(k, 'morten', 'cards.rendered_html', s)).toThrow(CryptoError);
-    expect(() => open(k, 'morten', 'cards.doc', 'Reply to Anna')).toThrow(CryptoError);
+    for (const at of [0, 11, 12, n - 17, n - 1]) expect(() => open(k, 'morten', 'cards.doc', 'mail:x:1', flip(s, at))).toThrow(CryptoError);
+    expect(() => open(newDataKey(), 'morten', 'cards.doc', 'mail:x:1', s)).toThrow(CryptoError);
+    expect(() => open(k, 'lena', 'cards.doc', 'mail:x:1', s)).toThrow(CryptoError);
+    expect(() => open(k, 'morten', 'cards.rendered_html', 'mail:x:1', s)).toThrow(CryptoError);
+    expect(() => open(k, 'morten', 'cards.doc', 'mail:x:1', 'Reply to Anna')).toThrow(CryptoError);
+  });
+
+  it('binds each value to its row: sealed for card A of a head, it does not open as card B of the same head', () => {
+    const k = newDataKey();
+    const a = seal(k, 'morten', 'cards.doc', 'mail:x:A', '{"title":"Reply to Anna"}');
+    expect(open(k, 'morten', 'cards.doc', 'mail:x:A', a)).toBe('{"title":"Reply to Anna"}');
+    expect(() => open(k, 'morten', 'cards.doc', 'mail:x:B', a)).toThrow(CryptoError);
+    // A whole sealed document moved to another card's row fails there too.
+    const doc = { protocol: 'pbcp/1', id: 'mail:x:A', kind: 'decision', title: 'A' };
+    const s = sealDoc(k, 'morten', 'mail:x:A', doc);
+    const asB = { headId: 'morten', id: 'mail:x:B', producerDoc: s.clear, content: { v: 1, mac: s.mac, doc: s.doc } } as unknown as Parameters<typeof openCardRow>[0];
+    expect(() => openCardRow(asB, k)).toThrow(CryptoError);
   });
 
   it('digests equal content equally, under the key only', () => {
@@ -76,7 +88,7 @@ describe('a card at rest (lib/vault.ts)', () => {
 
   it('opens a row back to the document as accepted', () => {
     const k = newDataKey();
-    const s = sealDoc(k, 'morten', doc);
+    const s = sealDoc(k, 'morten', 'mail:x:1', doc);
     expect(JSON.stringify(s.clear)).not.toMatch(/Divorce|40,000|divorce-lawyer|secret too/);
     const row = { headId: 'morten', id: 'mail:x:1', producerDoc: s.clear, content: { v: 1, mac: s.mac, doc: s.doc } } as unknown as Parameters<typeof openCardRow>[0];
     expect(openCardRow(row, k).producerDoc).toEqual(doc);

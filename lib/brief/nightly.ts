@@ -86,7 +86,7 @@ export async function mintDailyCard(db: Db, headId: string, timezone: string, da
   const key = (await dataKey(db, headId, { create: true }))!;
   await db
     .update(cards)
-    .set({ content: sql`coalesce(${cards.content}, '{"v":1}'::jsonb) || ${JSON.stringify({ paragraph: sealField(key, headId, 'paragraph', parts) })}::jsonb` })
+    .set({ content: sql`coalesce(${cards.content}, '{"v":1}'::jsonb) || ${JSON.stringify({ paragraph: sealField(key, headId, card.id, 'paragraph', parts) })}::jsonb` })
     .where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
   return r;
 }

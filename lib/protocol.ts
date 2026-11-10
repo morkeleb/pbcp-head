@@ -6,7 +6,7 @@ import {
   acknowledge, CARD_LIMIT_BYTES, checkOutcome, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
   snooze, submit, unsnooze, type Card, type Decision, type Urgency,
 } from '@pbcp/core';
-import { and, asc, eq, gt, inArray, max, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, decisionLog, labelCeilings } from '../db/schema';
 import { now } from './clock';
@@ -188,8 +188,11 @@ export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: un
       const decidedDoc = producerPart(stored.card);
       card = await persist(tx, ctx.headId, c, { decidedDoc });
       // At rest: the decided-on document, comment and edited text sealed; the value, device and time in clear.
-      const log = sealLog((await dataKey(tx, ctx.headId, { create: true }))!, ctx.headId, { decidedDoc: decidedDoc as unknown as Record<string, unknown>, comment: card.comment ?? null, editedProposal: card.edited_proposal ?? null });
+      // Bound to its row: the row's seq is taken before it is written, so the sealed values name it.
+      const [{ seq }] = (await tx.execute(sql`select nextval(pg_get_serial_sequence('decision_log', 'seq'))::bigint as seq`)) as unknown as [{ seq: string | number }];
+      const log = sealLog((await dataKey(tx, ctx.headId, { create: true }))!, ctx.headId, Number(seq), { decidedDoc: decidedDoc as unknown as Record<string, unknown>, comment: card.comment ?? null, editedProposal: card.edited_proposal ?? null });
       await tx.insert(decisionLog).values({
+        seq: Number(seq),
         headId: ctx.headId,
         cardId: card.id,
         decision: card.decision!,

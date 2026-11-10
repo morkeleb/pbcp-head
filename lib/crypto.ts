@@ -3,7 +3,8 @@
 // wraps under each passkey's PRF output and moves the unwrapping to the session, without touching a card. So the
 // wrapping is pluggable (`KeyWrap`); the data key and the sealed values are not.
 //
-//   value      AES-256-GCM, a random 96-bit nonce per value, the head id and the column as associated data:
+//   value      AES-256-GCM, a random 96-bit nonce per value, the head id, the table and column, and the row as associated
+//              data, so a value opens only in the row and field it was sealed for:
 //              "e1:" + base64(nonce ‖ ciphertext ‖ tag). A flipped byte fails closed (CryptoError).
 //   data key   wrapped with the same construction under the wrapping key, the head id as associated data:
 //              "<kind>1:" + base64(nonce ‖ ciphertext ‖ tag).
@@ -38,19 +39,26 @@ function gcmOpen(key: Buffer, aad: string, sealed: Buffer): Buffer {
   }
 }
 
-/** The associated data of a value: which head, which column (or field). */
-const aadOf = (headId: string, column: string) => `${headId}\u0000${column}`;
+/** The associated data of a value: which head, which `<table>.<column>` (or field), which row. */
+const aadOf = (headId: string, column: string, rowId: string) => `${headId}\u0000${column}\u0000${rowId}`;
 
-/** Encrypts `plain` under the head's data key for one column. */
-export function seal(key: Buffer, headId: string, column: string, plain: string): string {
-  return `e1:${gcmSeal(key, aadOf(headId, column), Buffer.from(plain, 'utf8')).toString('base64')}`;
+/**
+ * Encrypts `plain` under the head's data key for one field of one row: `column` is `<table>.<column>` and `rowId` the
+ * row's id (a card's id, a decision-log seq, a diagram's head-scoped hash, an invite request's id). A value copied to
+ * another row, field or head does not open there.
+ */
+export function seal(key: Buffer, headId: string, column: string, rowId: string, plain: string): string {
+  return `e1:${gcmSeal(key, aadOf(headId, column, rowId), Buffer.from(plain, 'utf8')).toString('base64')}`;
 }
 
-/** Decrypts a value `seal` made; CryptoError when it is not one, or does not authenticate. */
-export function open(key: Buffer, headId: string, column: string, sealed: string): string {
+/** Decrypts a value `seal` made for this head, field and row; CryptoError when it is not one, or does not authenticate. */
+export function open(key: Buffer, headId: string, column: string, rowId: string, sealed: string): string {
   if (!sealed.startsWith('e1:')) throw new CryptoError('not a sealed value');
-  return gcmOpen(key, aadOf(headId, column), Buffer.from(sealed.slice(3), 'base64')).toString('utf8');
+  return gcmOpen(key, aadOf(headId, column, rowId), Buffer.from(sealed.slice(3), 'base64')).toString('utf8');
 }
+
+/** The data-key wrap's associated data: the head id (a wrap belongs to one head; it has no row of its own). */
+const wrapAad = (headId: string) => `${headId}\u0000heads.data_key`;
 
 export const isSealed = (v: unknown): v is string => typeof v === 'string' && v.startsWith('e1:');
 
@@ -93,12 +101,12 @@ export class MasterKeyWrap implements KeyWrap {
   }
 
   wrap(headId: string, dataKey: Buffer): string {
-    return `m1:${gcmSeal(this.master, aadOf(headId, 'heads.data_key'), dataKey).toString('base64')}`;
+    return `m1:${gcmSeal(this.master, wrapAad(headId), dataKey).toString('base64')}`;
   }
 
   unwrap(headId: string, wrapped: string): Buffer {
     if (!wrapped.startsWith('m1:')) throw new CryptoError('not a master-key wrap');
-    const key = gcmOpen(this.master, aadOf(headId, 'heads.data_key'), Buffer.from(wrapped.slice(3), 'base64'));
+    const key = gcmOpen(this.master, wrapAad(headId), Buffer.from(wrapped.slice(3), 'base64'));
     if (key.length !== 32) throw new CryptoError('a data key is 32 bytes');
     return key;
   }
