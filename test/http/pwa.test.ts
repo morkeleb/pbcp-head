@@ -9,7 +9,7 @@ import { cards, decisionLog } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { startSession } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, resetHead, testDb, cardRow } from './helpers';
 
 let browser: Browser;
 let page: Page;
@@ -26,7 +26,7 @@ afterAll(() => browser?.close());
 afterEach(() => page?.close());
 
 const DECISION = 'goalpath:item:1:ship';
-const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+const row = (id: string) => cardRow(id);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 beforeEach(async () => {

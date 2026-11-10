@@ -9,7 +9,7 @@ import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { startSession } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let browser: Browser;
 let page: Page;
@@ -29,7 +29,7 @@ afterEach(() => page?.close());
 
 const decisionCard = (title: string) => page.$(`xpath/.//article[@data-kind="decision"][contains(., "${title}")]`);
 const row_ = (title: string) => page.$(`xpath/.//article[contains(@class,"update-row")][.//h4[contains(., "${title}")]]`);
-const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+const row = (id: string) => cardRow(id);
 /** Clicks (or taps) an element from the middle of the screen: one at the bottom edge sits under the fixed footer. */
 async function press(el: ElementHandle<Element> | null, how: 'click' | 'tap' = 'click') {
   await el!.evaluate((e) => e.scrollIntoView({ block: 'center' }));
@@ -1728,7 +1728,8 @@ describe('web orders', () => {
     await (await page.$('xpath/.//button[.="Give order"]'))!.click();
     await page.waitForSelector('xpath/.//article//a[.="Renew the parking permit"]');
 
-    const [order] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.toProducer, '*')));
+    const [raw] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.toProducer, '*')));
+    const order = await row(raw!.id); // opened (at rest: the title and body are sealed)
     expect(order!.producerDoc).toMatchObject({ title: 'Renew the parking permit', body: 'Zone 4, before Friday.' });
     expect(order!.wildcardEligible).toEqual(['hermes']);
     await call('POST', `${cardPath(order!.id)}/claim`, { auth: hermes, body: { lease_seconds: 600 } });

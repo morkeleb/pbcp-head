@@ -61,7 +61,9 @@ describe('caching by sha256 of the sanitised fence', () => {
     await renderBody(db, fence('pie title Bad\n "a" : x'));
     expect(drawCount()).toBe(2);
     const rows = await db.select().from(diagrams);
-    expect(rows.map((r) => [r.type, r.svg !== null, r.error !== null]).sort()).toEqual([['pie', false, true], ['pie', true, false]]);
+    // The demo's and the in-process renderer's (no head): public rows, kept in clear in `content` (lib/vault.ts).
+    const drawn = (r: (typeof rows)[number]) => r.content as { public?: true; svg?: string; error?: string };
+    expect(rows.map((r) => [r.type, drawn(r).public, drawn(r).svg !== undefined, drawn(r).error !== undefined]).sort()).toEqual([['pie', true, false, true], ['pie', true, true, false]]);
   });
 
   it('a stripped directive does not make a new diagram: the cache key is the sanitised source', async () => {
@@ -73,8 +75,9 @@ describe('caching by sha256 of the sanitised fence', () => {
   it('stores sanitised SVG with no script, foreignObject or external reference', async () => {
     await renderBody(db, fence('flowchart LR\n  A[Invoice] --> B[Reply]'));
     const [row] = await db.select().from(diagrams);
-    expect(row!.svg).toMatch(/^<svg/);
-    expect(row!.svg).not.toMatch(/<script|foreignObject|https?:\/\/(?!www\.w3\.org)/);
+    const svg = (row!.content as { svg?: string }).svg!;
+    expect(svg).toMatch(/^<svg/);
+    expect(svg).not.toMatch(/<script|foreignObject|https?:\/\/(?!www\.w3\.org)/);
   });
 });
 

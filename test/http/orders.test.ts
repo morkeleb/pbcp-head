@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { cards } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { card, cardPath } from './cards';
-import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let hermes: string;
 let cal: string;
@@ -18,7 +18,7 @@ const outcome = (auth: string, root: string, order: string, claimSeq: number, ex
   const id = outcomeId(root, order, claimSeq);
   return call('PUT', cardPath(id), { auth, body: card(id, { kind: 'signal', title: 'Done', thread: order, references: [order], 'orders.claim_seq': claimSeq, 'orders.result': 'done', ...extra }) });
 };
-const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+const row = (id: string) => cardRow(id);
 const ulid = (id: string) => id.split(':')[2]!;
 
 beforeEach(async () => {

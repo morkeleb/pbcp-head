@@ -6,7 +6,7 @@ import { mintProducerToken } from '../../lib/auth/producer';
 import { submitCard } from '../../lib/protocol';
 import { TEST_CRON_SECRET } from '../env';
 import { card, cardPath } from './cards';
-import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let hermes: string;
 const clock = (at: string) => call('POST', '/api/test', { body: { clock: at } });
@@ -116,7 +116,7 @@ describe('GET /api/cron/brief', () => {
   it('on a day with nothing open and nothing new, mints a card that says "Nothing waiting for you."', async () => {
     await clock('2026-10-07T06:00:00Z');
     expect((await cron()).body).toEqual({ minted: [{ head: OWNER, id: 'head:daily:2026-10-07', status: 201 }], notified: [] });
-    const [daily] = await testDb().select().from(cards).where(eq(cards.namespace, 'daily'));
+    const daily = await cardRow('head:daily:2026-10-07');
     expect((daily!.producerDoc as { body: string }).body.split('\n')[0]).toBe('Nothing waiting for you.');
     expect((daily!.producerDoc as { body: string }).body).not.toMatch(/mattered|decided|updates? from/);
   });

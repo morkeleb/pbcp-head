@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { cards, diagrams } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, resetHead, testDb, cardRow } from './helpers';
 
 let hermes: string;
 beforeEach(async () => {
@@ -13,7 +13,7 @@ beforeEach(async () => {
 
 async function renderedRow(id: string) {
   for (let i = 0; i < 100; i++) {
-    const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id)));
+    const row = await cardRow(id).catch(() => undefined);
     if (row?.renderedHtml) return row;
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -27,9 +27,10 @@ describe('render on receipt', () => {
     expect(r.status).toBe(201);
     expect(r.body).not.toHaveProperty('rendered_html'); // never on the producer API
     const row = await renderedRow('hermes:gmail:1');
-    const hash = /\/api\/me\/svg\/([0-9a-f]{64})/.exec(row.renderedHtml!)![1]!;
+    // At rest: a head's drawing is its own, served with the head named (?h=) so its key opens it.
+    const src = /\/api\/me\/svg\/[0-9a-f]{64}\?h=[^"]+/.exec(row.renderedHtml!)![0]!.replace(/&amp;/g, '&');
     expect(row.renderedHtml).not.toContain('<script');
-    const svg = await fetch(`${headUrl()}/api/me/svg/${hash}`);
+    const svg = await fetch(`${headUrl()}${src}`);
     expect(svg.status).toBe(200);
     expect(svg.headers.get('content-type')).toContain('image/svg+xml');
     expect(svg.headers.get('cache-control')).toContain('immutable');
