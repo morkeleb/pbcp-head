@@ -30,6 +30,9 @@ export const heads = pgTable('heads', {
   // so the change feed cannot carry it; a device that sees this move refetches the floors (GET /api/me/settings) and
   // recomputes its stored cards' effective sensitivity.
   settingsSeq: bigint('settings_seq', { mode: 'number' }).notNull().default(0),
+  // At rest (lib/crypto.ts, lib/vault.ts): the head's data key, 32 random bytes, wrapped (step one: under HEAD_MASTER_KEY,
+  // "m1:…"). Created on the head's first write. Destroying it makes every sealed value of the head unreadable.
+  dataKey: text('data_key'),
 });
 
 export const producerTokens = pgTable('producer_tokens', {
@@ -140,6 +143,11 @@ export const cards = pgTable(
     leaseClaimedAt: tstz('lease_claimed_at'),
     leaseRenewals: integer('lease_renewals').notNull().default(0),
     leaseLapsedAt: tstz('lease_lapsed_at'),
+    // At rest (lib/vault.ts): the card's content, sealed under the head's data key, one JSON per row so there is one place
+    // to forget: { v, mac, doc, decided?, html?, actions?, meta?, paragraph?, comment?, edited? }. `producer_doc` then
+    // holds only the clear metadata (ids, kind, thread, times, …). Rows written before it keep their plaintext columns
+    // until the drop-columns migration; readers prefer `content`.
+    content: jsonb('content'),
   },
   (t) => [
     primaryKey({ columns: [t.headId, t.id] }),
@@ -199,6 +207,8 @@ export const decisionLog = pgTable(
     decidedAt: tstz('decided_at').notNull(),
     decidedDoc: jsonb('decided_doc').notNull(),
     actor: text('actor').notNull(), // the device id that recorded the decision (mobile PRD, Auth decision 4)
+    // At rest (lib/vault.ts): { doc, comment?, edited? } sealed; decided_doc then holds the clear metadata only.
+    content: jsonb('content'),
   },
   (t) => [index('decision_log_card').on(t.headId, t.cardId)],
 );
@@ -273,6 +283,9 @@ export const diagrams = pgTable('diagrams', {
   svgDark: text('svg_dark'),
   errorDark: text('error_dark'),
   createdAt: tstz('created_at').notNull().defaultNow(),
+  // At rest (lib/vault.ts): { svg?, svgDark?, error?, errorDark? } sealed under the head's data key (the row's hash is then
+  // scoped to the head), or { public: true, … } in clear for the front door's demo, which is public by design.
+  content: jsonb('content'),
 });
 
 // Rate limits (RFC §7.1 `429`; docs/deploy.md): a fixed-window counter per bucket and key (a producer
@@ -308,6 +321,9 @@ export const inviteRequests = pgTable(
     email: text('email').notNull(),
     createdAt: tstz('created_at').notNull().defaultNow(),
     userAgent: text('user_agent'),
+    // At rest (lib/vault.ts): { email } sealed under the deployment head's data key; `email` then holds a keyed digest of
+    // the lowercased address, so asking twice still changes nothing.
+    content: jsonb('content'),
   },
   (t) => [uniqueIndex('invite_requests_email').on(sql`lower(${t.email})`)],
 );
