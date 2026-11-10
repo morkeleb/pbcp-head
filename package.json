@@ -26,7 +26,11 @@
     "api:generate": "tsx scripts/api-generate.ts",
     "icons": "tsx scripts/icons.ts",
     "demo": "tsx --env-file-if-exists=.env scripts/demo.ts",
-    "demo:purge": "tsx --env-file-if-exists=.env scripts/demo-purge.ts"
+    "demo:purge": "tsx --env-file-if-exists=.env scripts/demo-purge.ts",
+    "encrypt-backfill": "tsx --env-file-if-exists=.env scripts/encrypt-backfill.ts",
+    "rewrap": "tsx --env-file-if-exists=.env scripts/rewrap.ts",
+    "head:delete": "tsx --env-file-if-exists=.env scripts/head-delete.ts",
+    "card:decrypt": "tsx --env-file-if-exists=.env scripts/card-decrypt.ts"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
