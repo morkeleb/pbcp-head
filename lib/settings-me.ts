@@ -12,7 +12,7 @@ import { SNOOZE_PRESETS } from './api/schemas';
 import { canonicalZone, effectiveTimezone } from './timezone';
 import { listDevices } from './me';
 import { parseQuarterHour } from './push/daily';
-import { isSensitivity, loadPolicy, parseFloor, setFloor, type Sensitivity } from './sensitivity';
+import { bumpSettingsSeq, floorsOf, isSensitivity, loadPolicy, parseFloor, setFloor, type Sensitivity } from './sensitivity';
 
 /**
  * POST /api/me/visit: the owner left the brief having seen everything up to `seq` (default: now). The
@@ -171,6 +171,9 @@ export async function settings(db: Db, headId: string) {
     timezone_override: zone.override,
     device_timezone: zone.device ? { device_id: zone.device.id, timezone: zone.device.timezone, seen_at: iso(zone.device.seen_at) } : null,
     sensitivity_floor: isSensitivity(head.sensitivityFloor) ? head.sensitivityFloor : null,
+    // Every floor in one place, for a device that recomputes effective sensitivity itself (local store).
+    sensitivity_floors: await floorsOf(db, headId),
+    settings_seq: head.settingsSeq,
   };
 }
 
@@ -190,6 +193,10 @@ export async function updateSettings(db: Db, headId: string, body: { timezone?: 
     }
     set.displayName = name === null ? null : name.trim();
   }
-  if (Object.keys(set).length > 0) await db.update(heads).set(set).where(eq(heads.id, headId));
+  if (Object.keys(set).length > 0)
+    await db.transaction(async (tx) => {
+      await tx.update(heads).set(set).where(eq(heads.id, headId));
+      if (set.sensitivityFloor !== undefined) await bumpSettingsSeq(tx, headId);
+    });
   return settings(db, headId);
 }

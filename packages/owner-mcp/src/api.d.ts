@@ -1399,6 +1399,8 @@ export interface components {
             seq: number;
             /** @description The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight */
             date: string;
+            /** @description Moves with every change to the owner’s sensitivity floors (RFC 0.9 §9). A floor changes no card, so the change feed cannot carry it: when this moves, refetch the floors (GET /api/me/settings) and recompute stored cards’ effective sensitivity */
+            settings_seq: number;
         };
         OrderWithProgress: {
             /** @constant */
@@ -1569,6 +1571,17 @@ export interface components {
             } | null;
             /** @description The owner’s floor for every card (RFC 0.9 §9), or null */
             sensitivity_floor: ("normal" | "private" | "confirm") | null;
+            /** @description Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself */
+            sensitivity_floors: {
+                producers: {
+                    [key: string]: "normal" | "private" | "confirm";
+                };
+                labels: {
+                    [key: string]: "normal" | "private" | "confirm";
+                };
+            };
+            /** @description As in GET /api/me/seq: moves with every floor change */
+            settings_seq: number;
         };
         Producer: {
             root: string;

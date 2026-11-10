@@ -148,6 +148,13 @@
       "when": 1794310287081,
       "tag": "0020_sensitivity",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794327465324,
+      "tag": "0021_settings_seq",
+      "breakpoints": true
     }
   ]
 }

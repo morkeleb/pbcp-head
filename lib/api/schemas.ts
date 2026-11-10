@@ -204,6 +204,7 @@ export const Brief = z.object({
 export const BriefStamp = z.object({
   seq: Seq.describe('The highest change_seq the head has assigned: it moves with every card stored and every decision'),
   date: z.string().describe('The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight'),
+  settings_seq: z.number().int().nonnegative().describe('Moves with every change to the owner’s sensitivity floors (RFC 0.9 §9). A floor changes no card, so the change feed cannot carry it: when this moves, refetch the floors (GET /api/me/settings) and recompute stored cards’ effective sensitivity'),
 }).register(responses, { id: 'BriefStamp' });
 
 export const Visit = LastVisit;
@@ -260,6 +261,8 @@ export const Settings = z.object({
   timezone_override: Zone.nullable(),
   device_timezone: z.object({ device_id: z.string(), timezone: Zone, seen_at: Timestamp }).nullable().describe('The most recent zone a device sent'),
   sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s floor for every card (RFC 0.9 §9), or null'),
+  sensitivity_floors: z.object({ producers: z.record(z.string(), SENSITIVITY), labels: z.record(z.string(), SENSITIVITY) }).describe('Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself'),
+  settings_seq: z.number().int().nonnegative().describe('As in GET /api/me/seq: moves with every floor change'),
 }).register(responses, { id: 'Settings' });
 
 export const SettingsPatch = z.object({
