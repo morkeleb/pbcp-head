@@ -129,5 +129,6 @@ Each list is a test: a brief (a recorded `/api/me/brief` response), a context, t
 
 ## Sources
 
-- RFC Draft 0.9, `vendor/pbcp/rfc/pbcp-draft-0.9.md`: §4.1 (`task`; `sensitivity`), §4.1a, §4.3, §4.5, §7.3–§7.4, §8, §9, §12, Appendix A. **The `sensitivity` text is not yet in a published draft:** it is in uncommitted work on the `rfc-0.9-sensitivity` branch of `morkeleb/pbcp` (Nov 10, 2026), with no PR yet. This document follows that text; when it lands (and the head's pin moves), cite the section numbers from the published draft.
+- RFC Draft 0.9, `vendor/pbcp/rfc/pbcp-draft-0.9.md`, as pinned at `35e446a` (pbcp-head PR #57): §4.1 (`task`; the `sensitivity` row: `private` keeps the lead and body off notifications, assistant indexes and surfaces outside the signed-in session, and a locked device shows producer and kind only; `confirm` records no decision without the person identifying again), §4.1a ("`sensitivity` is how carefully"), §4.3, §4.5 ("Identifying again"), §7.3 and §7.4 (`403 reauthentication_required`), §8, §9 ("Sensitivity": the owner raises, never lowers), §11.3, §12 ("Sensitivity is a floor"), Appendix A.
+- The head's side: docs/trust.md ("Sensitivity"), and in /api/me each card's and each paragraph entry's `sensitivity` and `effective_sensitivity`, `GET /api/me/brief?spoken=1`, and the passkey step-up at `POST /api/auth/passkey/step-up` (pbcp-head PR #57).
 - docs/mobile-prd.md: the Human API, gestures, nothing queued offline, orders dictated and interpreted by the executor.
