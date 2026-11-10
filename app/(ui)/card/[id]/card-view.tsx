@@ -15,7 +15,8 @@ import { localDay } from '../../brief/days';
 import { TaskRow } from '../../brief/TaskRow';
 import { UpdateRow } from '../../brief/UpdateRow';
 import { PageRow, useChromeCards } from '../../chrome';
-import { api, cardHref, useFresh, when } from '../../client';
+import { api, cardHref, when } from '../../client';
+import { getCard, getMeta, onStore } from '../../local/store';
 import { decisionLabel, Rendered, type MeCard } from '../../components';
 import { OrderBlock } from '../../orders/orders-view';
 
@@ -86,15 +87,35 @@ export function CardView() {
     // Opening the card presents it to its owner (§4.2 seen_at). Offline it is not sent, and not kept for later.
     if (!d.card.seen_at) api(`/api/me/cards/${encodeURIComponent(d.card.id)}/seen`, { method: 'POST' }).catch(() => undefined);
   }, []);
+  // Local first (docs/local-first.md): the card from the device's store at once, marked "as of" the last sync; then the
+  // head's answer, which adds its thread and decision log. Offline, the store's card is the page.
   const load = useCallback(async (network = false) => {
+    const id = decodeId(segment!);
+    const local = await getCard(id);
+    if (local) {
+      setDetail((d) => d ?? ({ timezone: undefined, card: local, predecessors: [], successors: [], references: [], thread: [], decisions: [] } as unknown as Detail));
+      setCachedAt((await getMeta<string>('synced_at')) ?? null);
+    }
     const r = await api<Detail>(path!, { network });
-    if (r.status !== 200) return setStatus(r.status === 404 ? 'No such card.' : r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of this card yet.' : `Could not load the card (${r.status}).`);
-    show(r.body, r.cachedAt ?? null);
-  }, [path, show]);
+    if (r.status !== 200) {
+      if (local) return; // the device's copy stands, "as of" the last sync
+      return setStatus(r.status === 404 ? 'No such card.' : r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of this card yet.' : `Could not load the card (${r.status}).`);
+    }
+    // The head's card, with what the outbox has not sent yet laid over (the store's copy has it).
+    show(local && local.change_seq >= r.body.card.change_seq ? { ...r.body, card: { ...r.body.card, ...local } } : r.body, null);
+  }, [path, segment, show]);
   useEffect(() => void load(), [load]);
-  const fresh = useCallback((d: Detail) => show(d, null), [show]);
-  const stale = useCallback(() => void load(true), [load]);
-  useFresh(path, fresh, stale);
+  // The store changed this card (the sync, the outbox, another tab): the page follows.
+  useEffect(
+    () =>
+      onStore(async (e) => {
+        const id = segment ? decodeId(segment) : null;
+        if (!id || !e.cards?.includes(id)) return;
+        const c = await getCard(id);
+        if (c) setDetail((d) => (d ? { ...d, card: { ...d.card, ...c } } : d));
+      }),
+    [segment],
+  );
   useChromeCards(detail ? [detail.card] : [], { at: cachedAt, timezone: detail?.timezone });
 
   const title = detail ? (KIND[detail.card.kind] ?? 'Card') : 'Card';

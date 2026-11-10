@@ -4836,11 +4836,17 @@
           "date": {
             "type": "string",
             "description": "The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight"
+          },
+          "settings_seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Moves with every change to the owner’s sensitivity floors (RFC 0.9 §9). A floor changes no card, so the change feed cannot carry it: when this moves, refetch the floors (GET /api/me/settings) and recompute stored cards’ effective sensitivity"
           }
         },
         "required": [
           "seq",
-          "date"
+          "date",
+          "settings_seq"
         ],
         "additionalProperties": false
       },
@@ -5423,6 +5429,50 @@
               }
             ],
             "description": "The owner’s floor for every card (RFC 0.9 §9), or null"
+          },
+          "sensitivity_floors": {
+            "type": "object",
+            "properties": {
+              "producers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                }
+              },
+              "labels": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "producers",
+              "labels"
+            ],
+            "additionalProperties": false,
+            "description": "Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself"
+          },
+          "settings_seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "As in GET /api/me/seq: moves with every floor change"
           }
         },
         "required": [
@@ -5432,7 +5482,9 @@
           "timezone_source",
           "timezone_override",
           "device_timezone",
-          "sensitivity_floor"
+          "sensitivity_floor",
+          "sensitivity_floors",
+          "settings_seq"
         ],
         "additionalProperties": false
       },

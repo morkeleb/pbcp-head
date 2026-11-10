@@ -26,6 +26,10 @@ export const heads = pgTable('heads', {
   // RFC 0.9 §9 "Sensitivity": the owner's floor for every card (normal | private | confirm), or null for none. It raises a
   // card's effective sensitivity when the card is handled (lib/sensitivity.ts); the card is never rewritten.
   sensitivityFloor: text('sensitivity_floor'),
+  // Moves with every change to the owner's floors, in the same transaction (lib/sensitivity.ts): a floor changes no card,
+  // so the change feed cannot carry it; a device that sees this move refetches the floors (GET /api/me/settings) and
+  // recomputes its stored cards' effective sensitivity.
+  settingsSeq: bigint('settings_seq', { mode: 'number' }).notNull().default(0),
 });
 
 export const producerTokens = pgTable('producer_tokens', {

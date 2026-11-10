@@ -27,7 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, decidedLine, useLocale, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, splitBody, useDecide, useDeferred,
+  announce, decidedLine, useLocale, NOT_SENT, OFFLINE_QUEUED, OFFLINE_REASON_SHORT, options, OutboxNotice, Rendered, sendCommand, splitBody, useCanAct, useDecide, useDeferred,
   type MeCard,
 } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
@@ -73,6 +73,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   const { list, edit, byDefault } = options(card);
   const withBodies = list.some((o) => o.hasBody || !!card.rendered_actions?.[o.id]);
   const online = useOnline();
+  // Online, or offline with an outbox to keep the action in (local/outbox.ts).
+  const canAct = useCanAct();
   const locale = useLocale();
   const decided = card.state === 'decided';
   // Only an open decision takes one (§7.3): a decided card shows what was decided, a superseded one what replaced it
@@ -108,7 +110,7 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   };
   useImperativeHandle(handle, () => ({
     dismiss: () => {
-      if (open && online && !deferred.pending) deferred.schedule(`Dismiss: ${card.title}`, () => void decide('dismissed'));
+      if (open && canAct && !deferred.pending) deferred.schedule(`Dismiss: ${card.title}`, () => void decide('dismissed'));
     },
     expand: () => expandMore(!more),
   }));
@@ -117,8 +119,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   const snooze = async (preset: string | null, label: string) => {
     setSnoozeError(null);
     try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/${preset ? 'snooze' : 'unsnooze'}`, { method: 'POST', ...(preset ? { body: { preset } } : {}) });
-      if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
+      const r = await sendCommand(card, preset ? 'snooze' : 'unsnooze', preset ? { preset } : {});
+      if (r.status !== 200 && r.status !== 202) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
       onChange({ ...card, ...r.body });
       announce(preset ? `Snoozed until ${label.toLowerCase()}: ${card.title}` : `Unsnoozed: ${card.title}`);
     } catch (e) {
@@ -136,10 +138,10 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuLabel className="text-meta uppercase tracking-meta text-muted-foreground">Snooze</DropdownMenuLabel>
         {SNOOZES.map((s) => (
-          <DropdownMenuItem key={s.preset} disabled={!online || !open} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
+          <DropdownMenuItem key={s.preset} disabled={!canAct || !open} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
         ))}
         {card.snoozed_until && card.snoozed_until > new Date().toISOString() && (
-          <DropdownMenuItem disabled={!online || !open} onSelect={() => void snooze(null, 'Unsnooze')}>Unsnooze</DropdownMenuItem>
+          <DropdownMenuItem disabled={!canAct || !open} onSelect={() => void snooze(null, 'Unsnooze')}>Unsnooze</DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -169,7 +171,7 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
   );
 
   const control = (o: (typeof list)[number]) => (
-    <Button key={o.id} size="sm" variant={o === byDefault ? 'default' : 'outline'} disabled={!online} onClick={() => void decide(o.id)} data-action={o.id} {...(o === byDefault ? { 'data-primary': '' } : {})}>
+    <Button key={o.id} size="sm" variant={o === byDefault ? 'default' : 'outline'} disabled={!canAct} onClick={() => void decide(o.id)} data-action={o.id} {...(o === byDefault ? { 'data-primary': '' } : {})}>
       {o.label}
     </Button>
   );
@@ -221,14 +223,14 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
       <div className="decide-row flex flex-wrap items-center gap-2">
         {editing ? (
           <>
-            <Button size="sm" disabled={!online || !edited.trim()} onClick={() => void decide('edited', { edited_proposal: edited.trim() })}>Send edit</Button>
+            <Button size="sm" disabled={!canAct || !edited.trim()} onClick={() => void decide('edited', { edited_proposal: edited.trim() })}>Send edit</Button>
             <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Back</Button>
           </>
         ) : (
           <>
             {!withBodies && list.map(control)}
-            {edit && <Button size="sm" variant="outline" disabled={!online} onClick={() => setEditing(true)} data-action="edit">Edit…</Button>}
-            <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
+            {edit && <Button size="sm" variant="outline" disabled={!canAct} onClick={() => setEditing(true)} data-action="edit">Edit…</Button>}
+            <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!canAct} onClick={() => void decide('dismissed')} data-action="dismissed">Dismiss</Button>
           </>
         )}
       </div>
@@ -239,11 +241,11 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
           Add a comment <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={!online}
+          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={!canAct}
             className="mt-1 w-full rounded-md border border-input bg-background p-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </CollapsibleContent>
       </Collapsible>
-      {!online && <p className="offline text-lead text-muted-foreground" role="status">{OFFLINE_REASON_SHORT}</p>}
+      {!online && <p className="offline text-lead text-muted-foreground" role="status">{canAct ? OFFLINE_QUEUED : OFFLINE_REASON_SHORT}</p>}
       {(error ?? snoozeError) && <p className="text-lead text-destructive" role="alert">{error ?? snoozeError}</p>}
     </div>
   );
@@ -289,6 +291,7 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
           successor the notice cannot, and the line still says why. */}
       {!(told && card.replaced_by) && replaced}
       {told}
+      <OutboxNotice card={card} onChange={onChange} />
       {controls}
       {deferred.toast}
     </article>

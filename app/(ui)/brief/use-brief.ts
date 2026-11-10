@@ -6,10 +6,20 @@
 // day's as loaded, today's and the days ahead from GET /api/me/cards?from=&to=, since the brief leaves `log` cards out.
 // A day is shaped once here, the same at every width: its paragraph, its decisions, its schedule, its updates
 // (artifacts) and signals as threads.
+//
+// Local first (docs/local-first.md): everything is read from the device's store before the head is asked. A cold open
+// shows the brief the head last composed, kept on the device, with its cards from the store and the outbox laid over,
+// the dateline marked "as of <time>" until the sync (local/feed.ts) returns. Days within retention come from the store;
+// an older day, or a device without a store, is read from the head as before. The head is asked to move the cursor:
+// GET /api/me/seq, then the feed and, when its counter or date moved, the brief's composition.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, useFresh } from '../client';
+import { api } from '../client';
 import type { MeCard } from '../components';
+import { byTime } from '../../../lib/time';
+import { sync } from '../local/feed';
+import { storeBroken } from '../local/db';
+import { cardsByDay, getCard, getMeta, onStore, project } from '../local/store';
 
 import { addDays, aheadOf, AHEAD, localDay, pastOf, railCards, referencedBy, todayOf, tomorrowOf, type BriefResponse, type Day } from './days';
 
@@ -32,8 +42,10 @@ export function useBrief() {
   // tomorrow, which the brief does not carry. A day jumped to that has none is kept, empty, so it can be shown.
   const [near, setNear] = useState<Map<string, MeCard[]>>(new Map());
   const loadNear = useCallback(async (today: string, tz: string, network = false) => {
-    const cards: MeCard[] = [];
-    for (let after: number | null = 0; after !== null; ) {
+    // The store has every day of the window once it has synced.
+    const local = (await getMeta<number>('cursor')) !== null ? await cardsByDay(today, addDays(today, AHEAD)) : null;
+    const cards: MeCard[] = local ?? [];
+    for (let after: number | null = local ? null : 0; after !== null; ) {
       const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?from=${today}&to=${addDays(today, AHEAD)}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
       if (r.status !== 200) return;
       cards.push(...r.body.cards);
@@ -52,7 +64,25 @@ export function useBrief() {
   // Decisions decided here stay in today's list, in their place and their new state, when the brief loads again (it
   // lists only open ones): what the person is looking at does not move. The next visit no longer lists them.
   const settled = useRef(new Map<string, MeCard>());
+  /** The brief the head last composed, from the store, its cards the device's; null when the device has none. */
+  const fromStore = useCallback(async (): Promise<(BriefResponse & { fetched_at?: string }) | null> => {
+    const b = await getMeta<BriefResponse & { fetched_at?: string }>('brief');
+    return b ? project(b) : null;
+  }, []);
+  const loadFromHead = useCallback(async () => {
+    const r = await api<BriefResponse>('/api/me/brief', { network: true });
+    if (r.status !== 200) return setError(r.status === 0 || r.status === 503 ? 'You’re offline, and this device has no copy of the brief yet.' : `Could not load the brief (${r.status}).`);
+    setBrief((prev) => keepPlaces(prev, r.body, settled.current));
+    seq.current ??= r.body.seq;
+  }, []);
   const load = useCallback(async (network = false, quiet = false) => {
+    // Local first: the store's brief, when it has one and the sync just ran (or cannot run: offline, "as of").
+    const local = storeBroken() ? null : await fromStore();
+    if (local) {
+      setBrief((prev) => keepPlaces(prev, local, settled.current));
+      seq.current ??= local.seq;
+      return;
+    }
     const r = await api<BriefResponse>('/api/me/brief', { network });
     // A refresh that fails leaves the brief on screen as it was; only a first load reports.
     if (r.status !== 200 && quiet) return;
@@ -61,20 +91,53 @@ export function useBrief() {
     setCachedAt(r.cachedAt ?? null);
     seq.current ??= r.body.seq; // the first view sets what "seen" means when the owner leaves
   }, []);
-  useEffect(() => void load(), [load]);
+  // A cold open: the device's copy at once, marked "as of"; then the sync, and the brief as it now stands.
+  useEffect(() => {
+    void (async () => {
+      const local = storeBroken() ? null : await fromStore();
+      if (local) {
+        setBrief((prev) => keepPlaces(prev, local, settled.current));
+        setCachedAt(local.fetched_at ?? null);
+        seq.current ??= local.seq;
+      }
+      // A device with no copy yet: the head's brief at once, and the first pull fills the store behind it.
+      if (!local) await loadFromHead();
+      if (await sync()) {
+        await load(true, true);
+        setCachedAt(null);
+      }
+    })();
+  }, [load, fromStore, loadFromHead]);
   useEffect(() => void (brief?.date && loadNear(brief.date, brief.timezone)), [brief?.date, brief?.timezone, loadNear]);
-  const fresh = useCallback((b: BriefResponse) => {
-    setBrief((prev) => keepPlaces(prev, b, settled.current));
-    setCachedAt(null);
-  }, []);
-  const stale = useCallback(() => void load(true), [load]);
-  useFresh('/api/me/brief', fresh, stale);
+
+  // The store changed (the sync applied cards, the outbox settled or refused one, another tab acted): each card on
+  // screen follows, in place.
+  const changeRef = useRef<(c: MeCard, fromStore?: boolean) => void>(() => undefined);
+  useEffect(
+    () =>
+      onStore(async (e) => {
+        for (const id of e.cards ?? []) {
+          const c = await getCard(id);
+          if (c) changeRef.current(c, true);
+        }
+      }),
+    [],
+  );
 
   /**
    * Loads an earlier day: every card whose day it is (§8), all pages. Loaded again when the head has changed. False when
    * it could not be loaded (offline with no copy, or the head refused).
    */
   const loadDay = useCallback(async (date: string, network = false): Promise<boolean> => {
+    // Within retention (or with the archive), the day is on the device.
+    const oldest = await getMeta<string>('oldest_day');
+    if (oldest !== null && date >= oldest && (await getMeta<number>('cursor')) !== null) {
+      const local = await cardsByDay(date);
+      if (local) {
+        setPast((m) => new Map(m).set(date, local.sort(byTime)));
+        return true;
+      }
+    }
     const cards: MeCard[] = [];
     for (let after: number | null = 0; after !== null; ) {
       const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?date=${date}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
@@ -101,9 +164,12 @@ export function useBrief() {
       last = Date.now();
       busy = true;
       try {
-        const r = await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
+        // The sync asks the counter first, and pulls only when it moved (local/feed.ts). Without a store, the counter alone.
+        const synced = storeBroken() ? false : await sync();
+        const r = synced ? { status: 200, body: (await getMeta<{ seq: number; date: string }>('brief'))! } : await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
+        if (synced) setCachedAt(null);
         const b = current.current;
-        if (r.status === 200 && b && (r.body.seq !== b.seq || r.body.date !== b.date)) {
+        if (r.status === 200 && r.body && b && (r.body.seq !== b.seq || r.body.date !== b.date)) {
           await load(true, true);
           await loadNear(r.body.date, b.timezone, true);
           // An earlier day on screen loads again; the others when they are next shown.
@@ -149,8 +215,11 @@ export function useBrief() {
     };
   }, []);
 
-  /** A card changed on screen (decided, seen, snoozed, or rolled back): the same card everywhere it is shown. */
-  const change = useCallback((c: MeCard) => {
+  /**
+   * A card changed on screen (decided, seen, snoozed, or rolled back): the same card everywhere it is shown. `fromStore`:
+   * the store applied it (the sync, the outbox, another tab), so it says nothing about whether this brief is current.
+   */
+  const change = useCallback((c: MeCard, fromStore = false) => {
     if (c.kind === 'decision') {
       if (c.state === 'decided') settled.current.set(c.id, c);
       else settled.current.delete(c.id);
@@ -162,7 +231,7 @@ export function useBrief() {
       const intoTomorrow = hidden && c.snoozed_until!.slice(0, 10) <= b.tomorrow.date && !b.tomorrow.cards.some((t) => t.id === c.id);
       const tomorrowCards = intoTomorrow ? [...b.tomorrow.cards, c] : b.tomorrow.cards.map((t) => (t.id === c.id ? c : t));
       // The head's counter moved by this change alone: the brief is still current, and the live check need not reload it.
-      const seq = c.change_seq === b.seq + 1 ? c.change_seq : b.seq;
+      const seq = !fromStore && c.change_seq === b.seq + 1 ? c.change_seq : b.seq;
       // A task closed here stays in today's list, ticked, as the brief lists it again (RFC 0.9 §4.5); snoozed, it leaves.
       const tasks = c.kind !== 'task' || !b.tasks ? b.tasks : hidden ? b.tasks.filter((t) => t.id !== c.id) : b.tasks.map((t) => (t.id === c.id ? c : t));
       return { ...b, seq, decisions, ...(tasks ? { tasks } : {}), tomorrow: { ...b.tomorrow, cards: tomorrowCards } };
@@ -190,6 +259,8 @@ export function useBrief() {
       return touched ? next : p;
     });
   }, []);
+
+  changeRef.current = change;
 
   const withRail = (d: Day): Day => (near.has(d.date) ? { ...d, rail: railCards(near.get(d.date)!), cards: near.get(d.date)! } : d);
   /**

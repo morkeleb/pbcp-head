@@ -8,7 +8,7 @@
 // card's own `sensitivity` is never rewritten: it stays as sent, for equality (§5) and in what the head returns and syncs.
 
 import { effectiveSensitivity, SENSITIVITIES, type Sensitivity } from '@pbcp/core';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, heads, sensitivityFloors } from '../db/schema';
 import type { ParagraphParts } from './brief/paragraph';
@@ -59,12 +59,26 @@ export const isPrivate = (s: Sensitivity): boolean => s !== 'normal';
 /** Sets or clears (null) the owner's floor on a producer root or a label. */
 export async function setFloor(db: Db, headId: string, scope: 'producer' | 'label', key: string, floor: Sensitivity | null): Promise<void> {
   const where = and(eq(sensitivityFloors.headId, headId), eq(sensitivityFloors.scope, scope), eq(sensitivityFloors.key, key));
-  if (floor === null) await db.delete(sensitivityFloors).where(where);
-  else
-    await db
-      .insert(sensitivityFloors)
-      .values({ headId, scope, key, floor })
-      .onConflictDoUpdate({ target: [sensitivityFloors.headId, sensitivityFloors.scope, sensitivityFloors.key], set: { floor } });
+  await db.transaction(async (tx) => {
+    if (floor === null) await tx.delete(sensitivityFloors).where(where);
+    else
+      await tx
+        .insert(sensitivityFloors)
+        .values({ headId, scope, key, floor })
+        .onConflictDoUpdate({ target: [sensitivityFloors.headId, sensitivityFloors.scope, sensitivityFloors.key], set: { floor } });
+    await bumpSettingsSeq(tx, headId);
+  });
+}
+
+/** Moves `heads.settings_seq`: call inside the transaction that changes a floor. */
+export async function bumpSettingsSeq(tx: Db | Tx, headId: string): Promise<void> {
+  await tx.update(heads).set({ settingsSeq: sql`${heads.settingsSeq} + 1` }).where(eq(heads.id, headId));
+}
+
+/** Every floor, as the owner's devices keep them (GET /api/me/settings `sensitivity_floors`). */
+export async function floorsOf(db: Db, headId: string): Promise<{ producers: Record<string, Sensitivity>; labels: Record<string, Sensitivity> }> {
+  const p = await loadPolicy(db, headId);
+  return { producers: Object.fromEntries(p.producers), labels: Object.fromEntries(p.labels) };
 }
 
 /** A floor from a request body: a sensitivity, or null to clear it. */

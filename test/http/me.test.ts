@@ -91,12 +91,27 @@ describe('GET /api/me/seq', () => {
   it('gives the change counter and the local date, which move with a new card and at midnight, and needs a session', async () => {
     await clock('2026-10-07T09:00:00Z');
     const before = (await call('GET', '/api/me/seq', { auth: owner.auth })).body;
-    expect(before).toEqual({ seq: (await call('GET', '/api/me/brief', { auth: owner.auth })).body.seq, date: '2026-10-07' });
+    expect(before).toEqual({ seq: (await call('GET', '/api/me/brief', { auth: owner.auth })).body.seq, date: '2026-10-07', settings_seq: 0 });
     await put('hermes:gmail:new');
     expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.seq).toBeGreaterThan(before.seq);
     await clock('2026-10-08T00:30:00Z');
     expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.date).toBe('2026-10-08');
     expect((await call('GET', '/api/me/seq', { auth: hermes })).status).toBe(401);
+  });
+
+  it('moves settings_seq with every change to the owner’s floors, in the same request, and with nothing else (RFC 0.9 §9)', async () => {
+    const stamp = async () => (await call('GET', '/api/me/seq', { auth: owner.auth })).body as { seq: number; settings_seq: number };
+    const before = await stamp();
+    await call('PATCH', '/api/me/producers/hermes', { auth: owner.auth, body: { sensitivity_floor: 'private' } });
+    await call('PATCH', '/api/me/settings/labels/bank', { auth: owner.auth, body: { sensitivity_floor: 'confirm' } });
+    await call('PATCH', '/api/me/settings', { auth: owner.auth, body: { sensitivity_floor: 'private' } });
+    const after = await stamp();
+    expect(after.settings_seq).toBe(before.settings_seq + 3);
+    expect(after.seq).toBe(before.seq); // a floor changes no card
+    await call('PATCH', '/api/me/settings', { auth: owner.auth, body: { display_name: 'Morten' } });
+    expect((await stamp()).settings_seq).toBe(after.settings_seq);
+    const s = (await call('GET', '/api/me/settings', { auth: owner.auth })).body;
+    expect(s).toMatchObject({ sensitivity_floor: 'private', sensitivity_floors: { producers: { hermes: 'private' }, labels: { bank: 'confirm' } }, settings_seq: after.settings_seq });
   });
 
   it('moves when another session marks a card seen, acknowledges, snoozes or unsnoozes it (§4.2: each takes a fresh change_seq), and producers sync it', async () => {
@@ -410,7 +425,7 @@ describe('timezone and settings', () => {
   const settings = async () => (await me('GET', '/api/me/settings')).body;
 
   it('takes the zone from the device most recently seen; UTC before any device has said', async () => {
-    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null, sensitivity_floor: null });
+    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null, sensitivity_floor: null, sensitivity_floors: { producers: {}, labels: {} }, settings_seq: 0 });
     const phone = await ownerSession(OWNER, 'phone');
     expect((await zone(phone.auth, 'america/denver')).status).toBe(200); // stored in its canonical spelling
     expect(await settings()).toMatchObject({

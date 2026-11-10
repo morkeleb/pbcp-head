@@ -17,6 +17,7 @@ This repo is the **product**: the reference head (Next.js on Vercel, Postgres). 
 H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (orders) are done, and the gate passes all 69 cases of the Draft 0.9 suite over HTTP. Since then these have shipped:
 - the brief: the nightly `head:daily` card, and a live `/brief` laid out by day;
 - tasks (RFC 0.9 `kind: task`): a checklist in each day under the schedule, done through the decision routes, and in the daily paragraph;
+- local first: the web app keeps a store of the head's cards on the device (IndexedDB), synced from the change cursor, an index for search and an outbox for what the owner does offline (docs/local-first.md);
 - sensitivity (RFC 0.9 `sensitivity`): owner floors per producer, label and head; private content kept off push and the assistant; a `confirm` decision only after a passkey step-up (docs/trust.md);
 - Settings: producers with ceilings, pairing codes, devices and preferences, plus the `/connect` reference page;
 - the owner's MCP server at `/api/mcp`, with OAuth;
@@ -25,7 +26,7 @@ H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (ord
 
 The native phone app is deferred, and the Swift client was removed: the web app on a phone, with push, is the phone client for now. There is no milestone list to work through. New work arrives as a brief or an issue, and `docs/` describes what exists.
 
-Not here yet, and known: encryption of card content at rest (before anyone but the owner has an account); an offline outbox in the PWA for decisions made without a network; Obsidian vault sync of the decision log; OAuth clients identified by a Client ID Metadata Document.
+Not here yet, and known: encryption of card content at rest (before anyone but the owner has an account); Obsidian vault sync of the decision log; OAuth clients identified by a Client ID Metadata Document.
 
 ## Rules
 

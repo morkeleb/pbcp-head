@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { api, cardHref, OfflineError, useOnline } from '../client';
-import { announce, NOT_SENT, Rendered, useLocale, type MeCard } from '../components';
+import { announce, NOT_SENT, Rendered, sendCommand, useCanAct, useLocale, type MeCard } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
 import { rowId } from './days';
 
@@ -56,7 +56,7 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
   const last = cards.map((x) => x.acknowledged_at).filter(Boolean).sort().at(-1);
   const [acked, setAcked] = useState<string | null>(done ? (last ?? null) : null);
   const [error, setError] = useState<string | null>(null);
-  const online = useOnline();
+  const online = useCanAct(); // online, or offline with an outbox (local/outbox.ts)
   useImperativeHandle(handle, () => ({ open: () => void (location.href = cardHref(c.id)) }));
 
   const ack = async () => {
@@ -69,8 +69,8 @@ export function UpdateRow({ thread, timezone, onAcknowledged, focused, handle, e
       let at: string | undefined;
       for (const x of cards) {
         if (x.acknowledged_at) continue;
-        const r = await api<{ acknowledged_at?: string; message?: string }>(`/api/me/cards/${encodeURIComponent(x.id)}/ack`, { method: 'POST' });
-        if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
+        const r = await sendCommand({ id: x.id, title: x.title }, 'ack');
+        if (r.status !== 200 && r.status !== 202 && r.status !== 409) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
         at = r.body.acknowledged_at ?? at;
       }
       if (at) {

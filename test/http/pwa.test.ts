@@ -1,6 +1,6 @@
 // The web app as an installed app (app/manifest.ts, lib/pwa/service-worker.ts), in a real headless browser:
 // what iOS Safari's "Add to Home Screen" and Chrome's install read, the brief from the cache with the network
-// blocked, and writes that are refused offline rather than queued.
+// blocked, and writes kept on the device offline (docs/local-first.md; the outbox's cases: local-first.test.ts).
 
 import { and, eq } from 'drizzle-orm';
 import puppeteer, { type Browser, type CDPSession, type Page } from 'puppeteer';
@@ -242,28 +242,24 @@ describe('offline', () => {
     await setOffline(false, worker);
   });
 
-  it('refuses a decision offline in the UI and never sends it later', async () => {
+  it('keeps the controls working offline and says the action is kept on the device (docs/local-first.md)', async () => {
     await briefThroughWorker();
+    await page.waitForFunction(async (head) => {
+      const db: IDBDatabase = await new Promise((r) => { const o = indexedDB.open(`pbcp-${head}`); o.onsuccess = () => r(o.result); });
+      const v = await new Promise((r) => { const g = db.transaction('meta').objectStore('meta').get('cursor'); g.onsuccess = () => r(g.result); g.onerror = () => r(null); });
+      db.close();
+      return !!v;
+    }, { timeout: 15_000 }, OWNER);
     const worker = await workerSession();
     await setOffline(true, worker);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.body.innerText.includes('When should M4 ship?'));
-
-    // Offline: the controls are disabled and say why.
-    const controls = await page.$$eval('.decide-row button, [data-options] button', (bs) => bs.map((b) => ({ text: b.textContent, disabled: (b as HTMLButtonElement).disabled })));
+    const controls = await page.$$eval('.decide-row button, [data-options] button', (bs) => bs.map((b) => (b as HTMLButtonElement).disabled));
     expect(controls.length).toBeGreaterThan(0);
-    expect(controls.every((c) => c.disabled)).toBe(true);
-    expect(await page.$eval('.offline', (e) => e.textContent)).toContain('nothing is saved to send later');
-    await page.click('.decide-row button[data-action="approve"]').catch(() => undefined);
-    await page.click('.decide-row button[data-variant="ghost"]').catch(() => undefined); // Dismiss too
-    expect(await page.$('.state-line')).toBeNull();
-
-    // Back online, nothing goes out on its own: there is no queue to send it from.
-    await setOffline(false, worker);
-    await page.waitForFunction(() => !(document.querySelector('.decide-row button[data-action="approve"]') as HTMLButtonElement).disabled);
-    await wait(5000);
-    expect((await row(DECISION)).state).toBe('open');
+    expect(controls.every((d) => !d)).toBe(true);
+    expect(await page.$eval('.offline', (e) => e.textContent)).toContain('kept on this device and sent when you’re back online');
     expect(await testDb().select().from(decisionLog)).toEqual([]);
     expect(errors).toEqual([]);
+    await setOffline(false, worker);
   });
 });

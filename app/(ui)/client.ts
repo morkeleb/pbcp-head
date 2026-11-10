@@ -4,12 +4,12 @@
 // (mobile PRD). Tokens from sign-in live in localStorage; an expired access token is refreshed once. Every
 // call says which zone the browser is in (X-Timezone), so the head follows the owner when they travel.
 //
-// Offline (lib/pwa/service-worker.ts): reads may be answered from the service worker's cache, and then carry
-// `cachedAt`, the time that copy was fetched; the page says "as of" it. Writes (decide, acknowledge, snooze,
-// orders) are never sent without a network and never queued: api() refuses them with OfflineError, and the
-// controls are disabled while offline.
+// Offline: the pages read from the device's own store first (local/, docs/local-first.md), and the owner's actions
+// (decide, acknowledge, snooze) go into its outbox, which sends them when the network returns. api() itself never
+// queues: a write without a network is refused with OfflineError, which the outbox takes as "try again later".
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { dropStore } from './local/db';
 
 export interface Tokens {
   access_token: string;
@@ -30,6 +30,9 @@ export function loadTokens(): Tokens | null {
 }
 
 export function saveTokens(t: Tokens | null): void {
+  // Signed out: the device's store (local/) belongs to the session that read it.
+  const before = loadTokens();
+  if (!t && before?.head) void dropStore(before.head);
   try {
     if (t) localStorage.setItem(KEY, JSON.stringify(t));
     else localStorage.removeItem(KEY);
@@ -148,14 +151,18 @@ export function useFresh(path: string | null, onFresh: (body: any) => void, onSt
   }, [path, onFresh, onStale]);
 }
 
-let refreshing: Promise<Tokens | null> | null = null;
+let refreshing: Promise<Tokens | null | 'offline'> | null = null;
 
-async function refresh(t: Tokens): Promise<Tokens | null> {
+/**
+ * A new token pair, null when the head refused the refresh token (the device is signed out), or 'offline' when the head
+ * could not be reached: then nothing is signed out, since signing out drops the device's store and its outbox.
+ */
+async function refresh(t: Tokens): Promise<Tokens | null | 'offline'> {
   refreshing ??= fetch('/api/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refresh_token: t.refresh_token }) })
-    .then(async (r) => (r.ok ? ((await r.json()) as Tokens) : null))
-    .catch(() => null)
+    .then(async (r): Promise<Tokens | null | 'offline'> => (r.ok ? ((await r.json()) as Tokens) : r.status >= 500 ? 'offline' : null))
+    .catch((): 'offline' => 'offline')
     .then((next) => {
-      saveTokens(next);
+      if (next !== 'offline') saveTokens(next);
       refreshing = null;
       return next;
     });
@@ -223,7 +230,13 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     if (res.headers.get('x-pbcp-offline')) setOffline(true);
     else if (!res.headers.get('x-pbcp-from-cache')) setOffline(false);
     if (res.status === 401 && attempt === 0) {
-      tokens = await refresh(tokens!);
+      const next = await refresh(tokens!);
+      if (next === 'offline') {
+        setOffline(true);
+        if (method !== 'GET') throw new OfflineError();
+        return { status: 0, body: { error: 'offline', message: 'the session could not be refreshed: no network' } as T };
+      }
+      tokens = next;
       if (!tokens) signInAgain();
       continue;
     }

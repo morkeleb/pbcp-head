@@ -4,7 +4,10 @@ import { ArrowUpRight } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import type { ParagraphParts } from '../../lib/brief/paragraph';
 import { requestStepUp } from './step-up';
-import { api, OfflineError, when } from './client';
+import { command, discard, hasOutbox, noticeFor, onNotices, resume } from './local/outbox';
+import { apply as applyCommand, type OutboxRow } from './local/store';
+import { api, OfflineError, useOnline, when } from './client';
+import { cn } from '@/lib/utils';
 
 // --- types: the /api/me card shape ----------------------------------------------------
 
@@ -91,11 +94,87 @@ export function AsOf({ at, timezone }: { at?: string | null; timezone?: string }
 }
 
 
-/** Why a card's controls are disabled offline, in one line (the controls themselves say the rest). */
-export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection, and nothing is saved to send later.';
+/** Why a card's controls are disabled offline, in one line: only when the device has no store to keep them in. */
+export const OFFLINE_REASON_SHORT = 'Offline: deciding needs a connection on this device, and nothing is saved to send later.';
 
-/** What a write that was not sent says: nothing is queued. */
+/** Offline with a store (local/outbox.ts): what the person does is kept on the device and sent when the network returns. */
+export const OFFLINE_QUEUED = 'Offline: what you do here is kept on this device and sent when you’re back online.';
+
+/** What a write that was not sent says, on a device with no store: nothing is queued. */
 export const NOT_SENT = 'Not sent: you’re offline. Nothing was saved to send later; do it again when you’re back online.';
+
+let queueable: boolean | null = null;
+const queueWatchers = new Set<() => void>();
+if (typeof window !== 'undefined')
+  void hasOutbox().then((ok) => {
+    queueable = ok;
+    queueWatchers.forEach((w) => w());
+  });
+
+/**
+ * Whether a card's controls work now: online, or offline on a device with an outbox, which keeps the action and sends it
+ * later (local/outbox.ts). Without a store (a private window, storage evicted or refused) offline controls stay off.
+ */
+export function useCanAct(): boolean {
+  const online = useOnline();
+  const q = useSyncExternalStore(
+    (w) => {
+      queueWatchers.add(w);
+      return () => queueWatchers.delete(w);
+    },
+    () => queueable === true,
+    () => false,
+  );
+  return online || q;
+}
+
+/**
+ * Sends one owner action through the device's outbox (local/outbox.ts), answering in the shape the controls already
+ * handle: 200 with the head's card, 409 with the head's card when it moved on, 403 reauthentication_required, another 4xx
+ * with its message, or 202 with the card settled on the device when it waits to be sent. Without a store, straight to
+ * the head as before (offline: OfflineError).
+ */
+export async function sendCommand(card: Pick<MeCard, 'id' | 'title'> & Partial<MeCard>, action: OutboxRow['action'], body: Record<string, unknown> = {}): Promise<{ status: number; body: any }> {
+  const o = await command(card, action, body);
+  if (o === null) {
+    const path = `/api/me/cards/${encodeURIComponent(card.id)}/${{ decide: 'decision', ack: 'ack', snooze: 'snooze', unsnooze: 'unsnooze' }[action]}`;
+    return api(path, { method: 'POST', ...(action === 'ack' || action === 'unsnooze' ? {} : { body }) });
+  }
+  switch (o.kind) {
+    case 'sent':
+      return { status: 200, body: o.card };
+    case 'conflict':
+      return { status: 409, body: { ...o.card, ...(o.message ? { message: o.message } : {}) } };
+    case 'needs-person':
+      return { status: 403, body: { error: 'reauthentication_required', message: 'Needs your passkey to confirm.' } };
+    case 'refused':
+      return { status: o.status, body: { message: o.message } };
+    case 'waiting':
+      return { status: 202, body: applyCommand(card as MeCard, { action, body, at: new Date().toISOString() }) };
+  }
+}
+
+/** The line a card shows about its action out of sight: decided elsewhere, refused, or waiting for the passkey. */
+export function OutboxNotice({ card, onChange }: { card: MeCard; onChange: (c: MeCard) => void }) {
+  const n = useSyncExternalStore(onNotices, () => noticeFor(card.id), () => null);
+  if (!n) return null;
+  const confirm = async () => {
+    if (!(await requestStepUp(card.title))) return;
+    const o = await resume(card.id);
+    if (o.kind === 'sent' || o.kind === 'conflict') onChange(o.card);
+  };
+  return (
+    <p className={cn('mt-2 text-lead', n.kind === 'needs-person' ? 'text-foreground' : 'text-destructive')} role="status" data-outbox-notice={n.kind}>
+      {n.text}
+      {n.kind === 'needs-person' && (
+        <>
+          {' '}
+          <button type="button" className="underline underline-offset-2" onClick={() => void confirm()} data-outbox-confirm>Confirm with passkey</button>
+        </>
+      )}
+    </p>
+  );
+}
 
 
 // --- the locale times are written in ----------------------------------------------------
@@ -586,8 +665,9 @@ export function decisionLabel(card: MeCard): string {
 export type DecisionBody = { decision: string; edited_proposal?: string; comment?: string };
 
 /**
- * Records a decision (§7.3) the way every surface does: the card changes at once (optimistic), the head is asked,
- * and a refusal or a lost connection puts the card back with the error. Nothing is queued.
+ * Records a decision (§7.3) the way every surface does: the card changes at once (optimistic) and the command goes into
+ * the device's outbox (local/outbox.ts), which sends it now when it can. A refusal puts the card back with the error; a
+ * card the head says moved on shows the head's state and why; offline, the card stays settled and the decision waits.
  */
 export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
   const [error, setError] = useState<string | null>(null);
@@ -596,7 +676,8 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
   const decide = async (body: DecisionBody) => {
     const before = card;
     // RFC 0.9 §4.1 `confirm`: the person confirms with their passkey first; cancelling records nothing.
-    const confirmCard = card.effective_sensitivity === 'confirm';
+    // Offline the passkey cannot be asked: the decision waits in the outbox, and the head asks for it when it is sent.
+    const confirmCard = card.effective_sensitivity === 'confirm' && typeof navigator !== 'undefined' && navigator.onLine !== false;
     if (confirmCard && !(await requestStepUp(card.title))) {
       setError('Not recorded: confirm with your passkey to decide this card.');
       return;
@@ -612,11 +693,20 @@ export function useDecide(card: MeCard, onChange: (c: MeCard) => void) {
       announce(`Not recorded: ${message}`);
     };
     try {
-      const post = () => api<MeCard & { message?: string; error?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/decision`, { method: 'POST', body });
-      let r = await post();
-      // The window lapsed, or an owner's floor made the card `confirm` since the page loaded (§9): identify, then retry once.
-      if (r.status === 403 && r.body?.error === 'reauthentication_required' && (await requestStepUp(card.title))) r = await post();
+      let r = await sendCommand(card, 'decide', body);
+      // The window lapsed, or an owner's floor made the card `confirm` since the page loaded (§9): identify, then send the
+      // waiting row again; cancelled, the row is dropped and nothing is recorded.
+      if (r.status === 403 && r.body?.error === 'reauthentication_required') {
+        if (await requestStepUp(card.title)) {
+          const o = await resume(card.id);
+          r = o.kind === 'sent' ? { status: 200, body: o.card } : o.kind === 'conflict' ? { status: 409, body: o.card } : o.kind === 'refused' ? { status: o.status, body: { message: o.message } } : { status: 202, body: optimistic };
+        } else {
+          await discard(card.id);
+          return failed('Not recorded: confirm with your passkey to decide this card.');
+        }
+      }
       if (r.status === 200) onChange({ ...before, ...r.body });
+      else if (r.status === 202) onChange(optimistic); // kept on the device, sent when it can be
       else if (r.status === 409) {
         // The card is no longer open: replaced by a newer card since the page loaded (§8), or decided elsewhere. The
         // card shows what it is now, and the person is told why their choice did not count.

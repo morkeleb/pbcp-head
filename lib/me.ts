@@ -152,9 +152,10 @@ export async function headSettings(db: Db, headId: string) {
 }
 
 /** GET /api/me/seq: the change counter and the head's local date, which together say whether the brief is stale. */
-export async function briefStamp(db: Db, headId: string): Promise<{ seq: number; date: string }> {
+export async function briefStamp(db: Db, headId: string): Promise<{ seq: number; date: string; settings_seq: number }> {
   const head = await headSettings(db, headId);
-  return { seq: await counter(db, headId), date: localDate(new Date(now()), head.timezone) };
+  const [h] = await db.select({ settingsSeq: heads.settingsSeq }).from(heads).where(eq(heads.id, headId));
+  return { seq: await counter(db, headId), date: localDate(new Date(now()), head.timezone), settings_seq: h?.settingsSeq ?? 0 };
 }
 
 async function counter(db: Db, headId: string): Promise<number> {

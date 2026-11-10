@@ -1,0 +1,1 @@
+ALTER TABLE "heads" ADD COLUMN "settings_seq" bigint DEFAULT 0 NOT NULL;
