@@ -1,4 +1,4 @@
-// PATCH /api/me/producers/{root} { ceiling?: log | brief | immediate, revoked?: true }.
+// PATCH /api/me/producers/{root} { ceiling?: log | brief | immediate, revoked?: true, sensitivity_floor?: normal | private | confirm | null }.
 
 import { db } from '../../../../../db/client';
 import { parseRequest, ProducerPatch } from '../../../../../lib/api/schemas';

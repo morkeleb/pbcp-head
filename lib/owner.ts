@@ -3,9 +3,10 @@
 // `idSegment` is where `{id}` sits in the route's path.
 
 import { db } from '../db/client';
-import { authenticateSession, type Session, type SessionPolicy } from './auth/session';
+import { authenticateSession, MCP_PLATFORM, type Session, type SessionPolicy } from './auth/session';
 import { decodeId, handle, json, rawSegment, readJson, readObject } from './http';
 import { acknowledgeCard, decideCard, markCardSeen, snoozeCard, unsnoozeCard, type OwnerContext, type Outcome } from './protocol';
+import { redactForAssistant } from './me';
 import { snoozeUntil } from './settings-me';
 import { replacedBy } from './store';
 
@@ -13,8 +14,15 @@ function ownerAction(idSegment: number, act: (ctx: OwnerContext, id: string, req
   return (req: Request): Promise<Response> =>
     handle(async () => {
       const session = await authenticateSession(db(), req, policy);
-      const r = await act({ headId: session.headId, actor: session.deviceId }, decodeId(rawSegment(req, idSegment)), req);
-      return json(r.card, r.status);
+      const ctx: OwnerContext = {
+        headId: session.headId,
+        actor: session.deviceId,
+        canIdentify: session.platform !== MCP_PLATFORM,
+        reauthenticatedAt: session.reauthenticatedAt ?? null,
+      };
+      const r = await act(ctx, decodeId(rawSegment(req, idSegment)), req);
+      // RFC 0.9 §4.1: an assistant never receives a private card's content, not even in an action's answer.
+      return json(session.platform === MCP_PLATFORM ? await redactForAssistant(db(), session.headId, r.card) : r.card, r.status);
     });
 }
 
@@ -48,7 +56,15 @@ export function meHandler(fn: MeFn): (req: Request) => Promise<Response>;
 export function meHandler(policy: SessionPolicy, fn: MeFn): (req: Request) => Promise<Response>;
 export function meHandler(a: MeFn | SessionPolicy, b?: MeFn) {
   const [policy, fn] = typeof a === 'function' ? [{}, a] : [a, b!];
-  return (req: Request): Promise<Response> => handle(async () => fn(await authenticateSession(db(), req, policy), req));
+  return (req: Request): Promise<Response> =>
+    handle(async () => {
+      const session = await authenticateSession(db(), req, policy);
+      const res = await fn(session, req);
+      // RFC 0.9 §4.1, §12: the head strips every private and confirm card's content from what an assistant's scoped token
+      // receives (lib/me.ts redactForAssistant), on every route the assistant reaches. The owner's own session is untouched.
+      if (session.platform !== MCP_PLATFORM || !(res.headers.get('content-type') ?? '').includes('application/json')) return res;
+      return json(await redactForAssistant(db(), session.headId, await res.json()), res.status);
+    });
 }
 
 /** POST /api/me/cards/{id}/snooze { until } | { preset }; `until: null` unsnoozes. */

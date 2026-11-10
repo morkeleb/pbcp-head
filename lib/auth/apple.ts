@@ -55,5 +55,5 @@ export async function appleSignIn(
       .returning();
   }
   await db.update(identities).set({ lastUsedAt: new Date() }).where(eq(identities.id, identity!.id));
-  return startSession(db, { headId: identity!.headId, identityId: identity!.id, platform: body.platform, name: body.name });
+  return startSession(db, { headId: identity!.headId, identityId: identity!.id, platform: body.platform, name: body.name, identified: true });
 }

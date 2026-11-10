@@ -179,6 +179,20 @@ describe('the cron sends the daily notification', () => {
     expect(body).toBe('2 decisions: Reply to Anna 2 — About the invoice, part 2; Reply to Anna 1 — About the invoice, part 1.');
   });
 
+  it('counts a private or confirm entry in the first sentence, never naming it (RFC 0.9 §4.1)', async () => {
+    await clock('2026-10-07T02:01:00Z');
+    await call('PUT', cardPath('hermes:mail:1'), { auth: hermes, body: card('hermes:mail:1', { title: 'Reply to Anna', summary: 'About the invoice.' }) });
+    await clock('2026-10-07T02:02:00Z');
+    await call('PUT', cardPath('hermes:bank:1'), { auth: hermes, body: card('hermes:bank:1', { title: 'Mortgage offer', summary: 'Rate 3.1%.', sensitivity: 'private' }) });
+    const d = await device('d', { time: '07:00' });
+    await clock('2026-10-07T03:30:00Z'); // 05:30: the card
+    await cron();
+    await clock('2026-10-07T05:00:00Z');
+    await cron();
+    const body = decrypt(received.find((r) => r.path === d.sub.path)!, d.sub).body as string;
+    expect(body).toBe('2 decisions: Reply to Anna — About the invoice; and 1 private decision.');
+  });
+
   it('removes a subscription the push service says is gone (410), and sends to it no more', async () => {
     await clock('2026-10-07T04:50:00Z');
     const gone = await device('gone');
@@ -231,6 +245,20 @@ describe('urgent cards', () => {
     await call('PATCH', '/api/me/settings/labels/ops', { auth: on.auth, body: { ceiling: 'brief' } });
     expect((await put('alarm:x:3', { labels: ['ops'], summary: 'Label ceiling brief.' })).status).toBe(201);
     expect(await settled([on.sub.path], 0)).toEqual([]);
+  });
+
+  it('sends a private or confirm card as its producer and kind only, opening the brief: no title, lead or body (RFC 0.9 §4.1)', async () => {
+    const on = await device('on', { enable: false, urgent: true });
+    await put('alarm:bank:1', { title: 'Card charged DKK 9,400', summary: 'At an unknown merchant.', sensitivity: 'private' });
+    await call('PATCH', '/api/me/settings/labels/bank', { auth: on.auth, body: { sensitivity_floor: 'confirm' } });
+    await put('alarm:bank:2', { title: 'Wire DKK 40,000?', summary: 'To the lawyer.', labels: ['bank'] });
+    const got = await settled([on.sub.path], 2);
+    expect(got).toHaveLength(2);
+    for (const r of got) {
+      const n = decrypt(r, on.sub);
+      expect(n).toMatchObject({ title: 'Brief', body: 'A private signal from alarm', data: { url: '/brief' } });
+      expect(JSON.stringify(n)).not.toMatch(/DKK|merchant|lawyer|charged|Wire/);
+    }
   });
 
   it('re-sends a replacement only when its title or lead changed', async () => {

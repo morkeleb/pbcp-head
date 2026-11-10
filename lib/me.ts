@@ -19,6 +19,7 @@ import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
 import { formatTime } from './push/daily';
+import { annotateParts, effectiveOf, loadPolicy, type Sensitivity, type SensitivityPolicy } from './sensitivity';
 
 type Row = typeof cards.$inferSelect;
 
@@ -39,6 +40,13 @@ export type MeCard = Card & {
   paragraph?: ParagraphParts;
   /** On a superseded card: the newest card of its successor chain (§8), which the owner is sent to instead. */
   replaced_by?: Successor;
+  /** RFC 0.9 §9: the card's `sensitivity` raised by the owner's floors, as of this response; the card's own stays as sent. */
+  effective_sensitivity: Sensitivity;
+  /**
+   * On a `head:daily` card with parts: its paragraph for a surface outside the signed-in session, in plain text, with
+   * private and confirm entries counted, not named (RFC 0.9 §4.1). The card's body and lead name them; this does not.
+   */
+  spoken_paragraph?: string;
 };
 
 export type { Successor };
@@ -46,6 +54,8 @@ export type { Successor };
 /** A card for the owner: renders it first if its stored render is missing or stale (§3.1, render on receipt). */
 export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
   const out: MeCard[] = [];
+  const policies = new Map<string, SensitivityPolicy>();
+  const policyOf = async (headId: string) => policies.get(headId) ?? policies.set(headId, await loadPolicy(db, headId)).get(headId)!;
   for (const row of rows) {
     const card = toCard(row);
     let html = row.renderedHtml;
@@ -57,6 +67,7 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
     }
     // §8: a superseded card names its newest successor, which the owner is sent to instead.
     const by = card.state === 'superseded' ? await replacedBy(db, row.headId, card) : null;
+    const parts = row.renderedParagraph ? await annotateParts(db, row.headId, row.renderedParagraph as ParagraphParts, await policyOf(row.headId)) : null;
     out.push({
       ...card,
       rendered_html: html,
@@ -67,8 +78,9 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
       day: row.day,
-      ...(row.renderedParagraph ? { paragraph: row.renderedParagraph as ParagraphParts } : {}),
+      ...(parts ? { paragraph: parts, spoken_paragraph: composeParagraph(parts, [], { spoken: true }) } : {}),
       ...(by ? { replaced_by: by } : {}),
+      effective_sensitivity: effectiveOf(card, await policyOf(row.headId)),
     });
   }
   return out;
@@ -174,7 +186,16 @@ export interface Fold {
  * - `new` lists the ids changed since the last visit; `seq` is the head's counter now, which the client
  *   posts to /api/me/visit when the owner leaves.
  */
-export async function brief(db: Db, headId: string) {
+export interface BriefOptions {
+  /**
+   * `spoken=1`: the daily paragraph for a surface outside the owner's signed-in session (the owner MCP's `brief` tool, a
+   * voice client): plain text, private and confirm entries counted, never named (RFC 0.9 §4.1). The parts and the card
+   * lists are the same either way; each carries both sensitivities, so the client applies its own rules to them.
+   */
+  spoken?: boolean;
+}
+
+export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
   const head = await headSettings(db, headId);
   await expireDueOrders(db, headId); // A.2: lapsed leases are visible as lapsed before the brief reads them
   const at = new Date(now());
@@ -341,14 +362,20 @@ export async function brief(db: Db, headId: string) {
   // fold now, "so far today". None on a day with nothing open and nothing new. Either way with its parts, each entry
   // with its card's labels (lib/brief/paragraph.ts), for the label filter.
   const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
-  let paragraph: { html: string; so_far: boolean; parts: ParagraphParts } | null = null;
+  let paragraph: { html: string; so_far: boolean; parts: ParagraphParts; text?: string } | null = null;
   if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily) && presentedDaily.paragraph) {
     if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false, parts: presentedDaily.paragraph };
   } else {
     // No card for today yet, or one folded by an older fold or minted before paragraphs had parts: fold now.
-    const parts = await dailyParagraphNow(db, headId, head.timezone, today);
+    const parts = await annotateParts(db, headId, await dailyParagraphNow(db, headId, head.timezone, today));
     const html = composeParagraph(parts);
     if (html) paragraph = { html, so_far: true, parts };
+  }
+  // Spoken: the same parts, written for outside the session: `text` in plain words, and `html` the same text escaped, so
+  // neither carries a private entry's title or lead.
+  if (paragraph && opts.spoken) {
+    const text = composeParagraph(paragraph.parts, [], { spoken: true });
+    paragraph = { ...paragraph, text, html: text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') };
   }
 
   const [oldest] = await db.select({ day: cards.day }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.day)).limit(1);
@@ -543,6 +570,7 @@ export async function listProducers(db: Db, headId: string) {
     .groupBy(cards.producer);
   const lastAt = new Map(last.map((l) => [l.producer, l.at]));
   const roots = [...new Set(tokens.map((t) => t.root))];
+  const floors = (await loadPolicy(db, headId)).producers;
   return roots.map((root) => {
     const mine = tokens.filter((t) => t.root === root);
     const active = mine.filter((t) => t.revokedAt === null);
@@ -551,6 +579,7 @@ export async function listProducers(db: Db, headId: string) {
     return {
       root,
       ceiling: newest.urgencyCeiling,
+      sensitivity_floor: floors.get(root) ?? null,
       executor: newest.executor,
       revoked: active.length === 0,
       tokens: mine.map((t) => ({
@@ -583,4 +612,82 @@ export async function listDevices(db: Db, headId: string, current: string) {
     daily_notification: { enabled: d.notifyDaily, time: formatTime(d.notifyAtMinutes), subscribed: d.pushEndpoint !== null },
     urgent_notification: { enabled: d.notifyUrgent, subscribed: d.pushEndpoint !== null },
   }));
+}
+
+// --- what an assistant receives (RFC 0.9 §4.1, §12) -------------------------------------------------------------------
+
+/** Card fields an assistant never receives for a `private` or `confirm` card: its content, in any form (§4.1). */
+const CONTENT = ['summary', 'body', 'lead', 'lead_source', 'rendered_html', 'rendered_lead', 'rendered_actions', 'first_visual', 'comment', 'edited_proposal', 'paragraph', 'spoken_paragraph'] as const;
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+type Json = Record<string, unknown>;
+const isCardLike = (v: Json) => typeof v.id === 'string' && typeof v.producer === 'string' && typeof v.kind === 'string';
+
+/**
+ * One card (or a paragraph entry) as an assistant may see it. RFC 0.9 §4.1: a head MUST NOT include a `private` or
+ * `confirm` card's lead or body "in a notification, an assistant index or any surface outside the owner's signed-in
+ * session"; §12: "an assistant connector that holds the owner's credential … cannot approve a confirm card".
+ *
+ * - private or confirm: its content goes (summary, body, lead, rendered HTML, first visual, option bodies, the owner's
+ *   comment and edited proposal); id, kind, producer, title, state, labels, when, source, both sensitivities, the
+ *   decision, its times and what replaced it stay. An open confirm decision or task loses `actions`: the assistant cannot
+ *   decide it, so it is offered no choice. A paragraph entry keeps its title and loses the lead in its `text`.
+ * - a `head:daily:*` card: its body names every entry, private ones too, so the assistant gets the spoken paragraph in
+ *   its place (private entries counted, §4.1), and its parts with private entries reduced the same way.
+ */
+function redactCard(v: Json, policy: SensitivityPolicy): Json {
+  const effective =
+    (v.effective_sensitivity as Sensitivity | undefined) ??
+    effectiveOf({ producer: v.producer as string, labels: (v.labels as string[] | undefined) ?? [], ...(v.sensitivity ? { sensitivity: v.sensitivity as Sensitivity } : {}) }, policy);
+  const out: Json = { ...v };
+  if (typeof v.id === 'string' && v.id.startsWith('head:daily:')) {
+    const spoken = typeof v.spoken_paragraph === 'string' ? v.spoken_paragraph : '';
+    for (const k of ['summary', 'lead_source', 'rendered_actions', 'first_visual'] as const) delete out[k];
+    out.body = spoken;
+    out.lead = spoken;
+    out.rendered_lead = escapeHtml(spoken);
+    out.rendered_html = spoken ? `<p>${escapeHtml(spoken)}</p>` : '';
+    if (out.paragraph) out.paragraph = redactValue(out.paragraph, policy);
+    return out;
+  }
+  if (effective === 'normal') return out;
+  out.effective_sensitivity = effective;
+  for (const k of CONTENT) delete out[k];
+  // A paragraph entry: "<title> — <lead>" becomes the title alone.
+  if (typeof v.text === 'string') out.text = typeof v.title === 'string' ? escapeHtml(v.title) : '';
+  if (Array.isArray(v.actions)) {
+    if (effective === 'confirm' && v.state === 'open') delete out.actions;
+    else out.actions = (v.actions as unknown[]).map((a) => (a && typeof a === 'object' ? (({ body: _b, ...rest }) => rest)(a as Json) : a));
+  }
+  if (Array.isArray(v.options)) out.options = (v.options as Json[]).map(({ body: _b, ...rest }) => rest);
+  if ('editable' in v) out.editable = false;
+  return out;
+}
+
+/** Every card-shaped object in a response, at any depth, as an assistant may see it (redactCard). */
+function redactValue(v: unknown, policy: SensitivityPolicy): unknown {
+  if (Array.isArray(v)) return v.map((x) => redactValue(x, policy));
+  if (!v || typeof v !== 'object') return v;
+  const o = v as Json;
+  const walked: Json = {};
+  for (const [k, x] of Object.entries(o)) walked[k] = redactValue(x, policy);
+  // A paragraph entry before the head annotated it carries no producer: it is a card id with labels and text.
+  return isCardLike(walked) ? redactCard(walked, policy) : walked;
+}
+
+/**
+ * A response body for an assistant's scoped token (session platform `mcp`), with every private and confirm card's
+ * content removed by the head itself, wherever the card sits: the brief's lists and paragraph parts, a card and its
+ * thread, a list of cards, an action's returned card. GET /api/me/cards/{id} also drops the decision log's comment and
+ * edited proposal when the card is private. The owner's own session never goes through this.
+ */
+export async function redactForAssistant<T>(db: Db, headId: string, body: T): Promise<T> {
+  const policy = await loadPolicy(db, headId);
+  const out = redactValue(body, policy) as T;
+  const detail = out as unknown as { card?: Json; decisions?: Json[] };
+  if (detail && typeof detail === 'object' && detail.card && Array.isArray(detail.decisions) && detail.card.effective_sensitivity && detail.card.effective_sensitivity !== 'normal') {
+    detail.decisions = detail.decisions.map(({ comment: _c, edited_proposal: _e, ...rest }) => rest);
+  }
+  return out;
 }

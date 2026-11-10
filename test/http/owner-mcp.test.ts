@@ -231,6 +231,50 @@ describe('every tool, over /api/mcp', () => {
 });
 
 describe('scoped tokens are confined to the tools', () => {
+  it('gives an assistant no content of a private or confirm card, and never lets it decide a confirm card (RFC 0.9 §4.1)', async () => {
+    await call('PUT', cardPath('hermes:bank:1'), { auth: hermes, body: card('hermes:bank:1', { title: 'Mortgage offer', summary: 'Rate 3.1% fixed.', body: 'Rate 3.1% fixed for 30 years.', sensitivity: 'private' }) });
+    await call('PUT', cardPath('hermes:bank:2'), { auth: hermes, body: card('hermes:bank:2', { title: 'Wire to the lawyer', summary: 'DKK 40,000.', body: 'DKK 40,000 to the lawyer.', sensitivity: 'confirm' }) });
+    const { tokens: t } = await tokens();
+    const client = await mcpClient(t.access_token);
+    const said = (x: unknown) => JSON.stringify(x);
+
+    const brief = parse(await client.callTool({ name: 'brief', arguments: {} }));
+    const rows = Object.fromEntries(brief.decisions.map((d: { id: string }) => [d.id, d]));
+    expect(rows['hermes:bank:1']).toMatchObject({ id: 'hermes:bank:1', producer: 'hermes', title: 'Mortgage offer', private: true, effective_sensitivity: 'private', actions: expect.any(Array) });
+    expect(rows['hermes:bank:2']).toMatchObject({ title: 'Wire to the lawyer', private: true, effective_sensitivity: 'confirm', confirm_on_device: true });
+    expect(rows['hermes:bank:2'].actions).toBeUndefined();
+    // Exactly what the tools gave before the head redacted too: the move is invisible to the assistant.
+    expect(rows['hermes:bank:1']).toEqual({
+      id: 'hermes:bank:1', producer: 'hermes', title: 'Mortgage offer', sensitivity: 'private', effective_sensitivity: 'private', private: true,
+      actions: [{ id: 'approve', label: 'approve' }, { id: 'reject', label: 'reject' }],
+    });
+    expect(said(brief)).not.toMatch(/3\.1|40,000|lawyer\./);
+    // The paragraph counts the private entries instead of naming them.
+    expect(brief.paragraph).toMatch(/and 2 private decisions\./);
+    expect(brief.paragraph).not.toMatch(/Mortgage|Wire/);
+
+    const listed = parse(await client.callTool({ name: 'list_cards', arguments: { from: '2026-10-07' } }));
+    expect(listed.cards.find((c: { id: string }) => c.id === 'hermes:bank:1')).toMatchObject({ private: true, kind: 'decision', title: 'Mortgage offer' });
+    for (const id of ['hermes:bank:1', 'hermes:bank:2']) {
+      const got = parse(await client.callTool({ name: 'get_card', arguments: { id } }));
+      expect(got.card).toMatchObject({ id, producer: 'hermes', kind: 'decision', private: true });
+      expect(got.card.body).toBeUndefined();
+      expect(got.card.summary).toBeUndefined();
+      expect(said(got)).not.toMatch(/3\.1|40,000/);
+    }
+
+    // A confirm card: the head's 403, its message telling the assistant to send the person to their device.
+    const refused = await client.callTool({ name: 'decide', arguments: { id: 'hermes:bank:2', decision: 'approve' } });
+    expect(refused.isError).toBe(true);
+    expect(parse(refused)).toMatchObject({ error: 'reauthentication_required', status: 403 });
+    expect(parse(refused).message).toMatch(/send the person to their head/);
+    // Always: even with its device row stamped as re-identified, an assistant's session can never satisfy it.
+    await testDb().update(devices).set({ reauthenticatedAt: new Date('2026-10-07T09:00:00Z') }).where(eq(devices.platform, 'mcp'));
+    expect(parse(await client.callTool({ name: 'decide', arguments: { id: 'hermes:bank:2', decision: 'dismissed' } }))).toMatchObject({ error: 'reauthentication_required' });
+    // A private card (not confirm) is decided by its id.
+    expect(parse(await client.callTool({ name: 'decide', arguments: { id: 'hermes:bank:1', decision: 'approve' } }))).toMatchObject({ state: 'decided', decision: 'approve' });
+  });
+
   it('opens each route a tool calls to the assistant’s token, and refuses every other owner route with 403 insufficient_scope', async () => {
     const { tokens: t } = await tokens();
     const as = `Session ${t.access_token}`;

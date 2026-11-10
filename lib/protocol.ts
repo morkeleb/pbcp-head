@@ -12,6 +12,7 @@ import { cards, decisionLog, labelCeilings } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
 import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
+import { effectiveOf, loadPolicy, REAUTH_WINDOW_SECONDS } from './sensitivity';
 import { load, persist, toCard, writeTx, type Stored, type Tx } from './store';
 
 export interface Outcome {
@@ -132,6 +133,36 @@ export function parseAfter(value: string | null): number {
 export interface OwnerContext {
   headId: string;
   actor: string;
+  /**
+   * Whether the calling surface can ask the person to identify themselves (RFC 0.9 §4.1 `confirm`): false for an
+   * assistant's session (platform `mcp`). Absent counts as false.
+   */
+  canIdentify?: boolean;
+  /** When the person last identified themselves on the calling session; null or absent when never. */
+  reauthenticatedAt?: Date | null;
+}
+
+/**
+ * RFC 0.9 §4.1 `confirm`, §7.3, §7.4: a decision on a card whose effective sensitivity (§9: the card's, raised by the
+ * owner's floors) is `confirm` is recorded only if the person identified themselves on this session within
+ * REAUTH_WINDOW_SECONDS; otherwise 403 `reauthentication_required`, before anything is written. Every decision value
+ * counts, `dismissed` included. A surface that cannot ask (an assistant connector) is always refused.
+ */
+async function requireIdentified(tx: Tx, ctx: OwnerContext, card: Card): Promise<void> {
+  if (effectiveOf(card, await loadPolicy(tx, ctx.headId)) !== 'confirm') return;
+  if (!ctx.canIdentify) {
+    throw new PbcpError(
+      'reauthentication_required',
+      'This card needs the person to confirm it themselves (RFC §4.1 sensitivity: confirm). An assistant cannot approve it: send the person to their head, on their phone or the web, to decide it there.',
+    );
+  }
+  const at = ctx.reauthenticatedAt?.getTime();
+  if (at === undefined || Date.parse(now()) - at > REAUTH_WINDOW_SECONDS * 1000) {
+    throw new PbcpError(
+      'reauthentication_required',
+      `Deciding this card needs you to identify yourself again: confirm with your passkey (POST /api/auth/passkey/step-up) and decide within ${REAUTH_WINDOW_SECONDS / 60} minutes.`,
+    );
+  }
 }
 
 async function loadOrThrow(tx: Tx, headId: string, id: string): Promise<Stored> {
@@ -144,6 +175,8 @@ async function loadOrThrow(tx: Tx, headId: string, id: string): Promise<Stored> 
 export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: unknown): Promise<Outcome> {
   return writeTx(db, ctx.headId, async (tx) => {
     const stored = await loadOrThrow(tx, ctx.headId, id);
+    // The refusal comes before anything is written: no change_seq, no card change, no decision-log row.
+    await requireIdentified(tx, ctx, stored.card);
     const at = now();
     const r = decide(stored.card, body as Decision, at);
     let card = r.card;

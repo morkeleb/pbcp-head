@@ -1,6 +1,7 @@
 // Response helpers. Every refusal that does not return a card is `{ error, message }` (RFC §7.4).
 
 import { PbcpError } from '@pbcp/core';
+import { REAUTH_WINDOW_SECONDS } from './auth/reauth-window';
 
 export function json(body: unknown, status = 200, headers?: HeadersInit): Response {
   return Response.json(body, { status, headers });
@@ -8,7 +9,9 @@ export function json(body: unknown, status = 200, headers?: HeadersInit): Respon
 
 export function refusal(e: PbcpError): Response {
   const headers = e.retryAfter !== undefined ? { 'retry-after': String(e.retryAfter) } : undefined;
-  return json(e.toJSON(), e.status, headers);
+  // RFC 0.9 §7.4: `reauthentication_required` names the window the person has to decide in once they have identified.
+  const body = e.code === 'reauthentication_required' ? { ...e.toJSON(), window_seconds: REAUTH_WINDOW_SECONDS } : e.toJSON();
+  return json(body, e.status, headers);
 }
 
 /** Runs a handler body; a PbcpError becomes its §7.4 error response, anything else a 500. */

@@ -158,7 +158,7 @@ export interface paths {
         put?: never;
         /**
          * Decide (RFC §7.3)
-         * @description Deciding an order `dismissed` cancels it (A.5).
+         * @description Deciding an order `dismissed` cancels it (A.5). A card whose `effective_sensitivity` is `confirm` (RFC 0.9 §4.1) is decided only if the person identified themselves on this session within the last five minutes (a passkey or Sign in with Apple sign-in, or POST /api/auth/passkey/step-up); otherwise 403 `reauthentication_required`, with `window_seconds`, and nothing is recorded. Every value counts, `dismissed` included. An assistant’s token can never satisfy it.
          */
         post: operations["decide"];
         delete?: never;
@@ -676,6 +676,8 @@ export interface components {
             error: string;
             /** @description For people; its wording may change */
             message: string;
+            /** @description On 403 `reauthentication_required`: how long an identification counts; identify yourself and decide within it */
+            window_seconds?: number;
         };
         Card: {
             /** @constant */
@@ -691,6 +693,8 @@ export interface components {
             body: string;
             /** @enum {string} */
             urgency?: "immediate" | "brief" | "log";
+            /** @enum {string} */
+            sensitivity?: "normal" | "private" | "confirm";
             thread?: string;
             labels?: string[];
             about?: string;
@@ -760,6 +764,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
             /** @description The labels of each snoozed decision: counted, never listed (§8) */
             snoozed: string[][];
@@ -771,6 +791,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
                 /** @description Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded */
                 overdue: boolean;
             }[];
@@ -782,6 +818,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
             /** @description Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3) */
             orders?: {
@@ -791,6 +843,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
             /** @description The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more" */
             mattered?: {
@@ -800,6 +868,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
             /** @description Every other thread of the day before, counted by producer: "And 9 updates from mail, goalpath and hermes." */
             rest?: {
@@ -814,6 +898,22 @@ export interface components {
                 labels: string[];
                 /** @description Safe inline HTML: "<title> — <lead>", the title linked to the card */
                 text: string;
+                /** @description The card’s producer root */
+                producer?: string;
+                /** @description The card’s kind */
+                kind?: string;
+                /** @description The card’s title, as plain text */
+                title?: string;
+                /**
+                 * @description RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)
+                 * @enum {string}
+                 */
+                sensitivity?: "normal" | "private" | "confirm";
+                /**
+                 * @description RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text
+                 * @enum {string}
+                 */
+                effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
         };
         MeCard: {
@@ -830,6 +930,8 @@ export interface components {
             body: string;
             /** @enum {string} */
             urgency?: "immediate" | "brief" | "log";
+            /** @enum {string} */
+            sensitivity?: "normal" | "private" | "confirm";
             thread?: string;
             labels?: string[];
             about?: string;
@@ -918,6 +1020,13 @@ export interface components {
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];
+            /** @description On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1) */
+            spoken_paragraph?: string;
+            /**
+             * @description RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)
+             * @enum {string}
+             */
+            effective_sensitivity: "normal" | "private" | "confirm";
         } & {
             [key: string]: unknown;
         };
@@ -954,6 +1063,8 @@ export interface components {
                 body: string;
                 /** @enum {string} */
                 urgency?: "immediate" | "brief" | "log";
+                /** @enum {string} */
+                sensitivity?: "normal" | "private" | "confirm";
                 thread?: string;
                 labels?: string[];
                 about?: string;
@@ -1042,6 +1153,13 @@ export interface components {
                 day: string;
                 /** @description On a `head:daily` card: its paragraph in parts */
                 paragraph?: components["schemas"]["ParagraphParts"];
+                /** @description On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1) */
+                spoken_paragraph?: string;
+                /**
+                 * @description RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)
+                 * @enum {string}
+                 */
+                effective_sensitivity: "normal" | "private" | "confirm";
                 /** @description On an order: its lease as the owner sees it */
                 lease?: {
                     /** @description When the current claim began */
@@ -1119,6 +1237,8 @@ export interface components {
             daily: components["schemas"]["MeCard"] | null;
             /** @description The brief today opens with ("Nothing waiting for you." on a quiet day) */
             daily_paragraph: {
+                /** @description With `spoken=1`: the paragraph in plain text, private and confirm entries counted, never named (RFC 0.9 §4.1); `html` is then the same text, escaped */
+                text?: string;
                 /** @description Safe inline HTML, the parts’ sentences as one run of prose: "N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from …." with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8) */
                 html: string;
                 /** @description True until today’s `head:daily` card exists: the same fold, made now */
@@ -1149,6 +1269,8 @@ export interface components {
                 body: string;
                 /** @enum {string} */
                 urgency?: "immediate" | "brief" | "log";
+                /** @enum {string} */
+                sensitivity?: "normal" | "private" | "confirm";
                 thread?: string;
                 labels?: string[];
                 about?: string;
@@ -1237,6 +1359,13 @@ export interface components {
                 day: string;
                 /** @description On a `head:daily` card: its paragraph in parts */
                 paragraph?: components["schemas"]["ParagraphParts"];
+                /** @description On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1) */
+                spoken_paragraph?: string;
+                /**
+                 * @description RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)
+                 * @enum {string}
+                 */
+                effective_sensitivity: "normal" | "private" | "confirm";
                 /**
                  * @description An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card
                  * @constant
@@ -1285,6 +1414,8 @@ export interface components {
             body: string;
             /** @enum {string} */
             urgency?: "immediate" | "brief" | "log";
+            /** @enum {string} */
+            sensitivity?: "normal" | "private" | "confirm";
             thread?: string;
             labels?: string[];
             about?: string;
@@ -1373,6 +1504,13 @@ export interface components {
             day: string;
             /** @description On a `head:daily` card: its paragraph in parts */
             paragraph?: components["schemas"]["ParagraphParts"];
+            /** @description On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1) */
+            spoken_paragraph?: string;
+            /**
+             * @description RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)
+             * @enum {string}
+             */
+            effective_sensitivity: "normal" | "private" | "confirm";
             /** @description The lease as the owner sees it: head-private, never synced */
             lease: {
                 /** @description When the current claim began */
@@ -1429,11 +1567,15 @@ export interface components {
                 /** @description RFC 3339, UTC (`2026-10-07T09:00:00Z`) */
                 seen_at: string;
             } | null;
+            /** @description The owner’s floor for every card (RFC 0.9 §9), or null */
+            sensitivity_floor: ("normal" | "private" | "confirm") | null;
         };
         Producer: {
             root: string;
             /** @enum {string} */
             ceiling: "immediate" | "brief" | "log";
+            /** @description The owner’s sensitivity floor on it (RFC 0.9 §9), or null */
+            sensitivity_floor: ("normal" | "private" | "confirm") | null;
             executor: boolean;
             revoked: boolean;
             tokens: {
@@ -1457,6 +1599,8 @@ export interface components {
             cards: number;
             /** @description The owner’s ceiling on it (§9), or null */
             ceiling: ("immediate" | "brief" | "log") | null;
+            /** @description The owner’s sensitivity floor on it (RFC 0.9 §9), or null */
+            sensitivity_floor: ("normal" | "private" | "confirm") | null;
         };
         LabelList: {
             labels: components["schemas"]["Label"][];
@@ -1533,6 +1677,8 @@ export interface components {
             executor: boolean;
             /** @enum {string} */
             ceiling: "immediate" | "brief" | "log";
+            /** @description The owner’s sensitivity floor on its producer (RFC 0.9 §9: per root), or null */
+            sensitivity_floor: ("normal" | "private" | "confirm") | null;
             /** @description RFC 3339, UTC (`2026-10-07T09:00:00Z`) */
             created_at: string;
             /** @description The last request it authenticated, to the minute */
@@ -1664,6 +1810,8 @@ export interface components {
             timezone?: string | null;
             /** @description One line, 1–100 characters; null clears it */
             display_name?: string | null;
+            /** @description The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it */
+            sensitivity_floor?: ("normal" | "private" | "confirm") | null;
         };
         ProducerPatch: {
             /**
@@ -1676,10 +1824,14 @@ export interface components {
              * @constant
              */
             revoked?: true;
+            /** @description The owner’s sensitivity floor on the producer (RFC 0.9 §9): raises the effective sensitivity of its cards, already stored or not; null clears it */
+            sensitivity_floor?: ("normal" | "private" | "confirm") | null;
         };
         LabelPatch: {
             /** @description Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9) */
-            ceiling: ("immediate" | "brief" | "log") | null;
+            ceiling?: ("immediate" | "brief" | "log") | null;
+            /** @description The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it */
+            sensitivity_floor?: ("normal" | "private" | "confirm") | null;
         };
         DevicePatch: {
             daily_notification?: {
@@ -1725,6 +1877,8 @@ export interface components {
             ceiling?: "immediate" | "brief" | "log";
             /** @description The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes */
             name?: string;
+            /** @description The floor on its producer (every token of its root). The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it */
+            sensitivity_floor?: ("normal" | "private" | "confirm") | null;
         };
         PairRequest: {
             /** @description The code the owner gave you: six characters shown as two groups of three (XXX-XXX); the dash is optional when entering. Case does not matter */
@@ -1913,7 +2067,10 @@ export interface operations {
     };
     getBrief: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `1`: the daily paragraph for a surface outside the signed-in session (an assistant, a voice client): plain text in `daily_paragraph.text`, private and confirm entries counted, never named (RFC 0.9 §4.1). The parts and lists are unchanged; each carries `effective_sensitivity`. */
+                spoken?: "1";
+            };
             header?: {
                 /** @description The IANA timezone the device is in now, e.g. `Europe/Copenhagen`. Optional on every /api/me request. It is stored on the calling device, and the head follows the zone of the device most recently seen with it (for the brief and its days, snooze presets and the nightly card) unless the owner set an override in /api/me/settings. An unknown zone, or a bare offset such as `+02:00`, is 400 `invalid_request`, checked after the credential. */
                 "X-Timezone"?: components["parameters"]["XTimezone"];
@@ -2196,6 +2353,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session, an expired one, a signed-out device, or a producer token */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3359,7 +3525,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3569,7 +3735,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3620,7 +3786,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3901,7 +4067,7 @@ export interface operations {
                     "image/*": string;
                 };
             };
-            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change */
+            /** @description `insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused */
             403: {
                 headers: {
                     [name: string]: unknown;

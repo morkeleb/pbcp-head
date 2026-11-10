@@ -12,14 +12,14 @@ import { api, useOnline, when } from '../client';
 import { useDeferred } from '../components';
 import { Copyable } from '../copy';
 import { ProducerName } from './producer-name';
-import { call, ConnectLink, errorText, field, PageError, Section, URGENCIES, type Urgency } from './shared';
+import { call, ConnectLink, errorText, field, FloorSelect, PageError, Section, URGENCIES, type Sensitivity, type Urgency } from './shared';
 
 interface Token {
-  id: string; root: string; name: string | null; instance: string | null; executor: boolean; ceiling: Urgency; created_at: string; last_used_at: string | null;
+  id: string; root: string; name: string | null; instance: string | null; executor: boolean; ceiling: Urgency; sensitivity_floor: Sensitivity | null; created_at: string; last_used_at: string | null;
   paired: { name: string | null; address: string | null; at: string } | null;
 }
 interface OpenCode { id: string; created_at: string; expires_at: string }
-interface Label { label: string; cards: number; ceiling: Urgency | null }
+interface Label { label: string; cards: number; ceiling: Urgency | null; sensitivity_floor: Sensitivity | null }
 
 export function ProducersView() {
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +142,12 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
                   {URGENCIES.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
               </label>
+              {/* RFC 0.9 §9: the owner's sensitivity floor on this producer's cards, every one of its root's, stored or not. */}
+              <label className="flex items-center gap-2" data-producer-floor={t.root}>
+                <span className="text-meta uppercase tracking-meta text-muted-foreground">Sensitivity</span>
+                <FloorSelect label={`Sensitivity floor for ${t.root}`} value={t.sensitivity_floor} disabled={!online}
+                  onChange={(v) => void act(() => call(`/api/me/settings/producers/${t.id}`, 'PATCH', { sensitivity_floor: v }))} />
+              </label>
               <Button size="xs" variant="ghost" className="ml-auto text-destructive" disabled={!online || deferred.pending}
                 onClick={() => deferred.schedule(`Revoking ${t.root}’s token`, () => void act(() => call(`/api/me/settings/producers/${t.id}`, 'DELETE')))}>
                 Revoke
@@ -163,7 +169,7 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
 
       <Pairing onPaired={load} onError={onError} />
 
-      <h4 className="pb-2 pt-6 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-label-ceilings-title>Ceilings by label</h4>
+      <h4 className="pb-2 pt-6 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-label-ceilings-title>Ceilings and sensitivity by label</h4>
       {labels === null ? null : labels.length === 0 ? (
         <p className="text-lead text-muted-foreground">No card carries a label yet.</p>
       ) : (
@@ -175,11 +181,15 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
                   {l.label} <span className="text-lead text-muted-foreground">· {l.cards} {l.cards === 1 ? 'card' : 'cards'}</span>
                 </th>
                 <td className="py-2 text-right">
-                  <select aria-label={`Ceiling for label ${l.label}`} className={field} value={l.ceiling ?? ''} disabled={!online}
-                    onChange={(e) => void act(() => call(`/api/me/settings/labels/${encodeURIComponent(l.label)}`, 'PATCH', { ceiling: e.target.value || null }))}>
-                    <option value="">no ceiling</option>
-                    {URGENCIES.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <span className="inline-flex flex-wrap justify-end gap-2">
+                    <select aria-label={`Ceiling for label ${l.label}`} className={field} value={l.ceiling ?? ''} disabled={!online}
+                      onChange={(e) => void act(() => call(`/api/me/settings/labels/${encodeURIComponent(l.label)}`, 'PATCH', { ceiling: e.target.value || null }))}>
+                      <option value="">no ceiling</option>
+                      {URGENCIES.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                    <FloorSelect label={`Sensitivity floor for label ${l.label}`} value={l.sensitivity_floor} disabled={!online}
+                      onChange={(v) => void act(() => call(`/api/me/settings/labels/${encodeURIComponent(l.label)}`, 'PATCH', { sensitivity_floor: v }))} />
+                  </span>
                 </td>
               </tr>
             ))}

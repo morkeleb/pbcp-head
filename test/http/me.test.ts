@@ -217,7 +217,7 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
 
   it('stores a card under a producer ceiling and label ceilings with the lowest of them', async () => {
     // hermes's ceiling is immediate.
-    expect((await me('PATCH', '/api/me/settings/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log' });
+    expect((await me('PATCH', '/api/me/settings/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log', sensitivity_floor: null });
     await me('PATCH', '/api/me/settings/labels/billing-revamp', { ceiling: 'brief' });
     await put('hermes:gmail:n1', { kind: 'signal', urgency: 'immediate', labels: ['newsletters'] });
     await put('hermes:gmail:n2', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp', 'newsletters'] }); // both: the lowest
@@ -237,8 +237,8 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
     await put('hermes:gmail:l2', { kind: 'artifact', labels: ['a-label'] });
     await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: 'brief' });
     expect((await me('GET', '/api/me/settings/labels')).body.labels).toEqual([
-      { label: 'a-label', cards: 2, ceiling: 'brief' },
-      { label: 'b-label', cards: 1, ceiling: null },
+      { label: 'a-label', cards: 2, ceiling: 'brief', sensitivity_floor: null },
+      { label: 'b-label', cards: 1, ceiling: null, sensitivity_floor: null },
     ]);
     expect((await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: null })).body.ceiling).toBeNull();
     expect((await me('PATCH', '/api/me/settings/labels/Not_A_Label', { ceiling: 'log' })).status).toBe(400);
@@ -410,7 +410,7 @@ describe('timezone and settings', () => {
   const settings = async () => (await me('GET', '/api/me/settings')).body;
 
   it('takes the zone from the device most recently seen; UTC before any device has said', async () => {
-    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null });
+    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null, sensitivity_floor: null });
     const phone = await ownerSession(OWNER, 'phone');
     expect((await zone(phone.auth, 'america/denver')).status).toBe(200); // stored in its canonical spelling
     expect(await settings()).toMatchObject({

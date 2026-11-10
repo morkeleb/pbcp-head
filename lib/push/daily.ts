@@ -12,6 +12,8 @@ import { cards, cronRuns, devices, heads } from '../../db/schema';
 import { now } from '../clock';
 import { localDate, localMinutes } from '../time';
 import { effectiveTimezone } from '../timezone';
+import { composeParagraphs, type ParagraphParts } from '../brief/paragraph';
+import { annotateParts } from '../sensitivity';
 import { sendPush, type PushPayload, type SendResult } from './send';
 
 const RUN = 'daily-notification';
@@ -43,24 +45,16 @@ export function firstSentence(text: string): string {
   return (m ? m[0] : t).slice(0, 240);
 }
 
-/** The first paragraph of rendered card HTML as plain text. */
-function paragraphText(html: string): string {
-  const p = /<p>([\s\S]*?)<\/p>/.exec(html)?.[1] ?? '';
-  return p
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&amp;/g, '&');
-}
-
-/** What the notification says: the daily paragraph's first sentence when today's card exists, else how many decisions wait. */
+/**
+ * What the notification says: the daily paragraph's first sentence when today's card exists, else how many decisions wait.
+ * A notification is outside the owner's signed-in session (RFC 0.9 §4.1 `private`): the paragraph is written from its
+ * parts in the spoken form, so a private or confirm entry is counted ("1 decision: and 1 private decision"), never named.
+ * A card folded before its paragraph had parts is not read: an owner's floor raised since may cover a card it names, so
+ * the notification counts the decisions instead.
+ */
 export async function dailyPayload(db: Db, headId: string, date: string): Promise<PushPayload> {
-  const [daily] = await db.select({ html: cards.renderedHtml }).from(cards).where(and(eq(cards.headId, headId), eq(cards.id, `head:daily:${date}`)));
-  const sentence = daily?.html ? firstSentence(paragraphText(daily.html)) : '';
+  const [daily] = await db.select({ parts: cards.renderedParagraph }).from(cards).where(and(eq(cards.headId, headId), eq(cards.id, `head:daily:${date}`)));
+  const sentence = daily?.parts ? firstSentence(composeParagraphs(await annotateParts(db, headId, daily.parts as ParagraphParts), [], { spoken: true })[0] ?? '') : '';
   let body = sentence;
   if (!body) {
     const at = new Date(now());

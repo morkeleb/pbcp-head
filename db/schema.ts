@@ -23,6 +23,9 @@ export const heads = pgTable('heads', {
   // owner had seen when they last left the brief.
   lastVisitSeq: bigint('last_visit_seq', { mode: 'number' }).notNull().default(0),
   lastVisitAt: tstz('last_visit_at'),
+  // RFC 0.9 §9 "Sensitivity": the owner's floor for every card (normal | private | confirm), or null for none. It raises a
+  // card's effective sensitivity when the card is handled (lib/sensitivity.ts); the card is never rewritten.
+  sensitivityFloor: text('sensitivity_floor'),
 });
 
 export const producerTokens = pgTable('producer_tokens', {
@@ -164,6 +167,20 @@ export const labelCeilings = pgTable(
   (t) => [primaryKey({ columns: [t.headId, t.label] })],
 );
 
+// RFC 0.9 §9 "Sensitivity": the owner's floors per producer root and per label (normal | private | confirm). Applied when a
+// card is handled, not when it is stored, so raising one protects the cards already stored (lib/sensitivity.ts). Kept
+// apart from producer_tokens so a floor outlives the tokens of its root.
+export const sensitivityFloors = pgTable(
+  'sensitivity_floors',
+  {
+    headId: text('head_id').notNull().references(() => heads.id),
+    scope: text('scope').notNull(), // producer | label
+    key: text('key').notNull(), // the producer's root, or the label
+    floor: text('floor').notNull(), // normal | private | confirm
+  },
+  (t) => [primaryKey({ columns: [t.headId, t.scope, t.key] })],
+);
+
 // Append-only. The decision and the exact card it was made on (§4.4, §11.3), and who made it.
 export const decisionLog = pgTable(
   'decision_log',
@@ -231,6 +248,9 @@ export const devices = pgTable(
     timezone: text('timezone'), // the IANA zone the device last sent in X-Timezone
     clientId: text('client_id'), // platform 'mcp': the OAuth client it was authorised for (lib/oauth)
     tzSeenAt: tstz('tz_seen_at'), // when it last sent one: the most recent of these is the active device
+    // When the person last identified themselves on this device's session (RFC 0.9 §4.1 `confirm`, §4.5 "Identifying
+    // again"): a passkey or Sign in with Apple sign-in, or a passkey step-up (lib/auth/passkey.ts). A refresh never sets it.
+    reauthenticatedAt: tstz('reauthenticated_at'),
     createdAt: tstz('created_at').notNull().defaultNow(),
     lastSeenAt: tstz('last_seen_at'),
     revokedAt: tstz('revoked_at'),

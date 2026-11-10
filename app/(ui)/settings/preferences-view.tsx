@@ -1,15 +1,16 @@
 'use client';
 
-// Settings → Preferences: this device's theme, and the head's timezone override.
+// Settings → Preferences: this device's theme, the head's timezone override, and the owner's sensitivity floor for every
+// card (RFC 0.9 §9).
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { PageRow, setTheme, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, useOnline } from '../client';
-import { call, errorText, field, PageError, Section } from './shared';
+import { call, errorText, field, FloorSelect, PageError, Section, type Sensitivity } from './shared';
 
-interface HeadSettings { timezone: string; timezone_source: 'override' | 'device' | 'default'; timezone_override: string | null }
+interface HeadSettings { timezone: string; timezone_source: 'override' | 'device' | 'default'; timezone_override: string | null; sensitivity_floor: Sensitivity | null }
 
 export function PreferencesView() {
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +75,12 @@ function Preferences({ onError }: { onError: (e: unknown) => void }) {
               {head?.timezone_override && <Button type="button" size="xs" variant="ghost" className="text-muted-foreground" disabled={!online} onClick={() => void saveZone(null)}>Follow my devices</Button>}
             </form>,
             head ? (head.timezone_source === 'override' ? `Set here: ${head.timezone}.` : `${head.timezone}, ${head.timezone_source === 'device' ? 'from the device you used last' : 'until a device says otherwise'}.`) : undefined,
+          )}
+          {row(
+            'Sensitivity',
+            <FloorSelect label="Sensitivity floor for every card" value={head?.sensitivity_floor ?? null} disabled={!online || !head} none="as each producer sends"
+              onChange={(v) => void call('/api/me/settings', 'PATCH', { sensitivity_floor: v }).catch(onError).then(load)} />,
+            'Private: a card’s lead and body stay off notifications and assistants. Confirm: also, deciding asks for your passkey. Raises every card, already here or not; never lowers what a producer asked for.',
           )}
         </tbody>
       </table>

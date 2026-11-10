@@ -30,10 +30,14 @@ const Seq = z.number().int().nonnegative();
 
 // --- errors -------------------------------------------------------------------------------------------
 
+/** RFC 0.9 §4.1 `sensitivity`. */
+const SENSITIVITY = z.enum(['normal', 'private', 'confirm']);
+
 export const ErrorBody = z
   .object({
     error: z.string().describe('A stable code: `invalid_request`, `unauthorized`, `not_found`, `too_large`, `invalid_snooze`, … (RFC §7.4 and the head’s own)'),
     message: z.string().describe('For people; its wording may change'),
+    window_seconds: z.number().int().positive().optional().describe('On 403 `reauthentication_required`: how long an identification counts; identify yourself and decide within it'),
   })
   .register(responses, { id: 'Error', description: 'Every refusal from /api/me, and from GET /: RFC §7.4’s error body.' });
 
@@ -62,6 +66,11 @@ const ParagraphEntry = z.object({
   id: z.string().describe('The card the entry is'),
   labels: z.array(z.string()).describe('Its labels (§4.1), for filtering'),
   text: z.string().describe('Safe inline HTML: "<title> — <lead>", the title linked to the card'),
+  producer: z.string().optional().describe('The card’s producer root'),
+  kind: z.string().optional().describe('The card’s kind'),
+  title: z.string().optional().describe('The card’s title, as plain text'),
+  sensitivity: SENSITIVITY.optional().describe('RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)'),
+  effective_sensitivity: SENSITIVITY.optional().describe('RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text'),
 });
 
 export const ParagraphParts = z.object({
@@ -90,6 +99,8 @@ export const MeCard = Card.extend({
   order_outcome: z.enum(['applied', 'stale']).optional().describe('On an outcome card: whether it moved its order, or came late or from an earlier claim'),
   day: z.string().describe('The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored'),
   paragraph: ParagraphParts.optional().describe('On a `head:daily` card: its paragraph in parts'),
+  spoken_paragraph: z.string().optional().describe('On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)'),
+  effective_sensitivity: SENSITIVITY.describe('RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)'),
 }).register(responses, { id: 'MeCard', description: 'A card as the owner’s devices show it: the protocol card plus what the head rendered.' });
 
 export const CardSummary = z.object({
@@ -166,6 +177,7 @@ export const Brief = z.object({
   daily: MeCard.nullable().describe('The latest `head:daily` card'),
   daily_paragraph: z
     .object({
+      text: z.string().optional().describe('With `spoken=1`: the paragraph in plain text, private and confirm entries counted, never named (RFC 0.9 §4.1); `html` is then the same text, escaped'),
       html: z.string().describe('Safe inline HTML, the parts’ sentences as one run of prose: "N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from …." with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8)'),
       so_far: z.boolean().describe('True until today’s `head:daily` card exists: the same fold, made now'),
       parts: ParagraphParts,
@@ -247,16 +259,19 @@ export const Settings = z.object({
   timezone_source: z.enum(['override', 'device', 'default']),
   timezone_override: Zone.nullable(),
   device_timezone: z.object({ device_id: z.string(), timezone: Zone, seen_at: Timestamp }).nullable().describe('The most recent zone a device sent'),
+  sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s floor for every card (RFC 0.9 §9), or null'),
 }).register(responses, { id: 'Settings' });
 
 export const SettingsPatch = z.object({
   timezone: Zone.nullable().optional().describe('Sets the override, which wins over the devices; null clears it'),
   display_name: z.string().nullable().optional().describe('One line, 1–100 characters; null clears it'),
+  sensitivity_floor: SENSITIVITY.nullable().optional().describe('The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it'),
 }).register(requests, { id: 'SettingsPatch' });
 
 export const Producer = z.object({
   root: z.string(),
   ceiling: z.enum(URGENCIES),
+  sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s sensitivity floor on it (RFC 0.9 §9), or null'),
   executor: z.boolean(),
   revoked: z.boolean(),
   tokens: z.array(z.object({ instance: z.string().nullable(), ceiling: z.enum(URGENCIES), executor: z.boolean(), created_at: Timestamp, revoked_at: Timestamp.optional() })),
@@ -268,19 +283,22 @@ export const ProducerList = z.object({ producers: z.array(Producer) }).register(
 export const ProducerPatch = z.object({
   ceiling: z.enum(URGENCIES).optional().describe('Applies to content stored from now on (§9)'),
   revoked: z.literal(true).optional().describe('Revokes every token of the root; mint a new one to bring it back'),
+  sensitivity_floor: SENSITIVITY.nullable().optional().describe('The owner’s sensitivity floor on the producer (RFC 0.9 §9): raises the effective sensitivity of its cards, already stored or not; null clears it'),
 }).register(requests, { id: 'ProducerPatch' });
 
 export const Label = z.object({
   label: z.string(),
   cards: z.number().int().nonnegative().describe('How many of the head’s cards carry it'),
   ceiling: z.enum(URGENCIES).nullable().describe('The owner’s ceiling on it (§9), or null'),
+  sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s sensitivity floor on it (RFC 0.9 §9), or null'),
 }).register(responses, { id: 'Label' });
 
 export const LabelList = z.object({ labels: z.array(Label) }).register(responses, { id: 'LabelList' });
 
 export const LabelPatch = z.object({
-  ceiling: z.enum(URGENCIES).nullable().describe('Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)'),
-}).register(requests, { id: 'LabelPatch' });
+  ceiling: z.enum(URGENCIES).nullable().optional().describe('Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)'),
+  sensitivity_floor: SENSITIVITY.nullable().optional().describe('The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it'),
+}).refine((p) => p.ceiling !== undefined || p.sensitivity_floor !== undefined, 'give ceiling, sensitivity_floor, or both').register(requests, { id: 'LabelPatch' });
 
 export const Device = z.object({
   id: z.string(),
@@ -345,6 +363,7 @@ export const ProducerToken = z.object({
   instance: z.string().nullable(),
   executor: z.boolean(),
   ceiling: z.enum(URGENCIES),
+  sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s sensitivity floor on its producer (RFC 0.9 §9: per root), or null'),
   created_at: Timestamp,
   last_used_at: Timestamp.nullable().describe('The last request it authenticated, to the minute'),
   paired: z
@@ -370,7 +389,8 @@ export const MintedToken = z.object({
 export const TokenPatch = z.object({
   ceiling: z.enum(URGENCIES).optional().describe('The producer’s ceiling (§9): every live token of its root; cards stored from now on'),
   name: z.string().optional().describe('The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes'),
-}).refine((p) => p.ceiling !== undefined || p.name !== undefined, 'give ceiling, name, or both').register(requests, { id: 'TokenPatch' });
+  sensitivity_floor: SENSITIVITY.nullable().optional().describe('The floor on its producer (every token of its root). The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it'),
+}).refine((p) => p.ceiling !== undefined || p.name !== undefined || p.sensitivity_floor !== undefined, 'give ceiling, name, sensitivity_floor, or any of them').register(requests, { id: 'TokenPatch' });
 
 export const PairingCode = z.object({
   id: z.string().describe('Names the code to cancel it; not the code'),

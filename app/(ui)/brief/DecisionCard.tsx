@@ -32,6 +32,7 @@ import {
 } from '../components';
 import { CardMeta, clock, Thumbnail, wants } from './card-parts';
 import { hasDecision, rowId } from './days';
+import { ConfirmNote } from '../step-up';
 
 export { clock };
 
@@ -231,6 +232,8 @@ export function DecisionCard({ card, timezone, onChange, focused, handle, showTi
           </>
         )}
       </div>
+      {/* RFC 0.9 §4.5 "Identifying again": said beside the controls of a card whose decision needs the passkey. */}
+      {card.effective_sensitivity === 'confirm' && <ConfirmNote />}
       <Collapsible className="comment">
         <CollapsibleTrigger className="group flex items-center gap-1 text-lead text-muted-foreground">
           Add a comment <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />

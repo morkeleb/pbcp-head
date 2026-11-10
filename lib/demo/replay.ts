@@ -137,6 +137,8 @@ async function present(db: Db, card: Card, day: string): Promise<MeCard> {
     lead: meta.lead?.text ?? '',
     lead_source: meta.lead?.source ?? 'body',
     rendered_lead: meta.lead?.html ?? '',
+    // The demo has no owner policy; its script has no private or confirm card (the front door never shows one).
+    effective_sensitivity: card.sensitivity ?? 'normal',
     ...(Object.keys(actions).length > 0 ? { rendered_actions: actions } : {}),
     ...(meta.firstVisual ? { first_visual: meta.firstVisual } : {}),
     day,

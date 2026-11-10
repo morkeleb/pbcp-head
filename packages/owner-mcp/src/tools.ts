@@ -12,6 +12,37 @@ type ActionEntry = NonNullable<MeCard['actions']>[number];
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+// RFC 0.9 §4.1 `sensitivity`: an assistant connector is a surface outside the owner's signed-in session, whose responses
+// may be indexed. The head redacts first: it strips a private card's content from every response to an assistant's scoped
+// token (lib/me.ts redactForAssistant), so the rule holds for any client. What follows is a second layer, defence in
+// depth, that shapes what remains; it is not the rule. A card whose effective sensitivity (§9: the producer's, raised by the owner's floors) is `private` or
+// `confirm` reaches the assistant as its id, producer, kind, title, state, when, labels and both sensitivities: never its
+// summary, lead, body, option bodies or rendered HTML. A `confirm` card cannot be decided here at all: the head refuses
+// any decision from an assistant with 403 `reauthentication_required`, because only the person can identify themselves.
+
+type Sens = 'normal' | 'private' | 'confirm';
+const effective = (c: { effective_sensitivity?: Sens; sensitivity?: Sens }): Sens => c.effective_sensitivity ?? c.sensitivity ?? 'normal';
+/** Whether the card's content stays out of the assistant (§4.1 `private`, which `confirm` includes). */
+export const isPrivateCard = (c: { effective_sensitivity?: Sens; sensitivity?: Sens }) => effective(c) !== 'normal';
+
+/** What every row says about a card's sensitivity, and in a private card's place of its content. */
+const sensitivityOf = (c: MeCard) => {
+  const e = effective(c);
+  if (e === 'normal') return {};
+  return {
+    sensitivity: c.sensitivity ?? 'normal',
+    effective_sensitivity: e,
+    private: true as const,
+    ...(e === 'confirm' && c.state === 'open' && (c.kind === 'decision' || c.kind === 'task') ? { confirm_on_device: true as const } : {}),
+  };
+};
+
+/** The lead, unless the card is private. */
+const leadOf = (c: MeCard) => (isPrivateCard(c) ? {} : { lead: c.lead ?? '' });
+
+/** A card's choices for the assistant: none on a `confirm` card, which only the person can decide, on their device. */
+const choicesFor = (c: MeCard, list: Array<{ id: string; label: string; default?: true }>) => (effective(c) === 'confirm' ? {} : { actions: list });
+
 /** Text from the head's inline HTML (the daily paragraph): tags dropped, entities decoded. */
 export function plainText(html: string): string {
   return html
@@ -45,13 +76,14 @@ const taskRow = (c: MeCard & { overdue?: true }) => {
     id: c.id,
     producer: c.producer,
     title: c.title,
-    lead: c.lead ?? '',
+    ...leadOf(c),
     ...(c.labels?.length ? { labels: c.labels } : {}),
     ...(c.about ? { about: c.about } : {}),
     ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
     ...(overdue ? { overdue: true } : {}),
+    ...sensitivityOf(c),
     // Only an open task takes a decision; a closed one says how it closed, or what its producer recorded (§4.3, §8).
-    ...(c.state === 'open' ? { actions: taskChoices(c) } : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
+    ...(c.state === 'open' ? choicesFor(c, taskChoices(c)) : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
     ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
   };
 };
@@ -62,20 +94,25 @@ const decisionRow = (c: MeCard) => ({
   id: c.id,
   producer: c.producer,
   title: c.title,
-  lead: c.lead ?? '',
+  ...leadOf(c),
   ...(c.labels?.length ? { labels: c.labels } : {}),
   ...(c.about ? { about: c.about } : {}),
   ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
+  ...sensitivityOf(c),
   // Only an open card takes a decision (§7.3); a superseded one names what replaced it (§8).
-  ...(c.state === 'open' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
+  ...(c.state === 'open'
+    ? { ...choicesFor(c, choices(c)), ...(editable(c) && effective(c) !== 'confirm' ? { editable: true } : {}) }
+    : { state: c.state, ...(c.decision ? { decision: c.decision } : {}) }),
   ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
 });
 
 const updateRow = (latest: MeCard, count: number) => ({
   id: latest.id,
   producer: latest.producer,
+  kind: latest.kind,
   title: latest.title,
-  lead: latest.lead ?? '',
+  ...leadOf(latest),
+  ...sensitivityOf(latest),
   ...(latest.labels?.length ? { labels: latest.labels } : {}),
   ...(count > 1 ? { in_thread: count } : {}),
   ...(latest.acknowledged_at ? { acknowledged: true } : {}),
@@ -88,9 +125,12 @@ const row = (c: MeCard) => ({
   producer: c.producer,
   title: c.title,
   state: c.state,
+  ...(c.at ? { at: c.at } : {}),
+  ...(c.about ? { about: c.about } : {}),
   ...(c.labels?.length ? { labels: c.labels } : {}),
   ...(c.decision ? { decision: c.decision } : {}),
   ...(c.acknowledged_at ? { acknowledged: true } : {}),
+  ...sensitivityOf(c),
 });
 
 const result = (value: unknown): CallToolResult => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
@@ -136,18 +176,21 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
         'read each one’s title and lead, then its choices (`actions`, the one marked `default` is what the producer proposes); never decide on the owner’s behalf ' +
         'without asking them. `tasks` are what the owner has to do themselves, due today or overdue (overdue ones marked), by when they are due, and those ' +
         'closed today; read each title, lead and when it is due; one is marked done with decide `done`. `updates` (artifacts) and `signals` are folded by thread, the newest card of each with how many came in it. `snoozed` counts decisions ' +
-        'set aside until later; they are not listed. For an earlier day, `decisions` are those decided that day.',
+        'set aside until later; they are not listed. For an earlier day, `decisions` are those decided that day. ' +
+        'A card marked `private` (its producer or the owner asked that its content stay off assistants, RFC §4.1) comes without its lead: say only that ' +
+        'there is a private card from its producer, and never guess at its content; the paragraph already counts private entries instead of naming them. ' +
+        'A card marked `confirm_on_device` must be decided by the owner on their own device; it has no `actions` here.',
       inputSchema: { day: z.string().regex(DATE).optional().describe('YYYY-MM-DD; today when omitted') },
       annotations: { readOnlyHint: true },
     },
     ({ day }) =>
       run(async () => {
-        const b: Schemas['Brief'] = unwrap(await client.GET('/api/me/brief'));
+        const b: Schemas['Brief'] = unwrap(await client.GET('/api/me/brief', { params: { query: { spoken: '1' } } }));
         const split = (ts: Thread[], kind: string) => ts.filter((t) => t.latest.kind === kind).map((t) => updateRow(t.latest, t.count));
         if (day === undefined || day === b.date) {
           return {
             date: b.date,
-            paragraph: b.daily_paragraph ? plainText(b.daily_paragraph.html) : null,
+            paragraph: b.daily_paragraph ? (b.daily_paragraph.text ?? null) : null,
             decisions: b.decisions.map(decisionRow),
             tasks: (b.tasks ?? []).map(taskRow),
             updates: split(b.threads, 'artifact'),
@@ -161,7 +204,8 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
         const others = cards.filter((c) => c.producer !== 'head');
         return {
           date: day,
-          paragraph: daily?.rendered_lead ? plainText(daily.rendered_lead) : null,
+          // The daily card's own lead names private entries; its spoken paragraph counts them (RFC 0.9 §4.1).
+          paragraph: daily?.spoken_paragraph ?? null,
           decisions: others.filter((c) => c.kind === 'decision' && c.state !== 'open').map(decisionRow),
           updates: folded(others.filter((c) => c.kind === 'artifact')),
           signals: folded(others.filter((c) => c.kind === 'signal')),
@@ -177,7 +221,7 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
         'Cards by their day (an `about` date when the producer gave one, else the day of its time `at`, else the day they arrived), as compact rows: id, day, kind, producer, title, state, labels. ' +
         'Use it to answer questions such as “what did GoalPath send this week” or “which billing decisions are still open”: give a day range and narrow by ' +
         '`label`, `producer`, `kind` (decision, task, artifact, signal, order) or `state` (open, decided, superseded). Without a range it covers the last seven days. ' +
-        'Then call get_card for the one the owner wants to hear in full.',
+        'Then call get_card for the one the owner wants to hear in full. Rows of private cards say `private` (RFC §4.1): their content is not given to assistants.',
       inputSchema: {
         from: z.string().regex(DATE).optional().describe('First day, YYYY-MM-DD'),
         to: z.string().regex(DATE).optional().describe('Last day, YYYY-MM-DD; defaults to `from`, or today'),
@@ -215,7 +259,8 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
       description:
         'One card in full: its body as the producer wrote it (markdown), its choices if it is a decision, its source link, the other cards of its thread, ' +
         'and the decision log (what was decided, when, from which device). Read the body to the owner in your own words if it is long; the `summary`, when there ' +
-        'is one, is the producer’s own short version. Use the id from brief or list_cards.',
+        'is one, is the producer’s own short version. Use the id from brief or list_cards. A `private` card (RFC §4.1) comes without its summary and body: ' +
+        'its producer or the owner asked that its content stay off assistants; tell the owner to open it on their device. A `confirm_on_device` card can only be decided there.',
       inputSchema: { id: z.string().describe('The card id, e.g. hermes:gmail:19a4f2e7c3b1') },
       annotations: { readOnlyHint: true },
     },
@@ -223,22 +268,25 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
       run(async () => {
         const d: Schemas['CardDetail'] = unwrap(await client.GET('/api/me/cards/{id}', { params: { path: { id } } }));
         const c = d.card;
+        const hidden = isPrivateCard(c);
+        // The nightly card's body names every entry; outside the session its spoken paragraph stands in for it (§4.1).
+        const body = hidden ? {} : c.id.startsWith('head:daily:') && c.spoken_paragraph !== undefined ? { body: c.spoken_paragraph } : { ...(c.summary ? { summary: c.summary } : {}), body: c.body };
         return {
           card: {
             id: c.id,
             kind: c.kind,
             producer: c.producer,
             title: c.title,
-            ...(c.summary ? { summary: c.summary } : {}),
-            body: c.body,
+            ...body,
+            ...sensitivityOf(c),
             state: c.state,
             day: c.day,
             ...(c.labels?.length ? { labels: c.labels } : {}),
             ...(c.about ? { about: c.about } : {}),
             ...(c.at ? { at: c.at, ...(c.until ? { until: c.until } : {}) } : {}),
             ...(c.source ? { source: c.source } : {}),
-            ...(c.kind === 'decision' && c.state === 'open' ? { actions: choices(c), ...(editable(c) ? { editable: true } : {}) } : {}),
-            ...(c.kind === 'task' && c.state === 'open' ? { actions: taskChoices(c) } : {}),
+            ...(c.kind === 'decision' && c.state === 'open' ? { ...choicesFor(c, choices(c)), ...(editable(c) && effective(c) !== 'confirm' ? { editable: true } : {}) } : {}),
+            ...(c.kind === 'task' && c.state === 'open' ? choicesFor(c, taskChoices(c)) : {}),
             ...(c.replaced_by ? { replaced_by: c.replaced_by } : {}),
             ...(c.decision ? { decision: c.decision, decided_at: c.decided_at } : {}),
             ...(c.snoozed_until ? { snoozed_until: c.snoozed_until } : {}),
@@ -261,7 +309,9 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
         '(see brief or get_card), or `dismissed` to set it aside unanswered. A task takes `done` when the owner has done it (its default), or one of its own ' +
         'actions such as `tomorrow`; `done` is refused on a decision card that does not offer it, and a task is never edited. To answer with different words than the proposal, pass `edited` with the owner’s ' +
         'text (only when the card is editable). `comment` passes a note to the producer. The producer acts on the decision; it cannot be changed afterwards. ' +
-        'If the card is no longer open, the head says so and what was decided.',
+        'If the card is no longer open, the head says so and what was decided. A `private` card may be decided by its id once the owner has said what they decide. ' +
+        'A `confirm` card (RFC §4.1) cannot be decided by an assistant at all: the head refuses with `reauthentication_required`; tell the owner to open it on ' +
+        'their phone or the web and confirm it there.',
       inputSchema: {
         id: z.string(),
         decision: z.string().describe('An action id from the card, `done` on a task, or `dismissed`'),
