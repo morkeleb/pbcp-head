@@ -85,10 +85,10 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 
 | Endpoint | Returns | Notes |
 | --- | --- | --- |
-| `GET /api/me/brief` | The current `head:daily` card, open decisions, today's folded threads, the last-visit cursor | One call paints the Brief screen |
+| `GET /api/me/brief` | The current `head:daily` card, open decisions, today's folded threads, the last-visit cursor | One call paints the Brief screen. Every card carries `effective_sensitivity` and each paragraph entry `sensitivity` and `effective_sensitivity` (RFC 0.9 §4.1, §9); `?spoken=1` returns the paragraph as plain text in `daily_paragraph.text` with private entries counted, for an assistant or a voice client |
 | `GET /api/me/cards?date=`, `?from=&to=&state=` | An earlier day when it is shown; the days ahead in one request | Paginated by `change_seq`; with `from`/`to`, `before` names the latest earlier day with a card |
 | `GET /api/me/cards/{id}` | One card with its thread (predecessors, references, progress) |  |
-| `POST /api/me/cards/{id}/decision` | The core decide operation, actor = device | Same semantics as RFC §7.3 |
+| `POST /api/me/cards/{id}/decision` | The core decide operation, actor = device | Same semantics as RFC §7.3. A card whose `effective_sensitivity` is `confirm` needs the session re-identified within five minutes (`POST /api/auth/passkey/step-up`, or a passkey or Apple sign-in), else 403 `reauthentication_required` with `window_seconds`, nothing recorded; an assistant's token never satisfies it |
 | `POST /api/me/cards/{id}/ack` | Sets `acknowledged_at` | Artifacts and signals |
 | `POST /api/me/cards/{id}/snooze` | Sets `snoozed_until` (`until: null` clears it) |  |
 | `POST /api/me/cards/{id}/unsnooze` | Clears `snoozed_until` |  |
@@ -97,11 +97,11 @@ A second, small API under `/api/me/`, session-authenticated, separate from the p
 | `GET /api/me/producers` / `PATCH …/{root}` | Producers, ceilings, revoke | Settings |
 | `GET /api/me/devices` / `DELETE …/{id}` | Signed-in devices, each with the zone it last sent | Settings |
 | `GET /api/me/settings/head` | Owner id, the head URL a producer is given (origin + `/api`), protocol, extensions, mermaid tiers (§7.5) | Settings → This head |
-| `GET`/`POST /api/me/settings/producers`, `PATCH`/`DELETE …/{id}` | Live producer tokens (root, created, last used, ceiling); mint one (shown once, 409 when the root has a live token); set its producer's ceiling; revoke it | Settings → Producers |
-| `GET /api/me/settings/labels`, `PATCH …/{label}` | Labels with counts and the owner's ceiling on each (§9) | Settings → Producers |
+| `GET`/`POST /api/me/settings/producers`, `PATCH`/`DELETE …/{id}` | Live producer tokens (root, created, last used, ceiling, sensitivity floor); mint one (shown once, 409 when the root has a live token); set its producer’s ceiling or sensitivity floor (RFC 0.9 §9); revoke it | Settings → Producers |
+| `GET /api/me/settings/labels`, `PATCH …/{label}` | Labels with counts, the owner's ceiling and sensitivity floor on each (§9) | Settings → Producers. A floor raises the effective sensitivity of every card carrying the label, stored or not |
 | `GET /api/me/settings/snippets?root=` | The three values (`producerConfig`) and a curl (`curlSnippet`, @pbcp/client) with this head's api and owner id and `<token>`, the curl's card under `root`; links to each connector's README Setup (`lib/connect.ts`, as `/connect` and `/llms.txt`, which are public) | Settings → Connect a producer |
 | `GET /api/me/settings/devices`, `DELETE …/{id}`; `POST /api/me/settings/enrolment` | Devices, signing one out, a one-hour enrolment link for another | Settings → Devices |
-| `GET /api/me/settings` / `PATCH` | Head id, display name, effective timezone and its override | Settings. Every `/api/me` request may send `X-Timezone: <IANA zone>`; the head follows the device most recently seen unless the override is set |
+| `GET /api/me/settings` / `PATCH` | Head id, display name, effective timezone and its override, the sensitivity floor for every card (`sensitivity_floor`, RFC 0.9 §9) | Settings. Every `/api/me` request may send `X-Timezone: <IANA zone>`; the head follows the device most recently seen unless the override is set |
 | `POST /api/me/devices/{id}/push` | Registers or clears an APNs/FCM token | See Push |
 
 Responses are the same JSON card shape as the producer API, so `@pbcp/core` types are reused in Swift via a generated client (OpenAPI from the Zod schemas). Markdown is rendered on the device; the head never sends HTML.

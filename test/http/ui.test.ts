@@ -1431,9 +1431,9 @@ describe('settings', () => {
     expect(await page.$eval('[data-masthead-row]', (r) => r.textContent)).toBe('← BriefSettings');
     const links = await page.$$eval('[data-settings-link]', (as) => as.map((a) => [a.getAttribute('href'), (a as HTMLElement).innerText.split('\n').filter((l) => l !== '→')]));
     expect(links).toEqual([
-      ['/settings/producers', ['Producers', 'Tokens, pairing codes and ceilings.']],
+      ['/settings/producers', ['Producers', 'Tokens, pairing codes, ceilings and sensitivity.']],
       ['/settings/devices', ['Devices', 'Where you’re signed in, notifications, and assistants.']],
-      ['/settings/preferences', ['Preferences', 'Theme and timezone.']],
+      ['/settings/preferences', ['Preferences', 'Theme, timezone and sensitivity.']],
       ['/settings/invites', ['Invite requests', 'Who asked for an invite at the front door.']],
     ]);
     expect(await page.$eval('[data-connect-link] a', (a) => a.getAttribute('href'))).toBe('/connect#head');
@@ -1919,6 +1919,102 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     await page.waitForSelector('[data-decision-log], table');
     expect(await page.$eval('main[data-card-page]', (m) => m.textContent)).toMatch(/tomorrow/);
     expect(await page.$(`${page_} button[data-action]`)).toBeNull();
+    expect(errors).toEqual([]);
+  });
+});
+
+describe('sensitivity (RFC 0.9 §4.1, §4.5 "Identifying again", §9)', () => {
+  const shots = process.env.PBCP_SHOTS;
+
+  /** A passkey for the head in the browser's own virtual authenticator, registered through /signin's enrolment. */
+  async function browserPasskey() {
+    const cdp = await page.createCDPSession();
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    });
+    const { enrollmentToken } = await import('../../lib/auth/enroll');
+    await page.evaluate(() => localStorage.removeItem('pbcp.session'));
+    await page.goto(`${headUrl()}/signin?enroll=${encodeURIComponent(await enrollmentToken(OWNER))}`, { waitUntil: 'networkidle0' });
+    await (await page.waitForSelector('xpath/.//button[contains(., "Create a passkey")]'))!.click();
+    await page.waitForFunction(() => location.pathname === '/brief', { timeout: 10_000 });
+  }
+
+  it('says beside a confirm card’s controls that confirming asks for the passkey, asks for it, then records the decision', async () => {
+    const bank = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'bank' })}`;
+    await call('PUT', cardPath('bank:wire:1'), { auth: bank, body: card('bank:wire:1', {
+      title: 'Wire DKK 40,000 to the lawyer',
+      summary: 'The deposit for the flat, due Friday.',
+      sensitivity: 'confirm',
+      actions: [{ id: 'send', label: 'Send it', default: true }, 'reject'],
+    }) });
+    await call('PUT', cardPath('bank:statement:1'), { auth: bank, body: card('bank:statement:1', { title: 'Card statement', summary: 'October, 41 lines.', sensitivity: 'private' }) });
+    await until(async () => (await row('bank:wire:1')).renderedHtml !== null);
+    await browserPasskey();
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+
+    const wire = (await decisionCard('Wire DKK 40,000'))!;
+    expect(await wire.$eval('[data-confirm-note]', (p) => p.textContent)).toBe('Confirming asks for your passkey.');
+    // A private card is shown in full inside the signed-in brief, with no note: deciding it needs nothing more.
+    const statement = (await decisionCard('Card statement'))!;
+    expect(await statement.evaluate((a) => a.textContent)).toMatch(/October, 41 lines/);
+    expect(await statement.$('[data-confirm-note]')).toBeNull();
+    if (shots) {
+      await wire.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 300));
+      await page.screenshot({ path: `${shots}/confirm-card-360.png` });
+    }
+
+    await press(await wire.$('[data-action="send"]'));
+    await page.waitForSelector('[data-step-up]');
+    expect(await page.$eval('[data-step-up]', (d) => d.textContent)).toMatch(/Confirm it’s you.*“Wire DKK 40,000 to the lawyer” asks you to confirm with your passkey/);
+    // Nothing is recorded while the prompt is open.
+    expect((await row('bank:wire:1')).state).toBe('open');
+    if (shots) {
+      await new Promise((r) => setTimeout(r, 300));
+      await page.screenshot({ path: `${shots}/step-up-360.png` });
+    }
+    await (await page.$('[data-step-up-confirm]'))!.click();
+    await until(async () => (await row('bank:wire:1')).state === 'decided');
+    const [logged] = await testDb().select().from(decisionLog).where(and(eq(decisionLog.headId, OWNER), eq(decisionLog.cardId, 'bank:wire:1')));
+    expect(logged).toMatchObject({ decision: 'send' });
+    expect(errors).toEqual([]);
+  });
+
+  it('records nothing when the prompt is cancelled', async () => {
+    const bank = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'bank' })}`;
+    await call('PUT', cardPath('bank:wire:2'), { auth: bank, body: card('bank:wire:2', { title: 'Wire DKK 900', sensitivity: 'confirm' }) });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await press(await (await decisionCard('Wire DKK 900'))!.$('[data-action="approve"]'));
+    await page.waitForSelector('[data-step-up]');
+    await (await page.$('[data-step-up-cancel]'))!.click();
+    await page.waitForSelector('[data-step-up]', { hidden: true });
+    expect((await row('bank:wire:2')).state).toBe('open');
+    expect(await (await decisionCard('Wire DKK 900'))!.evaluate((a) => a.textContent)).toMatch(/confirm with your passkey to decide this card/);
+  });
+
+  it('sets a sensitivity floor per producer and per label in Settings → Producers, and for every card in Preferences', async () => {
+    await mintProducerToken(testDb(), { headId: OWNER, root: 'bank' });
+    const bank = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'mail' })}`;
+    await call('PUT', cardPath('mail:a:1'), { auth: bank, body: card('mail:a:1', { labels: ['finance'] }) });
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/settings/producers`, { waitUntil: 'networkidle0' });
+    await page.select('[aria-label="Sensitivity floor for bank"]', 'confirm');
+    await until(async () => (await call('GET', '/api/me/producers', { auth: `Session ${session.access_token}` })).body.producers.find((p: { root: string }) => p.root === 'bank')?.sensitivity_floor === 'confirm');
+    await page.select('[aria-label="Sensitivity floor for label finance"]', 'private');
+    await until(async () => (await call('GET', '/api/me/settings/labels', { auth: `Session ${session.access_token}` })).body.labels[0]?.sensitivity_floor === 'private');
+    expect(await page.$eval('[aria-label="Sensitivity floor for bank"]', (s) => (s as HTMLSelectElement).value)).toBe('confirm');
+    // No horizontal overflow at a phone's width with the extra select.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (shots) {
+      await page.evaluate(() => document.querySelector('[data-producer-floor="bank"]')!.scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 300));
+      await page.screenshot({ path: `${shots}/producers-floor-360.png` });
+    }
+    await page.goto(`${headUrl()}/settings/preferences`, { waitUntil: 'networkidle0' });
+    await page.select('[aria-label="Sensitivity floor for every card"]', 'private');
+    await until(async () => (await call('GET', '/api/me/settings', { auth: `Session ${session.access_token}` })).body.sensitivity_floor === 'private');
     expect(errors).toEqual([]);
   });
 });

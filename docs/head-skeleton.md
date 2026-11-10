@@ -33,8 +33,19 @@ Next.js App Router on Vercel, Postgres via Drizzle (Neon in hosted mode, any Pos
 ```sql
 create table heads (
   id            text primary key,          -- person id, e.g. 'morten'
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  sensitivity_floor text                   -- the owner's floor for every card (RFC 0.9 §9): normal | private | confirm
 );
+
+create table sensitivity_floors (          -- the owner's floors per producer root and per label (RFC 0.9 §9)
+  head_id text not null references heads(id),
+  scope   text not null,                   -- producer | label
+  key     text not null,                   -- the root, or the label
+  floor   text not null,                   -- normal | private | confirm
+  primary key (head_id, scope, key)
+);
+-- devices.reauthenticated_at: when the person last identified themselves on that session (a passkey or Apple sign-in,
+-- or a passkey step-up); a `confirm` decision needs it within five minutes (RFC 0.9 §4.1).
 
 create table producer_tokens (
   token_hash    bytea primary key,
@@ -82,11 +93,14 @@ create table decision_log (                -- append-only; the thing the hosted 
 | --- | --- | --- |
 | `PUT /api/cards/[id]` | `parseCard`, `inRoot`, `canSupersede`, `checkOutcome`, `submit`, `applyOutcome` | insert/replace card; mark predecessor; one or two `change_seq`; an outcome (stored under its per-claim id) moves its order when it comes from the current claim (A.3) |
 | `GET /api/changes?after=` | — | `where change_seq > $after and (producer = $root or (kind='order' and (to_producer = $root or $root = any(wildcard_eligible)))) order by change_seq limit 200` |
-| `POST /api/cards/[id]/decision` | `decide` | set decision fields, freeze `decided_doc`, append `decision_log`; for orders also `exec_state = cancelled` |
+| `POST /api/cards/[id]/decision` | `effectiveSensitivity`, `decide` | an owner route (a session, never a producer token; the same as `/api/me/cards/[id]/decision`): a card whose effective sensitivity is `confirm` is refused 403 `reauthentication_required` before anything is written unless the session re-identified within five minutes; then set decision fields, freeze `decided_doc`, append `decision_log`; for orders also `exec_state = cancelled` |
+| `POST /api/auth/passkey/step-up/options`, `POST /api/auth/passkey/step-up` | — | the owner's session only: a passkey assertion (user verification required) with one of the head's passkeys, which stamps `devices.reauthenticated_at`; no token is rotated (RFC 0.9 §4.5 "Identifying again") |
 | `POST /api/cards/[id]/claim` | `checkLease`, `expireIfDue`, `claim`, `ClaimRefusal` | `select … for update`; expiry is evaluated inside the same row lock and kept when the claim is refused (409 `lease_held`, 410 `order_terminal`); a renewal keeps `claim_seq` (A.2, A.5) |
 | `GET /api/cron/brief` | — | Vercel Cron, 05:30 local; mints `head:daily:YYYY-MM-DD` through the same PUT path |
 
 Auth: bearer token → sha256 → `producer_tokens` lookup, root attached to the request. Human sessions for the UI are a separate concern (NextAuth or similar) and never touch producer routes.
+
+**Sensitivity** (RFC 0.9 §4.1, §9, §12; lib/sensitivity.ts). A card's `sensitivity` is stored and returned as sent. Its effective value is core's `effectiveSensitivity` of the card's own and the owner's floors (per producer, per label, for every card), computed whenever the card is handled and never stored, so a floor raised today covers every card already stored (unlike the urgency ceiling, which applies to content stored from then on: a ceiling is about attention, a floor about exposure). `private` and `confirm`: the lead and body stay off Web Push (producer and kind only, opening the brief), the owner MCP (id, producer, kind, title, state, when, labels and both sensitivities), and any spoken or generated text (`/api/me/brief?spoken=1` counts them). `confirm`: the decide check above; an assistant's session (platform `mcp`) can never satisfy it. Inside the signed-in web app every card shows in full.
 
 **No worker process.** Lease expiry is evaluated lazily on the next claim or sync that touches the order, which A.2 permits; the brief is the only scheduled job. That is what keeps the whole head deployable as a single Vercel project.
 

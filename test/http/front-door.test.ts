@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cards, inviteRequests } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
-import { DEMO_TIMEZONE } from '../../lib/demo/replay';
+import { DEMO_TIMEZONE, replay } from '../../lib/demo/replay';
 import { demoScenario } from '../../lib/demo/scenario';
 import { localDate } from '../../lib/time';
 import { card, cardPath } from './cards';
@@ -49,6 +49,12 @@ describe('the front door', () => {
     expect(html).not.toContain(`>${OWNER}<`);
     // Replaying the demo stores nothing: no card rows but the one PUT above.
     expect((await testDb().select({ id: cards.id }).from(cards)).map((c) => c.id)).toEqual(['hermes:mail:secret']);
+  });
+
+  it('never shows a private or confirm card: the demo script has none (RFC 0.9 §4.1)', () => {
+    const { cards } = replay('2026-10-07');
+    expect(cards.size).toBeGreaterThan(0);
+    expect([...cards.values()].filter((c) => (c.sensitivity ?? 'normal') !== 'normal').map((c) => c.id)).toEqual([]);
   });
 
   it('says the hosted head is invite-only, links the self-hosting guide, and names the protocol once', async () => {
