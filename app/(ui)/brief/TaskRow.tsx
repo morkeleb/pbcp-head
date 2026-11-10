@@ -26,7 +26,7 @@ import { dueDay } from '../../../lib/brief/tasks';
 import { addDays, instant, localDate } from '../../../lib/time';
 import { api, cardHref, OfflineError, useOnline } from '../client';
 import {
-  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_REASON_SHORT, options, Rendered, sourceLink, splitBody, useDecide, useDeferred, useLocale, useSwipe,
+  announce, CardLabels, decidedLine, NOT_SENT, OFFLINE_QUEUED, OFFLINE_REASON_SHORT, options, OutboxNotice, Rendered, sendCommand, sourceLink, splitBody, useCanAct, useDecide, useDeferred, useLocale, useSwipe,
   type MeCard,
 } from '../components';
 import { CardMeta, clock, wants } from './card-parts';
@@ -77,6 +77,8 @@ export const isDone = (c: MeCard) => c.decision === 'done' || (c.state === 'supe
 export function TaskRow({ card, timezone, today, onChange, overdue = false, focused, handle, expanded = false }: TaskRowProps) {
   const locale = useLocale();
   const online = useOnline();
+  // Online, or offline with an outbox to keep the action in (local/outbox.ts).
+  const canAct = useCanAct();
   const open = card.state === 'open';
   const done = isDone(card);
   const [opened, setOpened] = useState(expanded);
@@ -88,7 +90,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
   // A swipe waiting out its undo window still happens if the row leaves the screen (another day, a card opened).
   const deferred = useDeferred({ commitOnUnmount: true });
   const later = (decision: 'done' | 'dismissed') => {
-    if (open && online && !deferred.pending) deferred.schedule(`${decision === 'done' ? 'Done' : 'Dismiss'}: ${card.title}`, () => void decide(decision));
+    if (open && canAct && !deferred.pending) deferred.schedule(`${decision === 'done' ? 'Done' : 'Dismiss'}: ${card.title}`, () => void decide(decision));
   };
   const swipe = useSwipe((direction) => !expanded && later(direction === 'right' ? 'done' : 'dismissed'));
 
@@ -107,8 +109,8 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
   const snooze = async (preset: string, label: string) => {
     setSnoozeError(null);
     try {
-      const r = await api<MeCard & { message?: string }>(`/api/me/cards/${encodeURIComponent(card.id)}/snooze`, { method: 'POST', body: { preset } });
-      if (r.status !== 200) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
+      const r = await sendCommand(card, 'snooze', { preset });
+      if (r.status !== 200 && r.status !== 202) throw new Error(r.body?.message ?? `the head answered ${r.status}`);
       onChange({ ...card, ...r.body });
       announce(`Snoozed until ${label.toLowerCase()}: ${card.title}`);
     } catch (e) {
@@ -137,7 +139,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       aria-checked={done}
       aria-label={done ? `Done: ${card.title}` : `Mark done: ${card.title}${confirm ? ' (asks for your passkey)' : ''}`}
       {...(confirm && open ? { title: 'Confirming asks for your passkey', 'data-confirm': '' } : {})}
-      disabled={!open || !online || !!deferred.pending}
+      disabled={!open || !canAct || !!deferred.pending}
       onClick={() => void decide('done')}
       data-done-control
       data-primary
@@ -164,7 +166,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuLabel className="text-meta uppercase tracking-meta text-muted-foreground">Snooze</DropdownMenuLabel>
         {SNOOZES.map((s) => (
-          <DropdownMenuItem key={s.preset} disabled={!online || !open} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
+          <DropdownMenuItem key={s.preset} disabled={!canAct || !open} onSelect={() => void snooze(s.preset, s.label)}>{s.label}</DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -175,7 +177,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
   );
 
   // Offline, or a swipe's decision still waiting out its undo: nothing else is sent meanwhile.
-  const busy = !online || !!deferred.pending;
+  const busy = !canAct || !!deferred.pending;
   // §4.5: Done the one primary control; the listed actions beside it, outlined, in the card's order; Dismiss secondary.
   const controls = open && (
     <div className="mt-3 space-y-2">
@@ -192,15 +194,20 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
           Add a comment <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={!online}
+          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Comment" disabled={!canAct}
             className="mt-1 w-full rounded-md border border-input bg-background p-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </CollapsibleContent>
       </Collapsible>
-      {!online && <p className="offline text-lead text-muted-foreground" role="status">{OFFLINE_REASON_SHORT}</p>}
+      {!online && <p className="offline text-lead text-muted-foreground" role="status">{canAct ? OFFLINE_QUEUED : OFFLINE_REASON_SHORT}</p>}
     </div>
   );
 
-  const told = notice && <p className="mt-2 text-lead text-destructive" role="alert" data-decide-notice>{notice}</p>;
+  const told = (
+    <>
+      {notice && <p className="mt-2 text-lead text-destructive" role="alert" data-decide-notice>{notice}</p>}
+      <OutboxNotice card={card} onChange={onChange} />
+    </>
+  );
   const failed = (error ?? snoozeError) && <p className="mt-1 text-lead text-destructive" role="alert">{error ?? snoozeError}</p>;
 
   if (expanded) {

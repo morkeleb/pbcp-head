@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { PageRow, setTheme, useThemeChoice, type ThemeChoice } from '../chrome';
 import { api, useOnline } from '../client';
 import { call, errorText, field, FloorSelect, PageError, Section, type Sensitivity } from './shared';
+import { downloadArchive, dropArchive, RETENTION_DEFAULT, setRetention } from '../local/feed';
+import { getMeta, storeSize } from '../local/store';
 
 interface HeadSettings { timezone: string; timezone_source: 'override' | 'device' | 'default'; timezone_override: string | null; sensitivity_floor: Sensitivity | null }
 
@@ -20,6 +22,7 @@ export function PreferencesView() {
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-2 min-[900px]:px-6" data-settings-page="preferences">
         <PageError error={error} />
         <Preferences onError={(e) => setError(errorText(e))} />
+        <OnThisDevice />
       </main>
     </>
   );
@@ -88,3 +91,80 @@ function Preferences({ onError }: { onError: (e: unknown) => void }) {
   );
 }
 
+
+const RETENTIONS = [30, 90, 180, 365];
+const mb = (bytes: number) => (bytes < 1_000_000 ? `${Math.max(1, Math.round(bytes / 1000))} kB` : `${(bytes / 1_000_000).toFixed(1)} MB`);
+
+/**
+ * The device's copy of the brief (docs/local-first.md): how many days it keeps, how much room it takes, and the archive.
+ * The head keeps everything regardless; the device chooses how much of it to hold.
+ */
+function OnThisDevice() {
+  const online = useOnline();
+  const [retention, setDays] = useState<number | null>(null);
+  const [archive, setArchive] = useState(false);
+  const [size, setSize] = useState<{ usage: number; quota: number; persisted: boolean } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [none, setNone] = useState(false);
+  const read = useCallback(async () => {
+    const cursor = await getMeta<number>('cursor');
+    setNone(cursor === null);
+    setDays((await getMeta<number>('retention')) ?? RETENTION_DEFAULT);
+    setArchive((await getMeta<boolean>('archive')) === true);
+    setSize(await storeSize());
+  }, []);
+  useEffect(() => void read(), [read]);
+  const run = async (label: string, fn: () => Promise<unknown>) => {
+    setBusy(label);
+    try {
+      await fn();
+    } finally {
+      setBusy(null);
+      await read();
+    }
+  };
+  return (
+    <Section id="device" title="On this device">
+      <p className="pb-2 text-lead text-muted-foreground">
+        The brief reads from this device first, works offline, and sends what you do when the network returns. Search runs here; the head holds no index of your cards.
+        {' '}On iPhone, the copy is kept for the app installed to the Home Screen; Safari may clear a website’s storage after a week unused, and then it is pulled again.
+      </p>
+      {none ? (
+        <p className="text-lead text-muted-foreground" data-device-none>This device has no copy yet, or its browser keeps none (a private window). The brief reads from the head.</p>
+      ) : (
+        <table className="w-full text-body" data-device>
+          <tbody className="divide-y border-y">
+            <tr>
+              <th scope="row" className="w-28 py-2 pr-3 text-left align-top font-normal text-muted-foreground">Keep</th>
+              <td className="py-2">
+                <select aria-label="Days kept on this device" className={field} value={retention ?? RETENTION_DEFAULT} disabled={!online || archive || !!busy}
+                  onChange={(e) => void run('retention', () => setRetention(Number(e.target.value)))}>
+                  {RETENTIONS.map((d) => <option key={d} value={d}>the last {d} days</option>)}
+                </select>
+                {archive && <p className="pt-1 text-lead text-muted-foreground">Everything, back to the first card: the archive is on this device.</p>}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="w-28 py-2 pr-3 text-left align-top font-normal text-muted-foreground">Archive</th>
+              <td className="py-2">
+                {archive ? (
+                  <Button size="xs" variant="outline" disabled={!!busy} onClick={() => void run('drop', dropArchive)}>Keep only the last {retention} days</Button>
+                ) : (
+                  <Button size="xs" variant="outline" disabled={!online || !!busy} onClick={() => void run('archive', () => downloadArchive())} data-download-archive>
+                    {busy === 'archive' ? 'Downloading…' : 'Download the archive'}
+                  </Button>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className="w-28 py-2 pr-3 text-left align-top font-normal text-muted-foreground">Size</th>
+              <td className="py-2" data-device-size>
+                {size ? `${mb(size.usage)} in use${size.persisted ? ', kept by the browser' : ''}` : 'The browser does not say.'}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </Section>
+  );
+}

@@ -24,6 +24,9 @@ import { cn } from '@/lib/utils';
 import { dateline, NAME } from '../../lib/masthead';
 import { api, cardHref, loadTokens, saveTokens } from './client';
 import { AsOf, useDark, type MeCard } from './components';
+import { waitingCount } from './local/outbox';
+import { search, type Hit } from './local/search';
+import { onStore } from './local/store';
 
 const THEME_KEY = 'pbcp.theme';
 const WIDE = '(min-width: 900px)';
@@ -191,11 +194,32 @@ function ThemeMenu() {
   );
 }
 
-/** Finds a card among those on screen, by its title or lead. */
+/**
+ * Search over the device (local/search.ts): every card the store holds, by its title, summary, lead and body, grouped by
+ * day and opening the card. Nothing is sent to the head. Without a store (a private window, storage refused), the cards on
+ * screen, by title and lead, as before.
+ */
 function SearchDialog({ cards }: { cards: MeCard[] }) {
   const [q, setQ] = useState('');
+  const [days, setDays] = useState<Array<{ day: string; hits: Hit[] }> | null>(null);
+  const [local, setLocal] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    void search(q).then((r) => {
+      if (!live) return;
+      setLocal(r !== null);
+      setDays(r);
+    });
+    return () => void (live = false);
+  }, [q]);
   const text = (c: MeCard) => `${c.title} ${(c.rendered_lead ?? '').replace(/<[^>]*>/g, '')} ${c.producer}`.toLowerCase();
-  const hits = q.trim() ? cards.filter((c) => text(c).includes(q.trim().toLowerCase())).slice(0, 30) : [];
+  const onScreen: Array<{ day: string; hits: Hit[] }> =
+    local === false && q.trim()
+      ? [{ day: '', hits: cards.filter((c) => text(c).includes(q.trim().toLowerCase())).slice(0, 30).map((c) => ({ id: c.id, title: c.title, producer: c.producer, day: c.day ?? '', kind: c.kind })) }]
+      : [];
+  const groups = local ? (days ?? []) : onScreen;
+  const none = q.trim() && groups.every((g) => g.hits.length === 0);
+  const dayName = (d: string) => (d ? new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`)) : '');
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -206,7 +230,7 @@ function SearchDialog({ cards }: { cards: MeCard[] }) {
       <DialogContent className="top-[12vh] translate-y-0 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-serif tracking-editorial">Search</DialogTitle>
-          <DialogDescription>Titles and leads of the cards on screen.</DialogDescription>
+          <DialogDescription>{local === false ? 'Titles and leads of the cards on screen.' : 'Every card on this device: titles, leads and bodies. Nothing is sent to the head.'}</DialogDescription>
         </DialogHeader>
         <input
           autoFocus
@@ -216,19 +240,42 @@ function SearchDialog({ cards }: { cards: MeCard[] }) {
           aria-label="Search the brief"
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-body outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-        <ul className="max-h-[50vh] divide-y overflow-y-auto">
-          {hits.map((c) => (
-            <li key={c.id} className="py-2">
-              <Link href={cardHref(c.id)} className="block">
-                <span className="text-meta uppercase tracking-meta text-muted-foreground">{c.producer}</span>
-                <span className="block font-serif text-body font-semibold">{c.title}</span>
-              </Link>
-            </li>
+        <div className="max-h-[50vh] overflow-y-auto" data-search-results>
+          {groups.map((g) => (
+            <section key={g.day} data-search-day={g.day}>
+              {g.day && <h4 className="pt-2 text-meta font-semibold uppercase tracking-meta text-muted-foreground">{dayName(g.day)}</h4>}
+              <ul className="divide-y">
+                {g.hits.map((c) => (
+                  <li key={c.id} className="py-2" data-search-hit={c.id}>
+                    <Link href={cardHref(c.id)} className="block">
+                      <span className="text-meta uppercase tracking-meta text-muted-foreground">{c.producer}</span>
+                      <span className="block font-serif text-body font-semibold">{c.title}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-          {q.trim() && hits.length === 0 && <li className="py-2 text-lead text-muted-foreground">Nothing on screen matches.</li>}
-        </ul>
+          {none && <p className="py-2 text-lead text-muted-foreground">{local === false ? 'Nothing on screen matches.' : 'Nothing on this device matches.'}</p>}
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** "2 changes waiting to send": what the outbox holds (local/outbox.ts), quiet, beside the dateline; nothing when empty. */
+function Waiting() {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const read = () => void waitingCount().then(setN);
+    read();
+    return onStore((e) => void (e.outbox && read()));
+  }, []);
+  if (n === 0) return null;
+  return (
+    <span className="text-meta text-muted-foreground" role="status" data-outbox-count={n}>
+      · {n} {n === 1 ? 'change' : 'changes'} waiting to send
+    </span>
   );
 }
 
@@ -278,7 +325,7 @@ function Masthead({ wide, cards, asOf, rowRef, pageToolsRef }: MastheadProps) {
   const name = <h1 className={cn('font-serif font-semibold tracking-editorial', wide ? 'text-masthead' : 'text-masthead-sm')} data-masthead-shared="name">{NAME}</h1>;
   const dateLine = (
     <p className="mt-0.5 flex min-h-[1lh] items-center gap-x-2 whitespace-nowrap text-lead text-muted-foreground" data-masthead-shared="dateline">
-      <span data-dateline>{date}</span> <AsOf at={asOf.at} timezone={asOf.timezone} />
+      <span data-dateline>{date}</span> <AsOf at={asOf.at} timezone={asOf.timezone} /> <Waiting />
     </p>
   );
 

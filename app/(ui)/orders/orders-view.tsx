@@ -18,6 +18,7 @@ import { PageRow, useChromeCards } from '../chrome';
 import { api, cardHref, OfflineError, OFFLINE_REASON, useLiveChanges, useOnline, when } from '../client';
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 import { requestStepUp } from '../step-up';
+import { getMeta, setMeta } from '../local/store';
 
 export interface Order extends MeCard {
   to_producer: string;
@@ -67,11 +68,23 @@ export function OrdersView() {
   const [producers, setProducers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [asOf, setAsOf] = useState<string | null>(null);
+  // Local first (docs/local-first.md): the list as last read, kept on the device and shown at once; then the head's.
   const fetchOrders = useCallback(async (network: boolean) => {
+    const kept = await getMeta<{ orders: Order[]; timezone: string; fetched_at: string }>('orders');
+    if (kept) {
+      setOrders((o) => o ?? kept.orders);
+      setTimezone((t) => t ?? kept.timezone);
+    }
     const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders', { network });
-    if (r.status !== 200) return setError(`Could not load orders (${r.status}).`);
+    if (r.status !== 200) {
+      if (kept) return setAsOf(kept.fetched_at);
+      return setError(`Could not load orders (${r.status}).`);
+    }
     setOrders(r.body.orders);
     setTimezone(r.body.timezone);
+    setAsOf(null);
+    void setMeta('orders', { ...r.body, fetched_at: new Date().toISOString() });
   }, []);
   const load = useCallback(() => fetchOrders(false), [fetchOrders]);
   useEffect(() => {
@@ -85,7 +98,7 @@ export function OrdersView() {
   const working = (orders ?? []).some(isActive);
   const reload = useCallback(() => fetchOrders(true), [fetchOrders]);
   useLiveChanges(reload, working ? 10_000 : 60_000);
-  useChromeCards([...(orders ?? []), ...(orders ?? []).flatMap((o) => (o.progress.latest ? [o.progress.latest] : []))]);
+  useChromeCards([...(orders ?? []), ...(orders ?? []).flatMap((o) => (o.progress.latest ? [o.progress.latest] : []))], { at: asOf, timezone });
 
   const open = (orders ?? []).filter(isActive);
   const done = (orders ?? []).filter((o) => !isActive(o));
