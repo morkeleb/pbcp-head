@@ -40,16 +40,31 @@ export interface Notice {
   text: string;
 }
 
+// One-off lines (a conflict, a refusal) live for the session. The waiting state of a confirm row does not: it is read from
+// the row itself (`status: 'needs-person'`, kept in IndexedDB), so a reload still says why the card, and every row behind
+// it, waits.
 const notices = new Map<string, Notice>();
 const noticeWatchers = new Set<() => void>();
+/** Cards whose outbox row waits for the passkey, as the outbox holds them now. */
+let blocked = new Set<string>();
+const NEEDS_PERSON: Notice = { kind: 'needs-person', text: 'Needs your passkey to confirm.' };
 function setNotice(cardId: string, n: Notice | null) {
   if (n) notices.set(cardId, n);
   else notices.delete(cardId);
   noticeWatchers.forEach((w) => w());
 }
-export const noticeFor = (cardId: string) => notices.get(cardId) ?? null;
+/** Re-reads which rows wait for the passkey, and tells the cards. */
+async function refreshBlocked(): Promise<void> {
+  const next = new Set((await pending()).filter((r) => r.status === 'needs-person').map((r) => r.card_id));
+  if (next.size === blocked.size && [...next].every((id) => blocked.has(id))) return;
+  blocked = next;
+  noticeWatchers.forEach((w) => w());
+}
+export const noticeFor = (cardId: string): Notice | null => notices.get(cardId) ?? (blocked.has(cardId) ? NEEDS_PERSON : null);
 export function onNotices(w: () => void): () => void {
   noticeWatchers.add(w);
+  // The first card to listen reads the outbox: a row that was waiting before the reload is waiting still.
+  if (noticeWatchers.size === 1) void refreshBlocked();
   return () => noticeWatchers.delete(w);
 }
 
@@ -108,12 +123,14 @@ export async function waitingCount(): Promise<number> {
 async function remove(seq: number): Promise<void> {
   const o = owner();
   if (o) await withStore(o, [OUTBOX], 'readwrite', (t) => void t.objectStore(OUTBOX).delete(seq));
+  await refreshBlocked();
   notify({ outbox: true });
 }
 
 async function update(row: OutboxRow): Promise<void> {
   const o = owner();
   if (o) await withStore(o, [OUTBOX], 'readwrite', (t) => void t.objectStore(OUTBOX).put(row));
+  await refreshBlocked();
   notify({ outbox: true });
 }
 
@@ -227,7 +244,17 @@ if (typeof window !== 'undefined') {
     timer = null;
     void drain();
   });
-  onStore((e) => void (e.outbox && !draining && !timer && drain()));
+  onStore((e) => {
+    if (!e.outbox) return;
+    void refreshBlocked(); // another tab's rows too
+    if (!draining && !timer) void drain();
+  });
+}
+
+/** The first row that waits for the passkey, when it is the one at the head of the outbox (and so blocks the rest). */
+export async function blockedBy(): Promise<{ card_id: string; title: string } | null> {
+  const first = (await pending()).sort((a, b) => a.seq! - b.seq!)[0];
+  return first?.status === 'needs-person' ? { card_id: first.card_id, title: first.title } : null;
 }
 
 /** Whether a store row is a draft of this card (for a card's "waiting to send" mark). */

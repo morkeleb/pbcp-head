@@ -33,6 +33,10 @@ A sender drains the rows in order whenever the device is online, under a web loc
 | Any other 4xx | The row is dropped, the card goes back to the head's state, and a line says what was refused |
 | No network, or 5xx | The row stays; tried again after 1 s, 10 s, 1 min, then every 5 min while the app is open, and at once when the browser comes back online |
 
+**When the sender runs.** On every open of any page of the app (the masthead starts it), after every sync that reached the head, whenever the browser comes back online, and when a row is added here or in another tab. Calls join a drain already running, under the same lock. So a decision written offline before the app was closed is sent the next time the app opens on a network, with nothing more for the person to do.
+
+**The waiting state is read from the row.** A row the head answered with 403 `reauthentication_required` keeps `status: 'needs-person'` in the outbox, and the card's "Needs your passkey to confirm" line is read from that row, so it survives a reload. When that row is first in the outbox, the masthead's line says "— one needs your passkey" and links to the card, since every row behind it waits. One-off lines (a conflict, a refusal) are kept for the session only.
+
 A row is never reordered: the person decided them in that order. The outbox is the device's and is never synced: a decision made offline on the phone is the phone's to send; the laptop learns of it through the head. The masthead says "N changes waiting to send" while the outbox holds any. A `confirm` card is never decided by the device alone: online the passkey is asked first; offline the row waits and the head asks at replay. Giving an order needs the network.
 
 ## Platform limits

@@ -17,6 +17,7 @@ import { effectiveSensitivity, type Sensitivity } from '@pbcp/core';
 import { api } from '../client';
 import type { MeCard } from '../components';
 import { addDays } from '../brief/days';
+import { drain } from './outbox';
 import { allCards, evictBefore, getMeta, notify, putCards, setMeta } from './store';
 
 export const RETENTION_DEFAULT = 90;
@@ -85,7 +86,10 @@ let running: Promise<boolean> | null = null;
 export function sync(): Promise<boolean> {
   running ??= (async () => {
     try {
-      return await withLock(syncOnce);
+      const ok = await withLock(syncOnce);
+      // The head answered: send what waits too (it joins a drain already running).
+      if (ok) void drain();
+      return ok;
     } finally {
       running = null;
     }

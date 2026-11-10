@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { dateline, NAME } from '../../lib/masthead';
 import { api, cardHref, loadTokens, saveTokens } from './client';
 import { AsOf, useDark, type MeCard } from './components';
-import { waitingCount } from './local/outbox';
+import { blockedBy, drain, waitingCount } from './local/outbox';
 import { search, type Hit } from './local/search';
 import { onStore } from './local/store';
 
@@ -263,18 +263,34 @@ function SearchDialog({ cards }: { cards: MeCard[] }) {
   );
 }
 
-/** "2 changes waiting to send": what the outbox holds (local/outbox.ts), quiet, beside the dateline; nothing when empty. */
+/**
+ * "2 changes waiting to send": what the outbox holds (local/outbox.ts), quiet, beside the dateline; nothing when empty.
+ * When the first row waits for the passkey, every row behind it waits too, so the line says so and links to that card.
+ */
 function Waiting() {
   const [n, setN] = useState(0);
+  const [blocked, setBlocked] = useState<{ card_id: string; title: string } | null>(null);
   useEffect(() => {
-    const read = () => void waitingCount().then(setN);
+    const read = () => {
+      void waitingCount().then(setN);
+      void blockedBy().then(setBlocked);
+    };
     read();
+    // The sender runs on every open (and after each sync, local/feed.ts): what was written offline before the app was
+    // closed goes now. It joins a drain already running.
+    void drain();
     return onStore((e) => void (e.outbox && read()));
   }, []);
   if (n === 0) return null;
   return (
     <span className="text-meta text-muted-foreground" role="status" data-outbox-count={n}>
       · {n} {n === 1 ? 'change' : 'changes'} waiting to send
+      {blocked && (
+        <>
+          {' — '}
+          <Link href={cardHref(blocked.card_id)} className="underline underline-offset-2" data-outbox-blocked={blocked.card_id}>one needs your passkey</Link>
+        </>
+      )}
     </span>
   );
 }

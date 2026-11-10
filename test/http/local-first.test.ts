@@ -107,6 +107,17 @@ async function setOffline(offline: boolean, worker?: CDPSession, p: Page = page)
 }
 const decisionCard = (p: Page, title: string) => p.$(`xpath/.//article[@data-kind="decision"][contains(., "${title}")]`);
 
+/** A passkey in the browser's virtual authenticator, registered through /signin's enrolment; the page is then signed in with it. */
+async function passkeyOnDevice() {
+  const cdp = await page.createCDPSession();
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  await page.evaluate(() => localStorage.removeItem('pbcp.session'));
+  await page.goto(`${headUrl()}/signin?enroll=${encodeURIComponent(await enrollmentToken(OWNER))}`, { waitUntil: 'networkidle0' });
+  await (await page.waitForSelector('xpath/.//button[contains(., "Create a passkey")]'))!.click();
+  await page.waitForFunction(() => location.pathname === '/brief', { timeout: 10_000 });
+}
+
 describe('local first', () => {
   it('opens from the store with the network gone, marked "as of" until the sync returns', async () => {
     await synced();
@@ -202,6 +213,72 @@ describe('local first', () => {
     await page.waitForSelector('[data-step-up]');
     await page.click('[data-step-up-confirm]');
     await until(async () => (await row('bank:wire:1')).state === 'decided');
+    await page.waitForFunction(() => !document.querySelector('[data-outbox-count]'));
+    expect(errors).toEqual([]);
+  });
+
+  it('sends what was decided offline when the app next opens on a network, with nothing more to do', async () => {
+    // The page's own network only: this is the app's sender, not the service worker.
+    await page.setBypassServiceWorker(true);
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await shows(page, 'When should M4 ship?');
+    await until(async () => (await meta(page, 'cursor')) !== null);
+    await page.setOfflineMode(true);
+    await (await decisionCard(page, 'When should M4 ship?'))!.$eval('[data-action="approve"]', (b) => (b as HTMLButtonElement).click());
+    await page.waitForSelector('[data-outbox-count="1"]');
+    await wait(500);
+    // The app is closed while offline.
+    const context = page.browserContext();
+    page.removeAllListeners('close'); // the setup closes the context with its page; this test needs the context after
+    await page.close();
+    await wait(1500);
+    expect((await row(DECISION)).state).toBe('open');
+    // Later, on a network, the app is opened again: on a page that runs no sync of its own.
+    page = await context.newPage();
+    await page.setBypassServiceWorker(true);
+    await page.emulateTimezone('UTC');
+    await page.goto(`${headUrl()}/orders`, { waitUntil: 'networkidle0' });
+    await until(async () => (await row(DECISION)).state === 'decided');
+    expect((await row(DECISION)).decision).toBe('approve');
+    await page.waitForFunction(() => !document.querySelector('[data-outbox-count]'));
+    expect(await page.$('[data-outbox-count]')).toBeNull(); // the count is 0
+    page.once('close', () => void context.close().catch(() => undefined));
+  });
+
+  it('keeps a confirm row waiting for the passkey across a reload, says so on the card and in the masthead, and then sends it and the rows behind it', async () => {
+    const bank = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'bank' })}`;
+    await call('PUT', cardPath('bank:wire:2'), { auth: bank, body: card('bank:wire:2', { title: 'Wire DKK 1,200', sensitivity: 'confirm' }) });
+    await passkeyOnDevice();
+    await synced();
+    const worker = await workerSession();
+    await setOffline(true, worker);
+    // In this order: the confirm card first, then another card behind it.
+    await (await decisionCard(page, 'Wire DKK 1,200'))!.$eval('[data-action="approve"]', (b) => (b as HTMLButtonElement).click());
+    await page.waitForSelector('[data-outbox-count="1"]');
+    await (await decisionCard(page, 'When should M4 ship?'))!.$eval('[data-action="approve"]', (b) => (b as HTMLButtonElement).click());
+    await page.waitForSelector('[data-outbox-count="2"]');
+    await call('POST', '/api/test', { body: { clock: new Date(Date.now() + 10 * 60_000).toISOString() } }); // the sign-in's identification has lapsed
+    await setOffline(false, worker);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForSelector('[data-outbox-notice="needs-person"]');
+
+    await page.reload({ waitUntil: 'networkidle0' });
+    const wire = '[data-outbox-notice="needs-person"]';
+    await page.waitForSelector(wire);
+    expect(await page.$eval(wire, (e) => e.textContent)).toBe('Needs your passkey to confirm. Confirm with passkey');
+    expect(await page.$(`${wire} [data-outbox-confirm]`)).not.toBeNull();
+    expect(await page.$eval('[data-outbox-count]', (e) => e.textContent)).toMatch(/2 changes waiting to send — one needs your passkey/);
+    expect(await page.$eval('[data-outbox-blocked]', (a) => a.getAttribute('href'))).toBe(`/card/${encodeURIComponent('bank:wire:2')}`);
+    expect((await row('bank:wire:2')).state).toBe('open');
+    expect((await row(DECISION)).state).toBe('open'); // behind it, waiting
+
+    await page.click('[data-outbox-confirm]');
+    await page.waitForSelector('[data-step-up]');
+    await page.click('[data-step-up-confirm]');
+    await until(async () => (await row('bank:wire:2')).state === 'decided' && (await row(DECISION)).state === 'decided');
+    const [first] = await logOf('bank:wire:2');
+    const [second] = await logOf(DECISION);
+    expect(first!.seq).toBeLessThan(second!.seq); // in the order they were decided
     await page.waitForFunction(() => !document.querySelector('[data-outbox-count]'));
     expect(errors).toEqual([]);
   });
