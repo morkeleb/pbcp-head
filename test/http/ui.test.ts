@@ -220,18 +220,35 @@ describe('web brief', () => {
     expect(await row('goalpath:item:1:ship')).toMatchObject({ decision: 'edited', editedProposal: 'Ship Monday instead.', comment: 'Check with Anna first.' });
   });
 
-  it('puts the buttons back with the error when the head does not record the decision', async () => {
-    await page.setBypassServiceWorker(true); // so the page's own request can be answered with a failure here
+  it('puts the buttons back with the error when the head refuses the decision', async () => {
+    await page.setBypassServiceWorker(true); // so the page's own request can be answered here
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
     await page.setRequestInterception(true);
-    page.on('request', (r) => (r.method() === 'POST' && r.url().includes('/decision') ? void r.respond({ status: 500, contentType: 'application/json', body: '{"error":"internal","message":"internal error"}' }) : void r.continue()));
+    page.on('request', (r) => (r.method() === 'POST' && r.url().includes('/decision') ? void r.respond({ status: 422, contentType: 'application/json', body: '{"error":"invalid_decision","message":"not an option of this card"}' }) : void r.continue()));
     const article = (await decisionCard('When should M4 ship?'))!;
     await (await article.$('xpath/.//button[@data-variant="default"]'))!.click();
     await article.waitForSelector('[role="alert"]');
-    expect(await article.$eval('[role="alert"]', (e) => e.textContent)).toBe('internal error');
+    expect(await article.$eval('[role="alert"]', (e) => e.textContent)).toBe('not an option of this card');
     expect(await article.$('.state-line')).toBeNull();
     expect(await article.$('xpath/.//button[@data-variant="default" and .="Ship Friday"]')).not.toBeNull();
     expect((await row('goalpath:item:1:ship')).state).toBe('open');
+    expect(await page.$('[data-outbox-count]')).toBeNull(); // refused: dropped, not waiting
+  });
+
+  it('keeps a decision the head could not take (5xx) settled and waiting, and sends it when the head answers (docs/local-first.md)', async () => {
+    await page.setBypassServiceWorker(true);
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.setRequestInterception(true);
+    let failing = true;
+    page.on('request', (r) => (failing && r.method() === 'POST' && r.url().includes('/decision') ? void r.respond({ status: 503, contentType: 'application/json', body: '{"error":"internal","message":"try later"}' }) : void r.continue()));
+    const article = (await decisionCard('When should M4 ship?'))!;
+    await (await article.$('xpath/.//button[@data-variant="default"]'))!.click();
+    await page.waitForSelector('[data-outbox-count="1"]');
+    expect(await article.$('.state-line')).not.toBeNull(); // settled on the device
+    expect((await row('goalpath:item:1:ship')).state).toBe('open');
+    failing = false; // the next retry (1 s, then 10 s) reaches the head
+    await until(async () => (await row('goalpath:item:1:ship')).state === 'decided', 20_000);
+    await page.waitForFunction(() => !document.querySelector('[data-outbox-count]'));
   });
 
   it('leaving the brief advances the last-visit cursor; opening a card marks it seen and its visual opens full-screen', async () => {
@@ -509,6 +526,9 @@ describe('the brief: one day at a time', () => {
   });
 
   it('goes to today for a day that does not exist in the address, and says when an earlier day cannot be loaded', async () => {
+    // Without a store (a browser that keeps none), an earlier day comes from the head, and can fail to; with one, every day
+    // within retention is on the device (docs/local-first.md).
+    await page.evaluateOnNewDocument(() => Object.defineProperty(window, 'indexedDB', { get() { throw new Error('no storage'); } }));
     await page.goto(`${headUrl()}/brief?day=${dayAt(0).slice(0, 8)}32`, { waitUntil: 'networkidle0' });
     await wait(dayAt(0));
     expect(errors).toEqual([]);

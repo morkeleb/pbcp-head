@@ -59,7 +59,7 @@ The RFC's decision semantics map one to one onto touch, and the mapping is the p
 
 The actions are the controls (§4.5): they sit on the card, in the card's order, with the lead and the proposal above them, and nothing gathers them behind a "decide" control. Only a default is drawn as the primary control; a card without a default shows its options with equal weight, so a closed choice is never nudged.
 
-**Taps commit; swipes move days.** A tap is a deliberate choice and is recorded at once: the card shows the decision in place ("Decided: approve · 09:14") and dims, and the protocol's one-way state follows. Nothing is decided or acknowledged by a swipe: a sideways swipe anywhere on the brief goes to the next or previous day. A decided card stays where it was, in its new state, until the brief is opened again, and nothing the person is looking at moves when cards arrive or the brief reloads. Nothing is queued offline: with no network the controls are disabled and say why. Artifacts and signals are acknowledged by a button, which sets `acknowledged_at` and nothing else.
+**Taps commit; swipes move days.** A tap is a deliberate choice and is recorded at once: the card shows the decision in place ("Decided: approve · 09:14") and dims, and the protocol's one-way state follows. Nothing is decided or acknowledged by a swipe: a sideways swipe anywhere on the brief goes to the next or previous day. A decided card stays where it was, in its new state, until the brief is opened again, and nothing the person is looking at moves when cards arrive or the brief reloads. Offline, the controls still work: the card settles on the device and the action waits in the device's outbox until the network returns (docs/local-first.md); the masthead says how many changes wait to send. Artifacts and signals are acknowledged by a button, which sets `acknowledged_at` and nothing else.
 
 **Orders** are dictated: a text field with a microphone, posted as `head:order:<ulid>` to the producer the person names or to `*`. The app does not try to parse the order; the executor does, and asks back with a decision card if it cannot.
 
@@ -118,6 +118,10 @@ Push is the one capability the protocol deliberately does not have, and the phon
 **In the web app now (Oct 28, 2026).** While the native app is deferred, the installed web app gets this through Web Push: Settings → Devices has an "Urgent cards" switch per device (off by default), and the PUT that stores a card with `delivery: immediate` sends after its commit, best effort, to each device with it on (`lib/push/urgent.ts`). Unlike the APNs payload above, a Web Push payload is encrypted end to end to the device (RFC 8291), so the push service can't read it: it carries the card's title and its lead as plain text (at most 120 characters), and the card's URL to open. A replacement sends again only if its title or lead changed. There is no outbox: a failed push is not retried.
 
 The head needs one addition for this: an outbox row written in the same transaction as the card, and a tiny sender triggered on write (a Vercel function invoked by the PUT handler after commit). No queue infrastructure; if the send fails the card is still in the brief.
+
+## The client architecture
+
+Local first (docs/local-first.md): every client keeps a store of the head's cards, synced forward from the change cursor (`GET /api/me/seq`, then `GET /api/me/cards?after=`), an index of them for search, and an outbox of the owner's actions sent in order when online. The web app builds it on IndexedDB, MiniSearch and an object store; the native app mirrors it with SQLite (WAL) for the store, FTS5 for the index and an outbox table, with the same conflict handling (409: the head's state wins; 403 `reauthentication_required`: the row waits for the passkey). Every screen reads the store first; the head is asked to move the cursor.
 
 ## Build plan
 
