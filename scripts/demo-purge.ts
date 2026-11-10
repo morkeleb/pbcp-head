@@ -7,7 +7,8 @@
 //
 // Run it with the deployment's DATABASE_URL.
 
-import { and, eq, inArray, isNull, like, ne, or, sql } from 'drizzle-orm';
+import { openRows } from '../lib/store';
+import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { parseArgs } from 'node:util';
 import { openDb } from '../db/client';
 import { cards, decisionLog, producerTokens } from '../db/schema';
@@ -33,12 +34,10 @@ try {
   const real = new Set(live.map((t) => t.root));
   const demoOnly = roots.filter((r) => !real.has(r));
 
-  const orders = (
-    await db
-      .select({ id: cards.id })
-      .from(cards)
-      .where(and(eq(cards.headId, head), eq(cards.producer, 'head'), eq(cards.namespace, 'order'), like(sql`${cards.producerDoc}->>'body'`, `%${DEMO_MARK}%`)))
-  ).map((o) => o.id);
+  // At rest: an order's body is sealed, so the demo's are found by opening the head's orders, never by a query on content.
+  const orders = (await openRows(db, await db.select().from(cards).where(and(eq(cards.headId, head), eq(cards.producer, 'head'), eq(cards.namespace, 'order')))))
+    .filter((o) => String((o.producerDoc as { body?: string }).body ?? '').includes(DEMO_MARK))
+    .map((o) => o.id);
   const doomed = await db
     .select({ id: cards.id, producer: cards.producer })
     .from(cards)

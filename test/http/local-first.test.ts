@@ -12,7 +12,7 @@ import { enrollmentToken } from '../../lib/auth/enroll';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { startSession } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let browser: Browser;
 let page: Page;
@@ -35,7 +35,7 @@ afterEach(async () => {
   await call('POST', '/api/test', { body: { clock: null } });
 });
 
-const row = async (id: string) => (await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, id))))[0]!;
+const row = (id: string) => cardRow(id);
 const logOf = (id: string) => testDb().select().from(decisionLog).where(and(eq(decisionLog.headId, OWNER), eq(decisionLog.cardId, id)));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function until(check: () => Promise<boolean>, ms = 15_000) {

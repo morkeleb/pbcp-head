@@ -7,6 +7,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, changeCounter } from '../db/schema';
 import { iso } from './clock';
+import { CryptoError } from './crypto';
+import { dataKey, keyring } from './keys';
+import { openCardRow, sealDoc, sealField } from './vault';
 import { instant, localDate } from './time';
 import { effectiveTimezone } from './timezone';
 
@@ -41,7 +44,30 @@ export async function nextSeq(tx: Tx, headId: string): Promise<number> {
 export async function load(tx: Tx | Db, headId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<Stored | null> {
   const q = tx.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
   const [row] = opts.forUpdate ? await q.for('update') : await q;
-  return row ? { card: toCard(row), eligible: row.wildcardEligible } : null;
+  // At rest: opened with the head's data key for this operation only (a tampered row fails the operation, closed).
+  return row ? { card: toCard(openCardRow(row, await dataKey(tx, headId))), eligible: row.wildcardEligible } : null;
+}
+
+/**
+ * Rows of `cards` with their sealed content opened (lib/vault.ts), one unwrap per head. A row that does not authenticate
+ * (tampered, or sealed under another key) is left out with a logged error: it fails closed, and the rest is served.
+ */
+export async function openRows(tx: Tx | Db, rows: Row[]): Promise<Row[]> {
+  const ring = keyring(tx);
+  const out: Row[] = [];
+  for (const row of rows) {
+    if (!row.content) {
+      out.push(row);
+      continue;
+    }
+    try {
+      out.push(openCardRow(row, await ring(row.headId)));
+    } catch (e) {
+      if (!(e instanceof CryptoError)) throw e;
+      console.error(`card ${row.headId}/${row.id}: its sealed content failed its integrity check; it is left out`, e.message);
+    }
+  }
+  return out;
 }
 
 /**
@@ -60,7 +86,9 @@ export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Ca
       .limit(1);
     if (!next || seen.has(next.id)) return newest;
     seen.add(next.id);
-    newest = toCard(next);
+    const [opened] = await openRows(tx, [next]);
+    if (!opened) return newest;
+    newest = toCard(opened);
     cur = next.id;
   }
 }
@@ -97,14 +125,31 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   // snooze) keeps the day it was given, so a decision made after the owner travelled does not move the card.
   const doc = producerPart(stored);
   const placed = await localDay(tx, headId, stored.at !== undefined ? instant(stored.at) : head.receivedAt);
-  const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and ${cards.producerDoc} = ${JSON.stringify(doc)}::jsonb`;
+  // At rest (lib/vault.ts): the content sealed under the head's data key, the metadata in clear. Only the new form is
+  // written; a row's plaintext columns from before encryption are left for the drop-columns migration.
+  const key = (await dataKey(tx, headId, { create: true }))!;
+  const sealed = sealDoc(key, headId, stored.id, doc);
+  const content: Record<string, unknown> = {
+    v: 1,
+    mac: sealed.mac,
+    doc: sealed.doc,
+    ...(opts.decidedDoc !== undefined ? { decided: sealField(key, headId, stored.id, 'decided', opts.decidedDoc) } : {}),
+    ...(stored.comment !== undefined ? { comment: sealField(key, headId, stored.id, 'comment', stored.comment) } : {}),
+    ...(stored.edited_proposal !== undefined ? { edited: sealField(key, headId, stored.id, 'edited', stored.edited_proposal) } : {}),
+  };
+  const gone = [...(stored.comment === undefined ? ['comment'] : []), ...(stored.edited_proposal === undefined ? ['edited'] : [])];
+  // The same content as stored: compared by its keyed digest, or (a row from before encryption) as it was.
+  const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and (${cards.content}->>'mac' = ${sealed.mac} or (${cards.content} is null and ${cards.producerDoc} = ${JSON.stringify(doc)}::jsonb))`;
+  const merged = sql`(coalesce(${cards.content}, '{}'::jsonb)${sql.raw(gone.map((k) => ` - '${k}'`).join(''))}) || ${JSON.stringify(content)}::jsonb`;
+  const clearDecided = opts.decidedDoc !== undefined ? sealDoc(key, headId, stored.id, opts.decidedDoc).clear : undefined;
   const updated = await tx
     .update(cards)
     .set({
-      producerDoc: doc,
+      producerDoc: sealed.clear,
       ...head,
       day: stored.about ?? sql`case when ${kept} then ${cards.day} else ${placed}::date end`,
-      ...(opts.decidedDoc !== undefined ? { decidedDoc: opts.decidedDoc } : {}),
+      content: merged,
+      ...(clearDecided !== undefined ? { decidedDoc: clearDecided } : {}),
       ...(opts.outcome !== undefined ? { outcome: opts.outcome } : {}),
     })
     .where(and(eq(cards.headId, headId), eq(cards.id, stored.id)))
@@ -116,10 +161,11 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
       id: stored.id,
       producer: id.producer,
       namespace: id.namespace,
-      producerDoc: doc,
+      producerDoc: sealed.clear,
       ...head,
       day: stored.about ?? placed,
-      decidedDoc: opts.decidedDoc ?? null,
+      content,
+      decidedDoc: clearDecided ?? null,
       wildcardEligible: opts.eligible ? [...opts.eligible] : null,
       outcome: opts.outcome ?? null,
     });
@@ -149,8 +195,9 @@ function headColumns(c: Card) {
     acknowledgedAt: date(c.acknowledged_at),
     snoozedUntil: date(c.snoozed_until),
     decision: c.decision ?? null,
-    editedProposal: c.edited_proposal ?? null,
-    comment: c.comment ?? null,
+    // Sealed in `content` (persist); never written in clear.
+    editedProposal: null,
+    comment: null,
     decidedAt: date(c.decided_at),
     delegatedTo: c.delegated_to ?? null,
     toProducer: c.to_producer ?? null,

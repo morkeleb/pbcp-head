@@ -6,14 +6,16 @@ import {
   acknowledge, CARD_LIMIT_BYTES, checkOutcome, checkSubmission, decide, markSeen, parseCardOrThrow, PbcpError, producerPart,
   snooze, submit, unsnooze, type Card, type Decision, type Urgency,
 } from '@pbcp/core';
-import { and, asc, eq, gt, inArray, max, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, decisionLog, labelCeilings } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
 import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
 import { effectiveOf, loadPolicy, REAUTH_WINDOW_SECONDS } from './sensitivity';
-import { load, persist, toCard, writeTx, type Stored, type Tx } from './store';
+import { dataKey } from './keys';
+import { sealLog } from './vault';
+import { load, openRows, persist, toCard, writeTx, type Stored, type Tx } from './store';
 
 export interface Outcome {
   status: number;
@@ -106,8 +108,10 @@ export async function syncChanges(db: Db, ctx: { headId: string; root: string },
         .where(and(eq(cards.headId, ctx.headId), or(eq(cards.producer, ctx.root), visibleOrders(ctx.root)), gt(cards.changeSeq, after)))
         .orderBy(asc(cards.changeSeq))
         .limit(pageSize);
-      const changes = rows.map((row) => ({ seq: row.changeSeq, card: toCard(row) }));
-      if (changes.length === pageSize) return { changes, next: changes.at(-1)!.seq };
+      // At rest: each card opened for this response; a row that fails its integrity check is left out (logged).
+      const opened = new Map((await openRows(tx, rows)).map((r) => [r.id, r]));
+      const changes = rows.filter((row) => opened.has(row.id)).map((row) => ({ seq: row.changeSeq, card: toCard(opened.get(row.id)!) }));
+      if (rows.length === pageSize) return { changes, next: rows.at(-1)!.changeSeq };
       const [top] = await tx
         .select({ seq: max(cards.changeSeq) })
         .from(cards)
@@ -183,15 +187,21 @@ export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: un
     for (const c of r.changed) {
       const decidedDoc = producerPart(stored.card);
       card = await persist(tx, ctx.headId, c, { decidedDoc });
+      // At rest: the decided-on document, comment and edited text sealed; the value, device and time in clear.
+      // Bound to its row: the row's seq is taken before it is written, so the sealed values name it.
+      const [{ seq }] = (await tx.execute(sql`select nextval(pg_get_serial_sequence('decision_log', 'seq'))::bigint as seq`)) as unknown as [{ seq: string | number }];
+      const log = sealLog((await dataKey(tx, ctx.headId, { create: true }))!, ctx.headId, Number(seq), { decidedDoc: decidedDoc as unknown as Record<string, unknown>, comment: card.comment ?? null, editedProposal: card.edited_proposal ?? null });
       await tx.insert(decisionLog).values({
+        seq: Number(seq),
         headId: ctx.headId,
         cardId: card.id,
         decision: card.decision!,
-        editedProposal: card.edited_proposal ?? null,
-        comment: card.comment ?? null,
+        editedProposal: null,
+        comment: null,
         delegatedTo: card.delegated_to ?? null,
         decidedAt: new Date(at),
-        decidedDoc,
+        decidedDoc: log.clearDoc,
+        content: log.content,
         actor: ctx.actor,
       });
     }

@@ -6,7 +6,7 @@
 import { curlSnippet, producerConfig, shellQuote } from '@pbcp/client';
 import { exampleCard, type ProducerCard } from '@pbcp/core';
 import { TOOL_NAMES } from '@pbcp-head/owner-mcp';
-import { DOCS_URL } from './front-door';
+import { DOCS_URL, TRUST_URL } from './front-door';
 import { mcpUrl } from './oauth';
 import { PAIRING_CODE_SHAPE } from './pairing-code';
 
@@ -47,6 +47,7 @@ export function connectLinks(origin: string): { head: Link[]; connectors: Link[]
       { label: 'This head’s API', href: `${origin}/api/openapi.json`, note: 'OpenAPI, the owner’s /api/me routes' },
       { label: 'The protocol', href: docs, note: 'the Personal Brief Card Protocol’s site' },
       { label: 'The specification', href: `${docs}/rfc/`, note: 'the RFC' },
+      { label: 'Trust', href: TRUST_URL, note: 'what the head encrypts at rest, and who can read what' },
     ],
     connectors: CONNECTORS.map((name) => ({ label: name, href: connectorSetup(name) })),
   };

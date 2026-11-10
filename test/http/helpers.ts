@@ -63,3 +63,14 @@ export async function ownerSession(owner = OWNER, name = 'test device'): Promise
   const t = await startSession(testDb(), { headId: owner, identityId: null, platform: 'web', name });
   return { auth: `Session ${t.access_token}`, deviceId: t.device_id };
 }
+
+/**
+ * A card's row as the head reads it (At rest, lib/vault.ts): its sealed content opened into the plaintext columns. Tests
+ * read rows with this, never the raw columns, which hold ciphertext or nothing.
+ */
+export async function cardRow(id: string, headId = OWNER) {
+  const { openRows } = await import('../../lib/store');
+  const { cards } = await import('../../db/schema');
+  const { and, eq } = await import('drizzle-orm');
+  return (await openRows(testDb(), await testDb().select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)))))[0]!;
+}

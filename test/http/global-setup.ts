@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import type { TestProject } from 'vitest/node';
 import { migrateDatabase } from '../../db/migrate';
 import { DRAW_PATH } from '../../lib/render/drawer';
-import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_CRON_SECRET, TEST_DATABASE_URL, TEST_HEAD_PORT, TEST_SESSION_SECRET, TEST_VAPID_PRIVATE_KEY, TEST_VAPID_PUBLIC_KEY } from '../env';
+import { TEST_APPLE_CLIENT_ID, TEST_APPLE_PORT, TEST_CRON_SECRET, TEST_DATABASE_URL, TEST_HEAD_MASTER_KEY, TEST_HEAD_PORT, TEST_SESSION_SECRET, TEST_VAPID_PRIVATE_KEY, TEST_VAPID_PUBLIC_KEY } from '../env';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -31,6 +31,7 @@ export async function setup(project: TestProject): Promise<void> {
         DATABASE_URL: TEST_DATABASE_URL,
         PBCP_TEST_MODE: '1',
         SESSION_SECRET: TEST_SESSION_SECRET,
+        HEAD_MASTER_KEY: TEST_HEAD_MASTER_KEY,
         WEBAUTHN_RP_ID: 'localhost',
         WEBAUTHN_ORIGIN: url,
         PBCP_HEAD: '',

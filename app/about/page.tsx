@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { db } from '../../db/client';
 import { demoHead, DEMO_TIMEZONE, type DemoHead } from '../../lib/demo/replay';
-import { DEPLOY_GUIDE_URL, DOCS_URL, GITHUB_URL } from '../../lib/front-door';
+import { DEPLOY_GUIDE_URL, DOCS_URL, GITHUB_URL, TRUST_URL } from '../../lib/front-door';
 import { NAME, timeOfDay } from '../../lib/masthead';
 import { Architecture } from './architecture';
 import { HeroBrief, SameCard } from './demo';
@@ -66,6 +66,7 @@ export default async function FrontDoor({ searchParams }: { searchParams: Promis
             <a href="#top" className="text-foreground">Overview</a>
             <a href={DOCS_URL} className="hover:text-foreground">Protocol</a>
             <Link href="/connect" className="hover:text-foreground">Docs</Link>
+            <a href={TRUST_URL} className="hover:text-foreground">Trust</a>
             <a href={GITHUB_URL} className="inline-flex items-center gap-1 hover:text-foreground">GitHub <ArrowUpRight className="size-3.5" aria-hidden /></a>
           </nav>
           <div className="ml-auto flex items-center gap-3">

@@ -9,7 +9,7 @@ import { cards } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { submitCard } from '../../lib/protocol';
 import { card, cardPath } from './cards';
-import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
+import { call, headUrl, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let owner: { auth: string; deviceId: string };
 let ip = 0;
@@ -69,19 +69,19 @@ describe('POST /api/pair', () => {
   it('records the pairing in the owner’s brief: a head:producer:<root> artifact at log (RFC §4.1a: a producer connecting)', async () => {
     const c = await newCode();
     await pair({ code: c.code, root: 'agent-7', name: 'Night agent' });
-    const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
+    const row = await cardRow('head:producer:agent-7');
     expect(row!.producerDoc).toMatchObject({ kind: 'artifact', urgency: 'log', producer: 'head', title: 'Night agent paired as `agent-7`' }); // §4.1a: a producer connecting
     expect((row!.producerDoc as { body: string }).body).toContain(`Paired at 2026-10-07T09:00:00Z from ${address}`);
     expect(row!.delivery).toBe('log');
     // Renamed later in Settings: the stored card keeps the words it was written with.
     const id = (await me('GET', '/api/me/settings/producers')).body.producers.find((p: { root: string }) => p.root === 'agent-7').id;
     expect((await me('PATCH', `/api/me/settings/producers/${id}`, { name: 'Overnight agent' })).body.name).toBe('Overnight agent');
-    const [after] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
+    const after = await cardRow('head:producer:agent-7');
     expect((after!.producerDoc as { title: string }).title).toBe('Night agent paired as `agent-7`');
     // Without a name, the root names it.
     const d = await newCode();
     await pair({ code: d.code, root: 'agent-9' });
-    const [nameless] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-9')));
+    const nameless = await cardRow('head:producer:agent-9');
     expect((nameless!.producerDoc as { title: string }).title).toBe('agent-9 paired as `agent-9`');
   });
 
@@ -90,7 +90,7 @@ describe('POST /api/pair', () => {
     await submitCard(testDb(), { headId: OWNER, root: 'head', ceiling: 'brief' }, JSON.stringify(card('head:producer:agent-7', { producer: 'head', kind: 'signal', urgency: 'log', title: 'agent-7 paired as `agent-7`' })), encodeURIComponent('head:producer:agent-7'));
     const c = await newCode();
     expect((await pair({ code: c.code, root: 'agent-7', name: 'Night agent' })).status).toBe(201);
-    const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'head:producer:agent-7')));
+    const row = await cardRow('head:producer:agent-7');
     expect(row!.producerDoc).toMatchObject({ kind: 'artifact', urgency: 'log', title: 'Night agent paired as `agent-7`' });
   });
 

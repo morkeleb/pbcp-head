@@ -46,6 +46,7 @@ Under **Settings → Environment Variables**, for Production (and Preview, with 
 | Variable | Value |
 | --- | --- |
 | `SESSION_SECRET` | `openssl rand -base64 48`; at least 32 characters |
+| `HEAD_MASTER_KEY` | `openssl rand -base64 32`: 32 random bytes that wrap every head's data key (card content is encrypted at rest, see "At rest" below). **Required**, and **keep a copy outside Vercel**: without it the content cannot be read. The head refuses to start without it once any content is encrypted |
 | `CRON_SECRET` | `openssl rand -base64 32`. Vercel Cron sends it to `/api/cron/brief` as a bearer token by itself |
 | `WEBAUTHN_ORIGIN` | `https://<your domain>`, the origin passkeys are registered for. **Required:** it is also the OAuth issuer and the MCP resource, which are never taken from a request's Host header, so the head refuses to start without it |
 | `WEBAUTHN_RP_ID` | optional; defaults to the host of `WEBAUTHN_ORIGIN` |
@@ -111,13 +112,13 @@ Hobby allows 100 cron jobs per project, so 24 daily entries (`30 0 * * *` … `3
 
 ### 5. Migrate and seed
 
-Neon's variables are **sensitive**: Vercel hands them to builds and functions, but `vercel env pull` writes them empty. The simplest way to migrate is therefore during the production build. Set **Settings → Build and Deployment → Build Command** to:
+Neon's variables are **sensitive**: Vercel hands them to builds and functions, but `vercel env pull` writes them empty. The simplest way to migrate is therefore during the production build. The repository's `vercel.json` sets the build command (it overrides **Settings → Build and Deployment → Build Command**); for another owner than `morten`, change it there:
 
 ```sh
-if [ "$VERCEL_ENV" = "production" ]; then pnpm db:migrate && pnpm seed morten --name "Morten" --if-new > /dev/null; fi && pnpm build
+if [ "$VERCEL_ENV" = "production" ]; then pnpm db:migrate && pnpm encrypt-backfill && pnpm seed morten --name "Morten" --if-new > /dev/null; fi && pnpm build
 ```
 
-- **Production builds** migrate with `DATABASE_URL_UNPOOLED`, create the head if it does not exist yet, then build.
+- **Production builds** migrate with `DATABASE_URL_UNPOOLED`, seal any card content still in plaintext (`pnpm encrypt-backfill`, which exits at once when there is none; see "At rest"), create the head if it does not exist yet, then build.
 - **Preview builds** only build, so they never migrate the production database.
 - **The seed's output is discarded,** so no enrolment link ends up in the build log.
 
@@ -171,11 +172,33 @@ curl https://<your domain>/          # {"protocol":"pbcp/1","owner":"morten","se
 
 Sign in at `https://<your domain>/signin` with the enrolled passkey. The brief is at `/brief`.
 
+### At rest: encrypting card content, in two deploys
+
+Card content is encrypted in the database under a data key per head, wrapped with `HEAD_MASTER_KEY` (docs/trust.md says what is encrypted and what is not). A database written before this change is sealed in two deploys, because production builds apply migrations by themselves.
+
+**Before merging the encryption PR, by hand:**
+1. Generate the key: `openssl rand -base64 32`.
+2. Set it as `HEAD_MASTER_KEY` in the production environment (Settings → Environment Variables), and **keep a copy outside Vercel** (a password manager). After the second deploy it is the only way to read the content. A missing key fails the deploy loudly: the backfill refuses to seal without it, and the head refuses to start without it once any content is encrypted.
+
+**Deploy 1: the encryption PR.** Its migration only adds the `content` columns and the head's wrapped data key. The build runs `pnpm db:migrate` and then `pnpm encrypt-backfill` (the build command above), which seals every row still in plaintext: resumable, idempotent, with a progress line. The app reads both forms and writes only the sealed one. **Nothing is dropped:** the plaintext columns stay, so this deploy cannot lose anything. Check it with the production environment loaded, as in step 5:
+
+```sh
+pnpm encrypt-backfill --verify    # "0 rows still plaintext", exit 0; otherwise the counts per table, exit 1
+```
+
+**Deploy 2: the drop-columns PR** (a later PR). Its migration drops the plaintext columns (`cards.rendered_html`, `rendered_actions`, `rendered_meta`, `rendered_paragraph`, `comment`, `edited_proposal`; `decision_log.comment`, `edited_proposal`; `diagrams.svg`, `svg_dark`, `error`, `error_dark`), strips the content fields from `cards.producer_doc` and `decided_doc` and `decision_log.decided_doc`, deletes the diagram rows marked `migrated`, and replaces old invite emails with their digests. **Merge it only after `--verify` reports zero on production.** It is the point of no return: from then on `HEAD_MASTER_KEY` is the only way to read the content.
+
+**Operating it:**
+- `pnpm rewrap --new-master <key>`: rewraps every head's data key under a new master key, one transaction per head, with the current key in the environment; then set `HEAD_MASTER_KEY` to the new one. No card is re-encrypted.
+- `pnpm card:decrypt <id> [--head <owner>]`: prints one card in clear. psql shows ciphertext.
+- `pnpm head:delete <owner>`: destroys the head's data key first (every sealed value of it is unreadable from that moment), then its rows.
+- Self-hosters with Docker set `HEAD_MASTER_KEY` in `.env`; the entrypoint refuses to start without it and runs the backfill after migrating.
+
 ## Self-hosted with Docker
 
 ```sh
 git clone --recurse-submodules https://github.com/morkeleb/pbcp-head && cd pbcp-head
-cp .env.example .env    # set SESSION_SECRET, CRON_SECRET, WEBAUTHN_ORIGIN and PBCP_OWNER (and PBCP_TIMEZONE)
+cp .env.example .env    # set SESSION_SECRET, CRON_SECRET, HEAD_MASTER_KEY, WEBAUTHN_ORIGIN and PBCP_OWNER (and PBCP_TIMEZONE)
 docker compose up -d
 docker compose logs head   # the enrolment link for PBCP_OWNER's first passkey
 ```
@@ -183,7 +206,7 @@ docker compose logs head   # the enrolment link for PBCP_OWNER's first passkey
 That one `up` does the following:
 - builds the image (Debian, Node 22, Chromium);
 - starts Postgres 17, with data in the `pgdata` volume;
-- migrates the database;
+- migrates the database, and seals any card content still in plaintext (`pnpm encrypt-backfill`);
 - creates the `PBCP_OWNER` head on first start and prints its enrolment link;
 - serves the head on port 3000, or `PBCP_PORT`.
 

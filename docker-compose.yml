@@ -33,6 +33,7 @@ services:
       DATABASE_URL: postgres://pbcp:pbcp@postgres:5432/pbcp
       TEST_DATABASE_URL: postgres://pbcp:pbcp@postgres:5432/pbcp_test
       SESSION_SECRET: ${SESSION_SECRET:-}
+      HEAD_MASTER_KEY: ${HEAD_MASTER_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}

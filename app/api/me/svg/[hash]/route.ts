@@ -3,10 +3,9 @@
 // No session: an <img> (and the phone's native image view) cannot send one. The hash is of content the
 // reader already has in the card, so it grants nothing new; the bytes are immutable, hence the long cache.
 
-import { eq } from 'drizzle-orm';
 import { db } from '../../../../../db/client';
-import { diagrams } from '../../../../../db/schema';
 import { json } from '../../../../../lib/http';
+import { servedDiagram } from '../../../../../lib/render';
 
 const notFound = () => json({ error: 'not_found', message: 'no such diagram' }, 404);
 
@@ -43,8 +42,17 @@ function onWhite(svg: string): string {
 export async function GET(req: Request, { params }: { params: Promise<{ hash: string }> }): Promise<Response> {
   const { hash } = await params;
   if (!/^[0-9a-f]{64}$/.test(hash)) return notFound();
-  const dark = new URL(req.url).searchParams.get('theme') === 'dark';
-  const [row] = await db().select({ svg: diagrams.svg, svgDark: diagrams.svgDark }).from(diagrams).where(eq(diagrams.hash, hash));
+  const q = new URL(req.url).searchParams;
+  const dark = q.get('theme') === 'dark';
+  // At rest: a head's drawing is sealed under its data key, so the address names the head (`h`) whose key opens it for
+  // this response; one that does not open (another head, tampered) is not found. Without `h`, a public (demo) drawing,
+  // or one from before encryption.
+  let row: { svg: string | null; svgDark: string | null } | null;
+  try {
+    row = await servedDiagram(db(), q.get('h'), hash);
+  } catch {
+    row = null;
+  }
   if (!row?.svg) return notFound();
   const fallback = dark && !row.svgDark;
   const svg = dark ? (row.svgDark ?? onWhite(row.svg)) : row.svg;

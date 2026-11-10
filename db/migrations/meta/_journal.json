@@ -155,6 +155,13 @@
       "when": 1794327465324,
       "tag": "0021_settings_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794334060837,
+      "tag": "0022_at_rest",
+      "breakpoints": true
     }
   ]
 }

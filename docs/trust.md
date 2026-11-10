@@ -1,6 +1,29 @@
 # Trust: what the head keeps, and who may see it
 
-What a head holds about its owner is the record the RFC calls "the sensitive record" (§12): the cards that reached them, what they saw, what they decided and what they ordered. This page says how this head treats it. Other sections (encryption at rest among them) join it as they ship.
+What a head holds about its owner is the record the RFC calls "the sensitive record" (§12): the cards that reached them, what they saw, what they decided and what they ordered. This page says how this head treats it.
+
+## At rest
+
+Card content is encrypted at rest with a key per head. The head reads a card only to render it when it arrives, to fold it into your brief, or to show it to a signed-in device. The operator holds no index of your content. Deleting your head destroys its key. Self-hosting is one Vercel project and a Postgres.
+
+**How.** Each head has a data key, 32 random bytes, kept in the database only wrapped (AES-256-GCM) under the deployment's master key, `HEAD_MASTER_KEY`, which lives in the host's environment and nowhere in the database. Each value is sealed with AES-256-GCM under the data key, with a random nonce, and bound to its head, its table and column, and its row (the card, the decision-log entry, the diagram, the invite request), so a value moved to another head, column or row, or altered by one bit, fails to open: that card is left out of what is served, and the rest is served. The head unwraps the data key for the request that needs it and keeps it nowhere.
+
+**What is encrypted, and what is not, and why.** One rule: content is encrypted; the metadata the head needs to route, order and sync is not.
+
+| | Encrypted | In clear |
+| --- | --- | --- |
+| Cards | title, summary, body, labels, source (address and label), actions (labels and bodies), any field a producer adds, the rendered HTML and lead, the daily paragraph, your comment and edited text, the copy kept of what you decided on | ids, kind, producer, thread, state, the change counter, every time, the decision value, urgency, delivery, sensitivity, `about`, `at`, `until`, the card's day, `supersedes`, `references`, the orders fields |
+| Decision log | your comment and edited text, the copy of the card | card id, the decision value, the device, the time |
+| Diagrams | the drawings and their errors | the hash (scoped to your head), the diagram type |
+| Invite requests | the address | a keyed digest of it, the time, the browser |
+
+Labels are encrypted because they are a producer's words about your life (`divorce-lawyer`); thread ids are opaque keys. `at` and `about` stay clear because the schedule, the day view and the week strip are indexes over them. The decision value stays clear because producers read it through sync (RFC §7.2). Tokens, devices and sessions were already hashes or opaque.
+
+**What it does not buy.** It is not end-to-end. The head decrypts a card to render it when it arrives, to serve it to your signed-in devices and your assistant, and to fold the nightly brief; whoever runs the head and holds `HEAD_MASTER_KEY` can read content while serving a request. What it protects against is a copy of the database, a backup, or a leaked connection string: those read as ciphertext. Producers that read your mailbox see the mail in their own runner. The protocol is unchanged (RFC §12 leaves storage to the head).
+
+**Search** runs on your devices (docs/local-first.md); the head has no search over content.
+
+**Deleting a head** destroys its data key first: every encrypted value of it is unreadable from that moment, and the rows are then deleted (`pnpm head:delete`).
 
 ## Sensitivity
 

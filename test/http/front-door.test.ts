@@ -72,8 +72,12 @@ describe('POST /api/invite', () => {
     expect([r.status, r.body]).toEqual([202, { requested: true }]);
     r = await invite({ email: 'ANNA@example.com' });
     expect(r.status).toBe(202);
+    // At rest: the address sealed, its keyed digest in `email` (one row for both spellings); the operator reads it in clear.
     const rows = await testDb().select().from(inviteRequests);
-    expect(rows).toEqual([expect.objectContaining({ email: 'anna@example.com', userAgent: 'TestBrowser/1' })]);
+    expect(rows).toEqual([expect.objectContaining({ email: expect.stringMatching(/^d:[0-9a-f]{64}$/), userAgent: 'TestBrowser/1' })]);
+    expect(JSON.stringify(rows)).not.toContain('anna');
+    const owner = await ownerSession();
+    expect((await call('GET', '/api/me/settings/invites', { auth: owner.auth })).body.requests).toEqual([expect.objectContaining({ email: 'anna@example.com', user_agent: 'TestBrowser/1' })]);
   });
 
   it('refuses what is not an email address, and any credential', async () => {
@@ -95,7 +99,7 @@ describe('POST /api/invite', () => {
     const r = await fetch(`${headUrl()}/api/invite`, { method: 'POST', body: 'email=c%40example.com', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-real-ip': address }, redirect: 'manual' });
     expect(r.status).toBe(303);
     expect(r.headers.get('location')).toBe('/?invite=requested#invite');
-    expect((await testDb().select().from(inviteRequests).where(eq(inviteRequests.email, 'c@example.com')))).toHaveLength(1);
+    expect(await testDb().select().from(inviteRequests)).toHaveLength(1);
     expect(await (await call('GET', '/?invite=requested', { headers: { accept: BROWSER } })).body).toContain('your request is in');
   });
 
