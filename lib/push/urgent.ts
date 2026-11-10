@@ -9,7 +9,8 @@
 import { leadOf, type Card } from '@pbcp/core';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../db/client';
-import { devices } from '../../db/schema';
+import { devices, producerTokens } from '../../db/schema';
+import { effectiveOf, isPrivate, loadPolicy, type Sensitivity } from '../sensitivity';
 import { cutSummary } from '../render/lead';
 import { load } from '../store';
 import { sendPush, type PushPayload, type SendResult } from './send';
@@ -32,8 +33,21 @@ export function plainLead(card: { summary?: string; body: string }): string {
   return cutSummary(text.replace(/\s+/g, ' ').trim(), URGENT_LEAD_MAX);
 }
 
-export function urgentPayload(card: Pick<Card, 'id' | 'title' | 'summary' | 'body'>): PushPayload {
+/** "A private decision from mail": a private card as a notification may name it (producer and kind only). */
+export function privateLine(card: Pick<Card, 'kind' | 'producer'>, producerName?: string | null): string {
+  return `A private ${card.kind} from ${producerName || card.producer}`;
+}
+
+/**
+ * The notification for a card. RFC 0.9 §4.1: for a card whose effective sensitivity is `private` or `confirm`, no title,
+ * lead or body, only the producer and kind, and it opens the brief rather than the card. The RFC allows the title, but
+ * asks for producer and kind only on a locked device; a head cannot tell whether a device is locked when it pushes, so
+ * every push of a private card meets the locked-device rule. A `normal` card's push carries its title and lead: a Web
+ * Push payload is encrypted end to end to the device (RFC 8291).
+ */
+export function urgentPayload(card: Pick<Card, 'id' | 'title' | 'summary' | 'body' | 'kind' | 'producer'>, sensitivity: Sensitivity = 'normal', producerName?: string | null): PushPayload {
   // The tag replaces an earlier notification for the same card on the device, rather than stacking another.
+  if (isPrivate(sensitivity)) return { title: 'Brief', body: privateLine(card, producerName), data: { url: '/brief' }, tag: `pbcp-card:${card.id}` };
   return { title: card.title, body: plainLead(card), data: { url: `/card/${encodeURIComponent(card.id)}` }, tag: `pbcp-card:${card.id}` };
 }
 
@@ -55,7 +69,13 @@ export async function notifyUrgent(db: Db, headId: string, card: Card, previous:
       .select()
       .from(devices)
       .where(and(eq(devices.headId, headId), isNull(devices.revokedAt), eq(devices.notifyUrgent, true), isNotNull(devices.pushEndpoint)));
-    const payload = urgentPayload(current);
+    const effective = effectiveOf(current, await loadPolicy(db, headId));
+    const [named] = await db
+      .select({ name: producerTokens.name })
+      .from(producerTokens)
+      .where(and(eq(producerTokens.headId, headId), eq(producerTokens.root, current.producer), isNull(producerTokens.revokedAt), isNotNull(producerTokens.name)))
+      .limit(1);
+    const payload = urgentPayload(current, effective, named?.name);
     const sent: Array<{ device: string; result: SendResult }> = [];
     for (const d of targets) sent.push({ device: d.id, result: await sendPush(db, d, payload).catch((): SendResult => 'failed') });
     return sent;

@@ -19,6 +19,7 @@ import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
 import { formatTime } from './push/daily';
+import { annotateParts, effectiveOf, loadPolicy, type Sensitivity, type SensitivityPolicy } from './sensitivity';
 
 type Row = typeof cards.$inferSelect;
 
@@ -39,6 +40,13 @@ export type MeCard = Card & {
   paragraph?: ParagraphParts;
   /** On a superseded card: the newest card of its successor chain (§8), which the owner is sent to instead. */
   replaced_by?: Successor;
+  /** RFC 0.9 §9: the card's `sensitivity` raised by the owner's floors, as of this response; the card's own stays as sent. */
+  effective_sensitivity: Sensitivity;
+  /**
+   * On a `head:daily` card with parts: its paragraph for a surface outside the signed-in session, in plain text, with
+   * private and confirm entries counted, not named (RFC 0.9 §4.1). The card's body and lead name them; this does not.
+   */
+  spoken_paragraph?: string;
 };
 
 export type { Successor };
@@ -46,6 +54,8 @@ export type { Successor };
 /** A card for the owner: renders it first if its stored render is missing or stale (§3.1, render on receipt). */
 export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
   const out: MeCard[] = [];
+  const policies = new Map<string, SensitivityPolicy>();
+  const policyOf = async (headId: string) => policies.get(headId) ?? policies.set(headId, await loadPolicy(db, headId)).get(headId)!;
   for (const row of rows) {
     const card = toCard(row);
     let html = row.renderedHtml;
@@ -57,6 +67,7 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
     }
     // §8: a superseded card names its newest successor, which the owner is sent to instead.
     const by = card.state === 'superseded' ? await replacedBy(db, row.headId, card) : null;
+    const parts = row.renderedParagraph ? await annotateParts(db, row.headId, row.renderedParagraph as ParagraphParts, await policyOf(row.headId)) : null;
     out.push({
       ...card,
       rendered_html: html,
@@ -67,8 +78,9 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
       ...(meta?.firstVisual ? { first_visual: meta.firstVisual } : {}),
       ...(row.outcome === 'applied' || row.outcome === 'stale' ? { order_outcome: row.outcome } : {}),
       day: row.day,
-      ...(row.renderedParagraph ? { paragraph: row.renderedParagraph as ParagraphParts } : {}),
+      ...(parts ? { paragraph: parts, spoken_paragraph: composeParagraph(parts, [], { spoken: true }) } : {}),
       ...(by ? { replaced_by: by } : {}),
+      effective_sensitivity: effectiveOf(card, await policyOf(row.headId)),
     });
   }
   return out;
@@ -174,7 +186,16 @@ export interface Fold {
  * - `new` lists the ids changed since the last visit; `seq` is the head's counter now, which the client
  *   posts to /api/me/visit when the owner leaves.
  */
-export async function brief(db: Db, headId: string) {
+export interface BriefOptions {
+  /**
+   * `spoken=1`: the daily paragraph for a surface outside the owner's signed-in session (the owner MCP's `brief` tool, a
+   * voice client): plain text, private and confirm entries counted, never named (RFC 0.9 §4.1). The parts and the card
+   * lists are the same either way; each carries both sensitivities, so the client applies its own rules to them.
+   */
+  spoken?: boolean;
+}
+
+export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
   const head = await headSettings(db, headId);
   await expireDueOrders(db, headId); // A.2: lapsed leases are visible as lapsed before the brief reads them
   const at = new Date(now());
@@ -341,14 +362,20 @@ export async function brief(db: Db, headId: string) {
   // fold now, "so far today". None on a day with nothing open and nothing new. Either way with its parts, each entry
   // with its card's labels (lib/brief/paragraph.ts), for the label filter.
   const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
-  let paragraph: { html: string; so_far: boolean; parts: ParagraphParts } | null = null;
+  let paragraph: { html: string; so_far: boolean; parts: ParagraphParts; text?: string } | null = null;
   if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily) && presentedDaily.paragraph) {
     if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false, parts: presentedDaily.paragraph };
   } else {
     // No card for today yet, or one folded by an older fold or minted before paragraphs had parts: fold now.
-    const parts = await dailyParagraphNow(db, headId, head.timezone, today);
+    const parts = await annotateParts(db, headId, await dailyParagraphNow(db, headId, head.timezone, today));
     const html = composeParagraph(parts);
     if (html) paragraph = { html, so_far: true, parts };
+  }
+  // Spoken: the same parts, written for outside the session: `text` in plain words, and `html` the same text escaped, so
+  // neither carries a private entry's title or lead.
+  if (paragraph && opts.spoken) {
+    const text = composeParagraph(paragraph.parts, [], { spoken: true });
+    paragraph = { ...paragraph, text, html: text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') };
   }
 
   const [oldest] = await db.select({ day: cards.day }).from(cards).where(eq(cards.headId, headId)).orderBy(asc(cards.day)).limit(1);
@@ -543,6 +570,7 @@ export async function listProducers(db: Db, headId: string) {
     .groupBy(cards.producer);
   const lastAt = new Map(last.map((l) => [l.producer, l.at]));
   const roots = [...new Set(tokens.map((t) => t.root))];
+  const floors = (await loadPolicy(db, headId)).producers;
   return roots.map((root) => {
     const mine = tokens.filter((t) => t.root === root);
     const active = mine.filter((t) => t.revokedAt === null);
@@ -551,6 +579,7 @@ export async function listProducers(db: Db, headId: string) {
     return {
       root,
       ceiling: newest.urgencyCeiling,
+      sensitivity_floor: floors.get(root) ?? null,
       executor: newest.executor,
       revoked: active.length === 0,
       tokens: mine.map((t) => ({

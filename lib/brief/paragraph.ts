@@ -20,7 +20,14 @@ export interface ParagraphEntry {
   labels: string[];
   /** The entry as the paragraph writes it: markdown in the fold, safe inline HTML from the head. */
   text: string;
+  /** RFC 0.9 §4.1: the entry's card's `sensitivity` as sent, added by the head when it serves the parts. */
+  sensitivity?: 'normal' | 'private' | 'confirm';
+  /** RFC 0.9 §9: the card's sensitivity raised by the owner's floors, added by the head when it serves the parts. */
+  effective_sensitivity?: 'normal' | 'private' | 'confirm';
 }
+
+/** Whether an entry is `private` (or `confirm`) as the head served it: counted, never named, outside the signed-in session. */
+const isPrivateEntry = (e: ParagraphEntry) => e.effective_sensitivity !== undefined && e.effective_sensitivity !== 'normal';
 
 /** A thread that is counted, not named: its producer and labels only. */
 export interface CountedThread {
@@ -66,38 +73,83 @@ function counted(rest: CountedThread[]): string {
   return `${plural(rest.length, 'update')} from ${listing(producers)}`;
 }
 
+/** Inline HTML (or the fold's markdown) as plain text: tags and markdown link syntax out, entities decoded. */
+export function plainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface ComposeOptions {
+  /**
+   * For a surface outside the owner's signed-in session (an assistant, a voice client, a notification; RFC 0.9 §4.1
+   * `private`): entries the head marked private or confirm are counted ("and 1 private decision"), never named, and the
+   * text is plain, not HTML.
+   */
+  spoken?: boolean;
+}
+
 /**
  * The paragraph's sentences from its parts, keeping only the entries (and counts) whose card carries one of `chosen`.
  * The first always says what waits ("Nothing waiting for you." when nothing does); the rest are left out when empty.
  */
-export function composeParagraphs(parts: ParagraphParts, chosen: readonly string[] = []): string[] {
+export function composeParagraphs(parts: ParagraphParts, chosen: readonly string[] = [], opts: ComposeOptions = {}): string[] {
   const keep = <T extends { labels: readonly string[] }>(xs: readonly T[] | undefined) => (xs ?? []).filter((x) => matchesLabels(x.labels, chosen));
+  const say = (e: ParagraphEntry) => (opts.spoken ? plainText(e.text) : e.text);
+  /** The entries as items: named ones, then the private ones as one count ("and 2 private decisions") when spoken. */
+  const items = (xs: readonly ParagraphEntry[], noun: string): string[] => {
+    if (!opts.spoken) return xs.map(say);
+    const named = xs.filter((e) => !isPrivateEntry(e)).map(say);
+    const hidden = xs.length - named.length;
+    return hidden === 0 ? named : [...named, `${named.length > 0 ? 'and ' : ''}${plural(hidden, `private ${noun}`)}`];
+  };
   const decisions = keep(parts.decisions);
   const snoozed = parts.snoozed.filter((l) => matchesLabels(l, chosen)).length;
   const tasks = keep(parts.tasks);
   const out: string[] = [];
-  if (decisions.length > 0) out.push(`${plural(decisions.length, 'decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}: ${decisions.map((e) => e.text).join('; ')}.`);
+  const allPrivate = (xs: readonly ParagraphEntry[]) => opts.spoken === true && xs.length > 0 && xs.every(isPrivateEntry);
+  if (decisions.length > 0)
+    out.push(
+      allPrivate(decisions)
+        ? `${plural(decisions.length, 'private decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}.`
+        : `${plural(decisions.length, 'decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}: ${items(decisions, 'decision').join('; ')}.`,
+    );
   else if (tasks.length === 0) out.push(snoozed > 0 ? `Nothing waiting for you; ${plural(snoozed, 'decision')} snoozed.` : 'Nothing waiting for you.');
   else if (snoozed > 0) out.push(`No decisions; ${snoozed} snoozed.`);
   if (tasks.length > 0) {
     const overdue = tasks.filter((t) => t.overdue).length;
-    out.push(`Tasks: ${tasks.length} due${overdue > 0 ? `, ${overdue} overdue` : ''}: ${tasks.map((e) => e.text).join('; ')}.`);
+    const head = `Tasks: ${tasks.length} due${overdue > 0 ? `, ${overdue} overdue` : ''}`;
+    out.push(allPrivate(tasks) ? `${head}, ${tasks.length === 1 ? 'a private one' : 'all private'}.` : `${head}: ${items(tasks, 'task').join('; ')}.`);
   }
 
   const before = keep(parts.yesterday);
-  if (before.length > 0) out.push(`Yesterday: ${before.map((e) => e.text).join('; ')}.`);
+  if (before.length > 0) out.push(`Yesterday: ${items(before, 'matter').join('; ')}.`);
 
   const decided = keep(parts.decided);
   const orders = keep(parts.orders);
-  const told = (xs: ParagraphEntry[]) => xs.map((e) => e.text).join('; ');
-  if (decided.length > 0 && orders.length > 0) out.push(`Yesterday you decided: ${told(decided)}; and your orders came back: ${told(orders)}.`);
-  else if (decided.length > 0) out.push(`Yesterday you decided: ${told(decided)}.`);
-  else if (orders.length > 0) out.push(`Yesterday your orders came back: ${told(orders)}.`);
+  const told = (xs: ParagraphEntry[], noun: string) => items(xs, noun).join('; ');
+  if (decided.length > 0 && orders.length > 0) out.push(`Yesterday you decided: ${told(decided, 'matter')}; and your orders came back: ${told(orders, 'order')}.`);
+  else if (decided.length > 0) out.push(`Yesterday you decided: ${told(decided, 'matter')}.`);
+  else if (orders.length > 0) out.push(`Yesterday your orders came back: ${told(orders, 'order')}.`);
   const mattered = keep(parts.mattered);
   if (mattered.length > 0) {
-    const shown = mattered.slice(0, MATTERED_SHOWN).map((e) => e.text);
-    const more = mattered.length - shown.length;
-    out.push(`What mattered yesterday: ${[...shown, ...(more > 0 ? [`and ${more} more`] : [])].join('; ')}.`);
+    // Spoken, the private ones are left out of the six named and counted after them.
+    const open = opts.spoken ? mattered.filter((e) => !isPrivateEntry(e)) : mattered;
+    const hidden = mattered.length - open.length;
+    const shown = open.slice(0, MATTERED_SHOWN).map(say);
+    const more = open.length - shown.length;
+    const tail = [...(more > 0 ? [`and ${more} more`] : []), ...(hidden > 0 ? [`and ${plural(hidden, 'private matter')}`] : [])];
+    out.push(`What mattered yesterday: ${(shown.length > 0 ? [...shown, ...tail] : [plural(hidden, 'private matter')]).join('; ')}.`);
   }
   const rest = keep(parts.rest);
   if (rest.length > 0) out.push(decided.length + orders.length + mattered.length > 0 ? `And ${counted(rest)}.` : `Yesterday: ${counted(rest)}.`);
@@ -105,6 +157,6 @@ export function composeParagraphs(parts: ParagraphParts, chosen: readonly string
 }
 
 /** The paragraph as one run of prose: the nightly card's lead (§3.1), and the head's `daily_paragraph.html`. */
-export function composeParagraph(parts: ParagraphParts, chosen: readonly string[] = []): string {
-  return composeParagraphs(parts, chosen).join(' ');
+export function composeParagraph(parts: ParagraphParts, chosen: readonly string[] = [], opts: ComposeOptions = {}): string {
+  return composeParagraphs(parts, chosen, opts).join(' ');
 }

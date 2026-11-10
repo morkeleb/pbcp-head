@@ -25,7 +25,7 @@ const errors = (statuses: number[], conflict: 'card' | 'error' = 'card') =>
         description: {
           400: 'The request is malformed (`invalid_request`, `malformed_json`, or a protocol code)',
           401: '`unauthorized`: no session, an expired one, a signed-out device, or a producer token',
-          403: '`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change',
+          403: '`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused',
           404: '`not_found`',
           409: conflict === 'card' ? 'The card is no longer open; the body is the stored card' : '`root_in_use` (minting) or `root_taken` (pairing): the root already has a live token',
           413: '`too_large`: the body is over 1 MiB',
@@ -84,7 +84,20 @@ const PATHS: Record<string, Record<string, Json>> = {
     }),
   },
   '/api/me/brief': {
-    get: operation('getBrief', { summary: 'Everything the Brief screen shows, in one call', ok: ok(S.Brief), errors: [400, 401] }),
+    get: operation('getBrief', {
+      summary: 'Everything the Brief screen shows, in one call',
+      parameters: [
+        {
+          name: 'spoken',
+          in: 'query',
+          required: false,
+          description: '`1`: the daily paragraph for a surface outside the signed-in session (an assistant, a voice client): plain text in `daily_paragraph.text`, private and confirm entries counted, never named (RFC 0.9 §4.1). The parts and lists are unchanged; each carries `effective_sensitivity`.',
+          schema: { type: 'string', enum: ['1'] },
+        },
+      ],
+      ok: ok(S.Brief),
+      errors: [400, 401],
+    }),
   },
   '/api/me/seq': {
     get: operation('getBriefStamp', {
@@ -128,11 +141,14 @@ const PATHS: Record<string, Record<string, Json>> = {
   '/api/me/cards/{id}/decision': {
     post: operation('decide', {
       summary: 'Decide (RFC §7.3)',
-      description: 'Deciding an order `dismissed` cancels it (A.5).',
+      description:
+        'Deciding an order `dismissed` cancels it (A.5). A card whose `effective_sensitivity` is `confirm` (RFC 0.9 §4.1) is decided only if the person identified ' +
+        'themselves on this session within the last five minutes (a passkey or Sign in with Apple sign-in, or POST /api/auth/passkey/step-up); otherwise 403 ' +
+        '`reauthentication_required`, with `window_seconds`, and nothing is recorded. Every value counts, `dismissed` included. An assistant’s token can never satisfy it.',
       parameters: [CARD_ID],
       body: S.DecisionRequest,
       ok: cardResult,
-      errors: [400, 401, 404, 409, 413],
+      errors: [400, 401, 403, 404, 409, 413],
     }),
   },
   '/api/me/cards/{id}/seen': {

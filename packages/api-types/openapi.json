@@ -200,6 +200,18 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/XTimezone"
+          },
+          {
+            "name": "spoken",
+            "in": "query",
+            "required": false,
+            "description": "`1`: the daily paragraph for a surface outside the signed-in session (an assistant, a voice client): plain text in `daily_paragraph.text`, private and confirm entries counted, never named (RFC 0.9 §4.1). The parts and lists are unchanged; each carries `effective_sensitivity`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
           }
         ],
         "responses": {
@@ -524,7 +536,7 @@
       "post": {
         "operationId": "decide",
         "summary": "Decide (RFC §7.3)",
-        "description": "Deciding an order `dismissed` cancels it (A.5).",
+        "description": "Deciding an order `dismissed` cancels it (A.5). A card whose `effective_sensitivity` is `confirm` (RFC 0.9 §4.1) is decided only if the person identified themselves on this session within the last five minutes (a passkey or Sign in with Apple sign-in, or POST /api/auth/passkey/step-up); otherwise 403 `reauthentication_required`, with `window_seconds`, and nothing is recorded. Every value counts, `dismissed` included. An assistant’s token can never satisfy it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/XTimezone"
@@ -572,6 +584,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session, an expired one, a signed-out device, or a producer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -1842,7 +1864,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -2119,7 +2141,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -2174,7 +2196,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -2498,7 +2520,7 @@
             }
           },
           "403": {
-            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change",
+            "description": "`insufficient_scope`: an assistant’s token on a route its tools do not use; `not_this_device`: a setting only that device may change; `reauthentication_required` (deciding a card whose effective sensitivity is `confirm`, RFC 0.9 §4.1, §7.4): identify yourself again with POST /api/auth/passkey/step-up and decide within `window_seconds`; an assistant’s token is always refused",
             "content": {
               "application/json": {
                 "schema": {
@@ -2552,6 +2574,11 @@
           "message": {
             "type": "string",
             "description": "For people; its wording may change"
+          },
+          "window_seconds": {
+            "description": "On 403 `reauthentication_required`: how long an identification counts; identify yourself and decide within it",
+            "type": "integer",
+            "exclusiveMinimum": 0
           }
         },
         "required": [
@@ -2606,6 +2633,14 @@
               "immediate",
               "brief",
               "log"
+            ]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "private",
+              "confirm"
             ]
           },
           "thread": {
@@ -2836,6 +2871,24 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
                 }
               },
               "required": [
@@ -2878,6 +2931,24 @@
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
                 },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
                 "overdue": {
                   "type": "boolean",
                   "description": "Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded"
@@ -2912,6 +2983,24 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
                 }
               },
               "required": [
@@ -2942,6 +3031,24 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
                 }
               },
               "required": [
@@ -2972,6 +3079,24 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
                 }
               },
               "required": [
@@ -3025,6 +3150,24 @@
                 "text": {
                   "type": "string",
                   "description": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card"
+                },
+                "sensitivity": {
+                  "description": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
+                },
+                "effective_sensitivity": {
+                  "description": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text",
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ]
                 }
               },
               "required": [
@@ -3088,6 +3231,14 @@
               "immediate",
               "brief",
               "log"
+            ]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "private",
+              "confirm"
             ]
           },
           "thread": {
@@ -3347,6 +3498,19 @@
           "paragraph": {
             "description": "On a `head:daily` card: its paragraph in parts",
             "$ref": "#/components/schemas/ParagraphParts"
+          },
+          "spoken_paragraph": {
+            "description": "On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)",
+            "type": "string"
+          },
+          "effective_sensitivity": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "private",
+              "confirm"
+            ],
+            "description": "RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)"
           }
         },
         "required": [
@@ -3366,7 +3530,8 @@
           "lead",
           "lead_source",
           "rendered_lead",
-          "day"
+          "day",
+          "effective_sensitivity"
         ],
         "additionalProperties": {}
       },
@@ -3488,6 +3653,14 @@
                   "immediate",
                   "brief",
                   "log"
+                ]
+              },
+              "sensitivity": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
                 ]
               },
               "thread": {
@@ -3748,6 +3921,19 @@
                 "description": "On a `head:daily` card: its paragraph in parts",
                 "$ref": "#/components/schemas/ParagraphParts"
               },
+              "spoken_paragraph": {
+                "description": "On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)",
+                "type": "string"
+              },
+              "effective_sensitivity": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ],
+                "description": "RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)"
+              },
               "lease": {
                 "description": "On an order: its lease as the owner sees it",
                 "type": "object",
@@ -3797,7 +3983,8 @@
               "lead",
               "lead_source",
               "rendered_lead",
-              "day"
+              "day",
+              "effective_sensitivity"
             ],
             "additionalProperties": {}
           },
@@ -4064,6 +4251,10 @@
               {
                 "type": "object",
                 "properties": {
+                  "text": {
+                    "description": "With `spoken=1`: the paragraph in plain text, private and confirm entries counted, never named (RFC 0.9 §4.1); `html` is then the same text, escaped",
+                    "type": "string"
+                  },
                   "html": {
                     "type": "string",
                     "description": "Safe inline HTML, the parts’ sentences as one run of prose: \"N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from ….\" with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8)"
@@ -4166,6 +4357,14 @@
                     "immediate",
                     "brief",
                     "log"
+                  ]
+                },
+                "sensitivity": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
                   ]
                 },
                 "thread": {
@@ -4426,6 +4625,19 @@
                   "description": "On a `head:daily` card: its paragraph in parts",
                   "$ref": "#/components/schemas/ParagraphParts"
                 },
+                "spoken_paragraph": {
+                  "description": "On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)",
+                  "type": "string"
+                },
+                "effective_sensitivity": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "private",
+                    "confirm"
+                  ],
+                  "description": "RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)"
+                },
                 "overdue": {
                   "description": "An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card",
                   "type": "boolean",
@@ -4449,7 +4661,8 @@
                 "lead",
                 "lead_source",
                 "rendered_lead",
-                "day"
+                "day",
+                "effective_sensitivity"
               ],
               "additionalProperties": {}
             },
@@ -4605,6 +4818,14 @@
               "immediate",
               "brief",
               "log"
+            ]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "private",
+              "confirm"
             ]
           },
           "thread": {
@@ -4865,6 +5086,19 @@
             "description": "On a `head:daily` card: its paragraph in parts",
             "$ref": "#/components/schemas/ParagraphParts"
           },
+          "spoken_paragraph": {
+            "description": "On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)",
+            "type": "string"
+          },
+          "effective_sensitivity": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "private",
+              "confirm"
+            ],
+            "description": "RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)"
+          },
           "lease": {
             "type": "object",
             "properties": {
@@ -4976,6 +5210,7 @@
           "lead_source",
           "rendered_lead",
           "day",
+          "effective_sensitivity",
           "lease",
           "progress"
         ],
@@ -5100,6 +5335,22 @@
               }
             ],
             "description": "The most recent zone a device sent"
+          },
+          "sensitivity_floor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner’s floor for every card (RFC 0.9 §9), or null"
           }
         },
         "required": [
@@ -5108,7 +5359,8 @@
           "timezone",
           "timezone_source",
           "timezone_override",
-          "device_timezone"
+          "device_timezone",
+          "sensitivity_floor"
         ],
         "additionalProperties": false
       },
@@ -5125,6 +5377,22 @@
               "brief",
               "log"
             ]
+          },
+          "sensitivity_floor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner’s sensitivity floor on it (RFC 0.9 §9), or null"
           },
           "executor": {
             "type": "boolean"
@@ -5187,6 +5455,7 @@
         "required": [
           "root",
           "ceiling",
+          "sensitivity_floor",
           "executor",
           "revoked",
           "tokens",
@@ -5235,12 +5504,29 @@
               }
             ],
             "description": "The owner’s ceiling on it (§9), or null"
+          },
+          "sensitivity_floor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner’s sensitivity floor on it (RFC 0.9 §9), or null"
           }
         },
         "required": [
           "label",
           "cards",
-          "ceiling"
+          "ceiling",
+          "sensitivity_floor"
         ],
         "additionalProperties": false
       },
@@ -5539,6 +5825,22 @@
               "log"
             ]
           },
+          "sensitivity_floor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner’s sensitivity floor on its producer (RFC 0.9 §9: per root), or null"
+          },
           "created_at": {
             "type": "string",
             "description": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)"
@@ -5598,6 +5900,7 @@
           "instance",
           "executor",
           "ceiling",
+          "sensitivity_floor",
           "created_at",
           "last_used_at",
           "paired"
@@ -6007,6 +6310,22 @@
               "string",
               "null"
             ]
+          },
+          "sensitivity_floor": {
+            "description": "The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -6026,6 +6345,22 @@
             "description": "Revokes every token of the root; mint a new one to bring it back",
             "type": "boolean",
             "const": true
+          },
+          "sensitivity_floor": {
+            "description": "The owner’s sensitivity floor on the producer (RFC 0.9 §9): raises the effective sensitivity of its cards, already stored or not; null clears it",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -6033,6 +6368,7 @@
         "type": "object",
         "properties": {
           "ceiling": {
+            "description": "Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)",
             "anyOf": [
               {
                 "type": "string",
@@ -6045,13 +6381,25 @@
               {
                 "type": "null"
               }
-            ],
-            "description": "Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)"
+            ]
+          },
+          "sensitivity_floor": {
+            "description": "The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        },
-        "required": [
-          "ceiling"
-        ]
+        }
       },
       "DevicePatch": {
         "type": "object",
@@ -6172,6 +6520,22 @@
           "name": {
             "description": "The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes",
             "type": "string"
+          },
+          "sensitivity_floor": {
+            "description": "The floor on its producer (every token of its root). The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "private",
+                  "confirm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
