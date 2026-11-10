@@ -9,18 +9,37 @@ import { inviteRequests } from '../db/schema';
 import { iso } from './clock';
 import { defaultHead } from './heads';
 import { HttpError } from './http';
+import { digest, open, seal } from './crypto';
+import { dataKey } from './keys';
 
 const EMAIL = /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]+$/;
 export const EMAIL_MAX = 254;
 
-/** Records a request for an invite; asking again with the same address changes nothing. */
+/**
+ * Records a request for an invite; asking again with the same address changes nothing. At rest (lib/vault.ts): the
+ * address is sealed under the deployment head's data key, and `email` holds a keyed digest of it, lowercased, so the
+ * unique index still catches a repeat. With no head on the deployment yet there is no key, and it is kept as before.
+ */
 export async function requestInvite(db: Db, body: { email?: unknown }, userAgent: string | null): Promise<void> {
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   if (email.length > EMAIL_MAX || !EMAIL.test(email)) throw new HttpError(400, 'invalid_email', 'an email address, please');
+  const head = await defaultHead(db);
+  const key = head ? await dataKey(db, head, { create: true }) : null;
+  const values = key && head
+    ? { email: `d:${digest(key, 'invite.email', email.toLowerCase())}`, content: { email: seal(key, head, 'invite_requests.email', email) } }
+    : { email };
   await db
     .insert(inviteRequests)
-    .values({ email, userAgent: userAgent?.slice(0, 300) ?? null })
+    .values({ ...values, userAgent: userAgent?.slice(0, 300) ?? null })
     .onConflictDoNothing(); // the unique index on lower(email)
+}
+
+/** A request's address in clear: opened from its content, or (rows before encryption) as stored. */
+function emailOf(r: typeof inviteRequests.$inferSelect, head: string | null, key: Buffer | null): string {
+  const c = r.content as { email?: string } | null;
+  if (!c?.email) return r.email;
+  if (!key || !head) throw new Error('an invite request is sealed and the deployment head has no data key');
+  return open(key, head, 'invite_requests.email', c.email);
 }
 
 async function operator(db: Db, headId: string): Promise<void> {
@@ -31,7 +50,8 @@ async function operator(db: Db, headId: string): Promise<void> {
 export async function listInvites(db: Db, headId: string) {
   await operator(db, headId);
   const rows = await db.select().from(inviteRequests).orderBy(asc(inviteRequests.createdAt), asc(inviteRequests.id));
-  return rows.map((r) => ({ id: String(r.id), email: r.email, created_at: iso(r.createdAt), user_agent: r.userAgent }));
+  const key = await dataKey(db, headId);
+  return rows.map((r) => ({ id: String(r.id), email: emailOf(r, headId, key), created_at: iso(r.createdAt), user_agent: r.userAgent }));
 }
 
 /** DELETE /api/me/settings/invites/{id}. */

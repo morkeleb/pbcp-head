@@ -14,7 +14,9 @@ import { composeParagraph, type ParagraphParts } from './brief/paragraph';
 import { dailyParagraphNow } from './brief/nightly';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
-import { replacedBy, toCard, type Successor } from './store';
+import { openRows, replacedBy, toCard, type Successor } from './store';
+import { dataKey } from './keys';
+import { openLogRow } from './vault';
 import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
@@ -102,7 +104,7 @@ async function orderThread(db: Db, headId: string, orderId: string): Promise<Row
     .from(cards)
     .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' = ${orderId}`))
     .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
-    .limit(200);
+    .limit(200).then((rows) => openRows(db, rows));
 }
 
 /** An order's lease as the owner sees it (head-private, A.2). */
@@ -208,14 +210,14 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.producer, 'head'), eq(cards.namespace, 'daily'), lte(cards.id, `head:daily:${today}`)))
     .orderBy(desc(cards.id))
-    .limit(1);
+    .limit(1).then((rows) => openRows(db, rows));
 
   const decisions = await db
     .select()
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'decision'`, notSnoozed(at)))
     .orderBy(desc(cards.receivedAt), desc(cards.changeSeq))
-    .limit(200);
+    .limit(200).then((rows) => openRows(db, rows));
 
   // §8, §4.5: every open task that is not snoozed and whose day is today or earlier (an earlier one is overdue), and the
   // tasks closed today: decided here (done, a listed action, dismissed) or superseded by the producer's record of what
@@ -246,7 +248,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
       ),
     )
     .orderBy(asc(cards.receivedAt), asc(cards.id)) // ties in when they are due keep the order they came in
-    .limit(200);
+    .limit(200).then((rows) => openRows(db, rows));
   const tasks = (await presentCards(db, taskRows))
     .filter((c) => c.state !== 'superseded' || c.replaced_by?.kind !== 'task')
     .sort(byDue(head.timezone))
@@ -267,7 +269,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
         notSnoozed(at),
       ),
     )
-    .orderBy(asc(cards.changeSeq));
+    .orderBy(asc(cards.changeSeq)).then((rows) => openRows(db, rows));
 
   // Orders with progress or an outcome since the last visit (A.3): one row each in the brief, "<order> — <newest
   // card's lead>", which stands for those cards; an open order that has been quiet since has none. An outcome that
@@ -277,7 +279,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' like 'head:order:%'`, sql`${cards.producerDoc}->>'kind' <> 'decision'`, gt(cards.changeSeq, head.lastVisitSeq)))
     .orderBy(asc(cards.changeSeq))
-    .limit(500);
+    .limit(500).then((rows) => openRows(db, rows));
   const newsByOrder = new Map<string, Row[]>();
   for (const r of news) {
     const order = (r.producerDoc as { thread: string }).thread;
@@ -333,7 +335,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.outcome, 'stale'), eq(cards.state, 'open'), isNull(cards.acknowledgedAt)))
     .orderBy(desc(cards.changeSeq))
-    .limit(50);
+    .limit(50).then((rows) => openRows(db, rows));
   // A.2: a lease that lapsed with no outcome usually means a worker died. The head surfaces those orders here
   // rather than minting a signal card per lapse.
   const lapsed = await db
@@ -341,7 +343,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), eq(cards.execState, 'open'), gt(cards.claimSeq, 0)))
     .orderBy(desc(cards.changeSeq))
-    .limit(50);
+    .limit(50).then((rows) => openRows(db, rows));
 
   // Tomorrow: cards snoozed until then, and cards whose day is tomorrow (§8: their `about`, the calendar's agenda).
   const tomorrow = addDays(today, 1);
@@ -357,7 +359,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
       ),
     )
     .orderBy(asc(cards.receivedAt))
-    .limit(100);
+    .limit(100).then((rows) => openRows(db, rows));
 
   // The day opens with its paragraph (lib/brief/fold.ts): the nightly card's lead once it exists, else the same
   // fold now, "so far today". None on a day with nothing open and nothing new. Either way with its parts, each entry
@@ -458,12 +460,14 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
   where.push(gt(cards.changeSeq, after));
   const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
 
-  const rows = await db.select().from(cards).where(and(...where)).orderBy(asc(cards.changeSeq)).limit(limit);
-  const presented = await presentCards(db, rows);
+  const raw = await db.select().from(cards).where(and(...where)).orderBy(asc(cards.changeSeq)).limit(limit);
+  // At rest: opened for this response; a row that fails its integrity check is left out, and the page's cursor still
+  // comes from what was read, so paging goes on past it.
+  const presented = await presentCards(db, await openRows(db, raw));
   return {
     // One day: in the day's order (§8, by `at`, then by received_at); the page and `next` stay in change_seq order.
     cards: q.date ? presented.sort(byTime) : presented,
-    next: rows.length === limit ? rows.at(-1)!.changeSeq : null,
+    next: raw.length === limit ? raw.at(-1)!.changeSeq : null,
     timezone: head.timezone,
     ...(before !== undefined ? { before } : {}),
   };
@@ -473,7 +477,7 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
 
 async function rowsById(db: Db, headId: string, ids: string[]): Promise<Map<string, Row>> {
   if (ids.length === 0) return new Map();
-  const rows = await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids)));
+  const rows = await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids))).then((rows) => openRows(db, rows));
   return new Map(rows.map((r) => [r.id, r]));
 }
 
@@ -482,7 +486,7 @@ async function rowsById(db: Db, headId: string, ids: string[]): Promise<Map<stri
  * its references resolved (null when this head does not hold one), and every card of its thread, newest last.
  */
 export async function cardWithThread(db: Db, headId: string, id: string) {
-  const [row] = await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
+  const [row] = await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id))).then((rows) => openRows(db, rows));
   if (!row) throw new HttpError(404, 'not_found', `no card ${id}`);
 
   const predecessors: Row[] = [];
@@ -500,7 +504,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
       .select()
       .from(cards)
       .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'supersedes' = ${cur}`))
-      .limit(1);
+      .limit(1).then((rows) => openRows(db, rows));
     if (!next || seen.has(next.id)) break;
     seen.add(next.id);
     successors.push(next);
@@ -522,6 +526,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
           .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'thread' = ${thread}`))
           .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
           .limit(200)
+          .then((rows) => openRows(db, rows))
       : [];
 
   const summary = (r: Row) => {
@@ -536,11 +541,16 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
   // The decision log for this card (§4.4, §11.3: every decision, and the card it was made on), oldest first, with the
   // device that recorded it by name.
   const log = await db
-    .select({ seq: decisionLog.seq, decision: decisionLog.decision, decidedAt: decisionLog.decidedAt, editedProposal: decisionLog.editedProposal, comment: decisionLog.comment, delegatedTo: decisionLog.delegatedTo, actor: decisionLog.actor, device: devices.name, platform: devices.platform })
+    .select({ seq: decisionLog.seq, decision: decisionLog.decision, decidedAt: decisionLog.decidedAt, editedProposal: decisionLog.editedProposal, comment: decisionLog.comment, content: decisionLog.content, delegatedTo: decisionLog.delegatedTo, actor: decisionLog.actor, device: devices.name, platform: devices.platform })
     .from(decisionLog)
     .leftJoin(devices, eq(devices.id, decisionLog.actor))
     .where(and(eq(decisionLog.headId, headId), eq(decisionLog.cardId, row.id)))
-    .orderBy(asc(decisionLog.seq));
+    .orderBy(asc(decisionLog.seq))
+    // At rest: each row's comment and edited text opened for this response.
+    .then(async (rows) => {
+      const key = await dataKey(db, headId);
+      return rows.map((r) => openLogRow({ ...r, headId }, key));
+    });
   const head = await headSettings(db, headId);
   return {
     timezone: head.timezone,

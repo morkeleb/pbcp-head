@@ -4,7 +4,9 @@
 // `ensureRendered`, which redraws only what is missing or stale (a failed draw, a newer body).
 
 import { actionId, type Card } from '@pbcp/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { dataKey } from '../keys';
+import { openDiagram, sealDiagram, sealField } from '../vault';
 import { createHash } from 'node:crypto';
 import type { Db } from '../../db/client';
 import { cards, diagrams } from '../../db/schema';
@@ -17,7 +19,7 @@ import { proxiedImageSrc } from './proxy';
 import { sanitiseSvg } from './svg';
 
 /** Bump when the pipeline's output changes, so stored renders are redone on next read. */
-export const RENDER_VERSION = 'h2.4'; // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body; h2.3: `**bold**` leads stay bold; h2.4: a list or quote lead loses its marker
+export const RENDER_VERSION = 'h2.5'; // h2.5: a head's diagrams are its own, sealed, served with ?h= // h2.2: the lead (RFC 0.6 §3.1) is rendered with the body; h2.3: `**bold**` leads stay bold; h2.4: a list or quote lead loses its marker
 
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -31,44 +33,82 @@ export const resetDrawCount = (): void => void (g.__pbcpDraws = 0);
  * instead); an infrastructure failure is not, so the next render of a card with this fence tries again. Not counted
  * in drawCount, which is the pipeline's one drawing per fence (R07).
  */
-async function drawDark(db: Db, hash: string, source: string): Promise<void> {
+/**
+ * At rest (lib/vault.ts): a head's diagrams are its content, sealed under its data key, so the cache is per head: the
+ * row's key is the fence's hash scoped to the head (sha256 of "<head>:<fence hash>"), and the drawing's address names the
+ * head (`?h=`), whose key the route opens it with. The front door's demo (no head) draws into public rows, in clear.
+ */
+export const scopedHash = (headId: string | null, fenceHash: string) => (headId === null ? fenceHash : sha256(`${headId}:${fenceHash}`));
+
+/** Where a drawing is served from: the head's own, or (the demo) the public one. */
+export const svgSrc = (headId: string | null) => (hash: string) => (headId === null ? `/api/me/svg/${hash}` : `/api/me/svg/${hash}?h=${encodeURIComponent(headId)}`);
+
+type Drawn = { svg: string | null; svgDark: string | null; error: string | null; errorDark: string | null };
+
+async function readDiagram(db: Db, headId: string | null, hash: string): Promise<Drawn | null> {
+  const [row] = await db.select().from(diagrams).where(eq(diagrams.hash, hash));
+  if (!row) return null;
+  return openDiagram(row, headId === null ? null : await dataKey(db, headId), headId);
+}
+
+async function writeDiagram(db: Db, headId: string | null, hash: string, type: string, d: Partial<Drawn>, update = false): Promise<void> {
+  const key = headId === null ? null : await dataKey(db, headId, { create: true });
+  const content = sealDiagram(key, headId, d);
+  if (update) await db.update(diagrams).set({ content: sql`coalesce(${diagrams.content}, '{}'::jsonb) || ${JSON.stringify(content)}::jsonb` }).where(eq(diagrams.hash, hash));
+  else await db.insert(diagrams).values({ hash, type, content }).onConflictDoNothing();
+}
+
+async function drawDark(db: Db, headId: string | null, hash: string, source: string, fenceHash: string): Promise<void> {
   try {
-    const svgDark = sanitiseSvg(await drawSvg(source, `d${hash.slice(0, 12)}`, 'dark'), { allowStyle: true });
-    await db.update(diagrams).set({ svgDark }).where(eq(diagrams.hash, hash));
+    const svgDark = sanitiseSvg(await drawSvg(source, `d${fenceHash.slice(0, 12)}`, 'dark'), { allowStyle: true });
+    await writeDiagram(db, headId, hash, '', { svgDark }, true);
   } catch (e) {
-    if (e instanceof DiagramError) await db.update(diagrams).set({ errorDark: e.message }).where(eq(diagrams.hash, hash));
+    if (e instanceof DiagramError) await writeDiagram(db, headId, hash, '', { errorDark: e.message }, true);
     else console.error(`drawing ${hash} for a dark page failed; it is retried on the next render`, e);
   }
 }
 
-/** The diagram dependency of the markdown renderer: cached, drawn on a miss, in both page themes. */
-export function cachedDiagrams(db: Db) {
+/** The diagram dependency of the markdown renderer: cached per head, drawn on a miss, in both page themes. */
+export function cachedDiagrams(db: Db, headId: string | null = null) {
   return async (source: string): Promise<DiagramOutcome> => {
-    const hash = sha256(source);
-    const [hit] = await db.select().from(diagrams).where(eq(diagrams.hash, hash));
+    const fenceHash = sha256(source);
+    const hash = scopedHash(headId, fenceHash);
+    let hit = await readDiagram(db, headId, hash);
+    // A head's drawing from before the cache was per head: kept, sealed, rather than drawn again.
+    if (!hit && headId !== null) {
+      const old = await readDiagram(db, null, fenceHash);
+      if (old && (old.svg !== null || old.error !== null)) {
+        await writeDiagram(db, headId, hash, diagramType(source), old);
+        hit = old;
+      }
+    }
     if (hit) {
       // Drawn before dark drawings existed, or a dark drawing that failed for want of a browser: draw it now.
-      if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(db, hash, source);
+      if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(db, headId, hash, source, fenceHash);
       return hit.svg !== null ? { status: 'render', hash } : { status: 'fallback', message: hit.error ?? 'diagram could not be drawn' };
     }
     g.__pbcpDraws = drawCount() + 1;
-    let row: typeof diagrams.$inferInsert;
+    let drawn: Partial<Drawn>;
     try {
-      // A stable id from the hash keeps the drawing identical across draws (§3.1 Determinism).
-      const svg = sanitiseSvg(await drawSvg(source, `d${hash.slice(0, 12)}`), { allowStyle: true });
-      row = { hash, type: diagramType(source), svg };
+      // A stable id from the fence's hash keeps the drawing identical across draws (§3.1 Determinism).
+      drawn = { svg: sanitiseSvg(await drawSvg(source, `d${fenceHash.slice(0, 12)}`), { allowStyle: true }) };
     } catch (e) {
       if (!(e instanceof DiagramError)) throw e; // infrastructure: do not cache, let the next read retry
-      row = { hash, type: diagramType(source), error: e.message };
+      drawn = { error: e.message };
     }
-    await db.insert(diagrams).values(row).onConflictDoNothing();
-    if (row.svg) await drawDark(db, hash, source);
-    return row.svg ? { status: 'render', hash } : { status: 'fallback', message: row.error! };
+    await writeDiagram(db, headId, hash, diagramType(source), drawn);
+    if (drawn.svg) await drawDark(db, headId, hash, source, fenceHash);
+    return drawn.svg ? { status: 'render', hash } : { status: 'fallback', message: drawn.error! };
   };
 }
 
-export function renderBody(db: Db, body: string): Promise<Rendered> {
-  return renderMarkdown(body, { diagram: cachedDiagrams(db), imageSrc: proxiedImageSrc });
+/** A diagram's drawings for the route, opened with the head's key (or the public ones). */
+export async function servedDiagram(db: Db, headId: string | null, hash: string): Promise<Drawn | null> {
+  return readDiagram(db, headId, hash);
+}
+
+export function renderBody(db: Db, body: string, headId: string | null = null): Promise<Rendered> {
+  return renderMarkdown(body, { diagram: cachedDiagrams(db, headId), imageSrc: proxiedImageSrc, svgSrc: svgSrc(headId) });
 }
 
 export interface RenderMeta {
@@ -92,24 +132,27 @@ export const renderSource = (card: Card): string => sha256(JSON.stringify([RENDE
 
 /** Renders a card's body and option bodies and stores them beside it. */
 export async function renderCard(db: Db, headId: string, card: Card): Promise<CardRender> {
-  const { html, actions, meta } = await renderCardContent(db, card);
-  const body = { html };
+  const { html, actions, meta } = await renderCardContent(db, card, headId);
+  // At rest: the rendered output sealed into the card's content (lib/vault.ts); what it was rendered from stays clear.
+  const key = await dataKey(db, headId, { create: true });
+  if (!key) return { html, actions, meta }; // the head is gone (deleted while this rendered): nothing to store
+  const sealed = { html: sealField(key, headId, 'html', html), actions: sealField(key, headId, 'actions', actions), meta: sealField(key, headId, 'meta', meta) };
   await db
     .update(cards)
-    .set({ renderedHtml: body.html, renderedActions: actions, renderedMeta: meta, renderedFrom: renderSource(card) })
+    .set({ content: sql`coalesce(${cards.content}, '{"v":1}'::jsonb) || ${JSON.stringify(sealed)}::jsonb`, renderedFrom: renderSource(card) })
     .where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
-  return { html: body.html, actions, meta };
+  return { html, actions, meta };
 }
 
 /**
  * A card's body, option bodies and lead through the pipeline, stored nowhere (the diagram cache aside): renderCard
  * keeps the result on the card's row; the front door's demo brief (lib/demo) shows it and keeps nothing.
  */
-export async function renderCardContent(db: Db, card: Card): Promise<CardRender> {
-  const body = await renderBody(db, card.body);
+export async function renderCardContent(db: Db, card: Card, headId: string | null = null): Promise<CardRender> {
+  const body = await renderBody(db, card.body, headId);
   const actions: Record<string, string> = {};
-  for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(db, md)).html;
-  const lead = await presentLead(card, async (md) => (await renderBody(db, md)).html);
+  for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(db, md, headId)).html;
+  const lead = await presentLead(card, async (md) => (await renderBody(db, md, headId)).html);
   const meta: RenderMeta = { firstVisual: body.firstVisual, lead, fences: body.result.fences.map((f) => ({ type: f.type, class: f.class })) };
   return { html: body.html, actions, meta };
 }

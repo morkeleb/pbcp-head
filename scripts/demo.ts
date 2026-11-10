@@ -12,7 +12,8 @@
 //
 // Run it with the deployment's DATABASE_URL and SESSION_SECRET (docs/deploy.md, "Demo data").
 
-import { and, eq, inArray, like, or, sql } from 'drizzle-orm';
+import { openRows } from '../lib/store';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { parseArgs } from 'node:util';
 import { openDb } from '../db/client';
 import { cards, decisionLog, devices, producerTokens } from '../db/schema';
@@ -35,10 +36,10 @@ if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 const db = openDb(process.env.DATABASE_URL, 1);
 
 async function remove() {
-  const orders = await db
-    .select({ id: cards.id })
-    .from(cards)
-    .where(and(eq(cards.headId, head!), eq(cards.producer, 'head'), eq(cards.namespace, 'order'), like(sql`${cards.producerDoc}->>'body'`, `%${DEMO_MARK}%`)));
+  // At rest: an order's body is sealed, so the demo's are found by opening the head's orders, never by a query on content.
+  const orders = (await openRows(db, await db.select().from(cards).where(and(eq(cards.headId, head!), eq(cards.producer, 'head'), eq(cards.namespace, 'order'))))).filter((o) =>
+    String((o.producerDoc as { body?: string }).body ?? '').includes(DEMO_MARK),
+  );
   const orderIds = orders.map((o) => o.id);
   const doomed = await db
     .select({ id: cards.id })

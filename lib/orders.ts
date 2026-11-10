@@ -14,7 +14,7 @@ import { cards, producerTokens } from '../db/schema';
 import { now } from './clock';
 import { decodeId } from './http';
 import type { Outcome } from './protocol';
-import { load, persist, toCard, writeTx, type Tx } from './store';
+import { load, openRows, persist, toCard, writeTx, type Tx } from './store';
 
 /** A head-chosen upper bound on a lease (OPEN, Orders 10: "the upper bound is the head's"). One day. */
 export const MAX_LEASE_SECONDS = 24 * 60 * 60;
@@ -131,6 +131,6 @@ export async function ordersFor(db: Db, headId: string) {
     .from(cards)
     .where(and(eq(cards.headId, headId), isNotNull(cards.toProducer), or(inArray(cards.execState, ['open', 'claimed']), gte(cards.changedAt, since))))
     .orderBy(sql`${cards.receivedAt} desc`)
-    .limit(200);
+    .limit(200).then((rows) => openRows(db, rows));
   return rows.map(toCard);
 }

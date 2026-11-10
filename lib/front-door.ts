@@ -5,4 +5,6 @@ export const DOCS_URL = process.env.PBCP_DOCS_URL || 'https://morkeleb.github.io
 
 /** This head's source, and the guide to running it yourself. */
 export const GITHUB_URL = 'https://github.com/morkeleb/pbcp-head';
+/** What the head keeps, encrypted and not, and who may read it (docs/trust.md). */
+export const TRUST_URL = `${GITHUB_URL}/blob/main/docs/trust.md`;
 export const DEPLOY_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/deploy.md`;

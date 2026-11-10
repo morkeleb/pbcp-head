@@ -11,6 +11,7 @@ import { addDays, localDate, localMinutes, zonedInstant } from './time';
 import { SNOOZE_PRESETS } from './api/schemas';
 import { canonicalZone, effectiveTimezone } from './timezone';
 import { listDevices } from './me';
+import { openRows } from './store';
 import { parseQuarterHour } from './push/daily';
 import { bumpSettingsSeq, floorsOf, isSensitivity, loadPolicy, parseFloor, setFloor, type Sensitivity } from './sensitivity';
 
@@ -87,9 +88,13 @@ export async function updateProducer(db: Db, headId: string, root: string, body:
  * set on it, if any (§9: a head MAY set ceilings per label), by label.
  */
 export async function listLabels(db: Db, headId: string) {
-  const used = await db.execute<{ label: string; cards: number }>(
-    sql`select l as label, count(*)::int as cards from ${cards}, jsonb_array_elements_text(coalesce(${cards.producerDoc}->'labels', '[]'::jsonb)) as l where ${cards.headId} = ${headId} group by l`,
-  );
+  // At rest: labels are sealed (a producer's words about the person's life), so they are counted here, on the opened
+  // rows, never in a query.
+  const tally = new Map<string, number>();
+  for (const r of await openRows(db, await db.select().from(cards).where(eq(cards.headId, headId)))) {
+    for (const l of ((r.producerDoc as { labels?: string[] }).labels ?? [])) tally.set(l, (tally.get(l) ?? 0) + 1);
+  }
+  const used = [...tally.entries()].map(([label, cards]) => ({ label, cards }));
   const set = await db.select().from(labelCeilings).where(eq(labelCeilings.headId, headId));
   const ceilings = new Map(set.map((r) => [r.label, r.ceiling as Urgency]));
   const floors = (await loadPolicy(db, headId)).labels;
