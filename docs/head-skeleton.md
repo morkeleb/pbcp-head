@@ -4,7 +4,7 @@ Extracted from the pbcp repo's `docs/skeleton.md`. The protocol packages are in 
 
 ## Repo 2 — `head` (Sustainable Use)
 
-The product: the reference head and its phone app, one API contract between them. Depends on `@pbcp/core` and `@pbcp/client` from npm, pinned, and runs the conformance suite in CI.
+The product: the reference head and its phone app, one API contract between them. Depends on `@pbcp/core` and `@pbcp/client` from npm, pinned, and runs the conformance suite in CI: all 70 cases of the Draft 0.9 suite (core C01–C59 without C23, render R01–R12) pass over HTTP.
 
 ```
 head/
