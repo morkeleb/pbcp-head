@@ -10,7 +10,7 @@
 import Link from 'next/link';
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { composeParagraphs } from '../../../lib/brief/paragraph';
+import { composeParagraphs, foldViews } from '../../../lib/brief/paragraph';
 import { isOverdue, wasOverdue } from '../../../lib/brief/tasks';
 import { useLocale, type MeCard } from '../components';
 import { DailyBrief } from './DailyBrief';
@@ -56,15 +56,20 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
   // One short paragraph per part of the brief (lib/brief/paragraph.ts), filtered by the chosen labels; a paragraph the
   // head did not keep in parts is the one run of prose it was written as.
   const p = day.paragraph;
-  const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? []) : [p.html];
-  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} />;
+  const paragraphs = !p ? [] : p.parts ? composeParagraphs(p.parts, p.chosen ?? [], { foldMarks: true }) : [p.html];
+  const folds = p?.parts ? foldViews(p.parts, p.chosen ?? []) : [];
+  const brief = heading && <DailyBrief heading={heading} paragraphs={paragraphs} soFar={p?.soFar} folds={folds} />;
   // RFC 0.9 §4.5: the day's tasks together, overdue first and marked; only when there are any. Under the schedule in
   // both layouts.
   const now = new Date();
-  const late = day.tasks.filter((c) => wasOverdue(c, now, tz));
-  const due = day.tasks.filter((c) => !late.includes(c));
-  const open = day.tasks.filter((c) => c.state === 'open').length;
-  const overdue = day.tasks.filter((c) => isOverdue(c, now, tz)).length;
+  // RFC 0.9 §9 "Folding": tasks under a label the owner set to `count` stand apart, under a collapsed Routine group,
+  // ticked from there; the paragraph counts them as routine. The rest are counted in the heading.
+  const listed = day.tasks.filter((c) => !c.routine);
+  const routine = day.tasks.filter((c) => c.routine);
+  const late = listed.filter((c) => wasOverdue(c, now, tz));
+  const due = listed.filter((c) => !late.includes(c));
+  const open = listed.filter((c) => c.state === 'open').length;
+  const overdue = listed.filter((c) => isOverdue(c, now, tz)).length;
   const tasks = task && day.tasks.length > 0 && (
     <Group title={`Tasks · ${open} open${overdue > 0 ? `, ${overdue} overdue` : ''}`} data="tasks">
       {/* On the timeline, on the rail of the schedule above it: each ring under the schedule's dots, as on the broadsheet. */}
@@ -82,6 +87,7 @@ export function DaySection({ day, name, wide, tz, decision, update, task, onChan
             <div className="divide-y border-y" data-due-tasks>{due.map((c) => task(c, false))}</div>
           </>
         )}
+        {routine.length > 0 && <Routine tasks={routine} spaced={listed.length > 0} row={(c) => task(c, wasOverdue(c, now, tz))} />}
       </div>
     </Group>
   );
@@ -237,5 +243,25 @@ function Updates({ title, threads, orders = [], wide, update, tz, date }: {
         </button>
       )}
     </Group>
+  );
+}
+
+/** RFC 0.9 §9: the day's routine tasks, behind "Routine (N)", N the open ones; opened, each is an ordinary task row. */
+function Routine({ tasks, spaced, row }: { tasks: MeCard[]; spaced: boolean; row: (c: MeCard) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const count = tasks.filter((c) => c.state === 'open').length;
+  return (
+    <div className={cn(spaced && 'mt-3')} data-routine>
+      <button
+        type="button"
+        className="pb-1 text-meta font-semibold uppercase tracking-meta text-muted-foreground hover:text-foreground"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        data-routine-toggle
+      >
+        {open ? '▾' : '▸'} Routine ({count})
+      </button>
+      {open && <div className="divide-y border-y" data-routine-tasks>{tasks.map(row)}</div>}
+    </div>
   );
 }

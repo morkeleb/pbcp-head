@@ -4,7 +4,7 @@ Extracted from the pbcp repo's `docs/skeleton.md`. The protocol packages are in 
 
 ## Repo 2 — `head` (Sustainable Use)
 
-The product: the reference head and its phone app, one API contract between them. Depends on `@pbcp/core` and `@pbcp/client` from npm, pinned, and runs the conformance suite in CI.
+The product: the reference head and its phone app, one API contract between them. Depends on `@pbcp/core` and `@pbcp/client` from npm, pinned, and runs the conformance suite in CI: all 70 cases of the Draft 0.9 suite (core C01–C59 without C23, render R01–R12) pass over HTTP.
 
 ```
 head/
@@ -103,6 +103,15 @@ Auth: bearer token → sha256 → `producer_tokens` lookup, root attached to the
 **At rest** (lib/crypto.ts, lib/keys.ts, lib/vault.ts; docs/trust.md). Each head has a data key, wrapped under `HEAD_MASTER_KEY` on its row (`heads.data_key`). Card content is sealed (AES-256-GCM, head and column as associated data) into one `content` JSON per row of `cards`, `decision_log`, `diagrams` and `invite_requests`; `producer_doc` keeps only the clear metadata routes and queries use (kind, thread, supersedes, about, at, …). Every select of card rows is opened with `openRows` (a row that fails its integrity check is left out, logged); every write seals. Equality and the card's day compare a keyed digest (`content.mac`). Diagrams are cached per head (`scopedHash`) and served with `?h=<head>`. `pnpm encrypt-backfill [--verify]`, `pnpm rewrap`, `pnpm head:delete`, `pnpm card:decrypt` (lib/at-rest.ts).
 
 **Sensitivity** (RFC 0.9 §4.1, §9, §12; lib/sensitivity.ts). A card's `sensitivity` is stored and returned as sent. Its effective value is core's `effectiveSensitivity` of the card's own and the owner's floors (per producer, per label, for every card), computed whenever the card is handled and never stored, so a floor raised today covers every card already stored (unlike the urgency ceiling, which applies to content stored from then on: a ceiling is about attention, a floor about exposure). `private` and `confirm`: the lead and body stay off Web Push (producer and kind only, opening the brief), the owner MCP (id, producer, kind, title, state, when, labels and both sensitivities), and any spoken or generated text (`/api/me/brief?spoken=1` counts them). `confirm`: the decide check above; an assistant's session (platform `mcp`) can never satisfy it. Every `/api/me` response to an assistant's scoped token passes through `redactForAssistant` (lib/me.ts, applied in lib/owner.ts): each private or confirm card in it, at any depth, loses its content, an open confirm card its actions, and a `head:daily` card's body becomes the spoken paragraph. Inside the signed-in web app every card shows in full.
+
+**The brief's fold** (RFC 0.9 §8, §9; lib/brief/fold.ts, lib/brief/paragraph.ts). One fold, the same parts, for the nightly card, the "so far today" paragraph, the daily push and the spoken form:
+- every open, unsnoozed decision is named by its title, linked to its card;
+- a decision with no `default` action, or whose producer sent it `urgency: immediate` (its `urgency`, not its `delivery`), is named with its lead;
+- every other decision is folded under its default action with its producer's other cards that share it, each named (a fold needs at least two cards; a card alone under its producer's default is named with its lead): "6 the mail reader proposes archiving: Order receipt, Weekly newsletter, …", the producer by its display name (Settings → Producers) or its root, the action by its label on the card; the parts carry the folds (producer, action id and label, card ids) beside the entries;
+- a fold has no control: each card is decided on its own card, and the Decide view is unchanged;
+- tasks are counted in the paragraph ("Tasks: 23 due, 21 overdue and 5 routine.") and listed in the Tasks section, overdue first;
+- a task under a label whose fold policy is `count` (§9 "Folding", Settings → Producers, beside the label's sensitivity floor; `sensitivity_floors.fold_policy`, moving `settings_seq`) is routine: counted apart in the paragraph and listed under a collapsed "Routine (N)" group, ticked from there;
+- the label filter keeps only the entries, and folded cards, of the chosen labels; spoken, a private entry is counted, never named, in a fold or out of one.
 
 **No worker process.** Lease expiry is evaluated lazily on the next claim or sync that touches the order, which A.2 permits; the brief is the only scheduled job. That is what keeps the whole head deployable as a single Vercel project.
 

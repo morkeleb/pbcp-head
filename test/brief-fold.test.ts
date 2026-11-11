@@ -4,7 +4,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
 import { dailyLines, dailyParagraph, escapeMarkdown, foldDaily, paragraphParts } from '../lib/brief/fold';
-import { composeParagraphs } from '../lib/brief/paragraph';
+import { composeParagraphs, foldViews, proposing } from '../lib/brief/paragraph';
 import { FOLD_VERSION } from '../lib/brief/fold-version';
 
 let seq = 0;
@@ -235,7 +235,7 @@ describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
     ],
   };
 
-  it('says "Tasks: N due, M overdue: <title> — <lead>; …" after the decisions, by when they are due, a snoozed one left out', () => {
+  it('counts them after the decisions, "Tasks: N due, M overdue.", by when they are due, a snoozed one left out (fold 9: the Tasks list names them)', () => {
     const lines = dailyLines({ ...base, at: base.emittedAt, date: base.date });
     expect(lines.tasks.map((t) => [t.id, t.due, t.overdue])).toEqual([
       ['todo:task:bins', 'Fri 6 Nov', true],
@@ -244,12 +244,10 @@ describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
     ]);
     const [first, second] = composeParagraphs(paragraphParts(lines, url));
     expect(first).toMatch(/^1 decision: \[Archive the newsletter\?\]/);
-    expect(second).toBe(
-      `Tasks: 3 due, 1 overdue: [Put the bins out](<${url('todo:task:bins')}>) — Grey bin this week; [Renew the passport](<${url('todo:task:pass')}>) — Form and photo at the town hall; [Call the dentist](<${url('todo:task:call')}>) — To move the appointment.`,
-    );
+    expect(second).toBe('Tasks: 3 due, 1 overdue.');
   });
 
-  it('lists each with when it is due in the card, overdue first and marked, and references them; fold 8', () => {
+  it('lists each with when it is due in the card, overdue first and marked, and references them; fold 9', () => {
     const card = foldDaily(base);
     const body = card.body;
     expect(body).toContain('**Tasks**');
@@ -259,8 +257,8 @@ describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
     expect(listed[2]).toMatch(/^- \[Call the dentist\]\(.*\) — no due date — To move the appointment\.$/);
     expect(body).not.toContain('Snoozed one');
     expect(card.references).toEqual(['mail:d:1', 'todo:task:bins', 'todo:task:pass', 'todo:task:call']);
-    expect(FOLD_VERSION).toBe(8);
-    expect((card as Record<string, unknown>)['x-pbcp-fold']).toBe(8);
+    expect(FOLD_VERSION).toBe(9);
+    expect((card as Record<string, unknown>)['x-pbcp-fold']).toBe(9);
   });
 
   it('tells a task done the day before as "<title> — done", and never as a thread of the day before', () => {
@@ -281,6 +279,93 @@ describe('tasks in the nightly fold (RFC 0.9 §8)', () => {
 
   it('with tasks and no decision opens with the tasks, not "Nothing waiting for you."', () => {
     const lines = dailyLines({ ...base, openDecisions: [], at: base.emittedAt, date: base.date });
-    expect(composeParagraphs(paragraphParts(lines, url))[0]).toMatch(/^Tasks: 3 due, 1 overdue: /);
+    expect(composeParagraphs(paragraphParts(lines, url))[0]).toBe('Tasks: 3 due, 1 overdue.');
+  });
+});
+
+describe('folds (RFC 0.9 §8, §9)', () => {
+  const url = (id: string) => `https://head.example/card/${encodeURIComponent(id)}`;
+  const archive = { actions: [{ id: 'archive', label: 'Archive', default: true }, 'keep'] };
+  const mail = (n: number, title: string) => stored(`mail:inbox:${n}`, { kind: 'decision', title, summary: `From the shop, message ${n}.`, ...archive } as Partial<Card>);
+  // A day with eight decisions: two that need the owner (no default action), six the mail reader proposes archiving.
+  const day = {
+    openDecisions: [
+      stored('hermes:gmail:anna', { kind: 'decision', title: 'Reply to Anna', summary: 'Anna asks whether the invoice can wait.' } as Partial<Card>),
+      stored('goalpath:item:9', { kind: 'decision', title: 'Accept the roadmap item', summary: 'The item is finished, accept it.', actions: ['accept', 'reopen'] } as Partial<Card>),
+      mail(1, 'Order receipt'), mail(2, 'Weekly newsletter'), mail(3, 'Shipping update'), mail(4, 'Password reset'), mail(5, 'Event reminder'), mail(6, 'Bank statement'),
+    ],
+    yesterday: [],
+    names: { mail: 'the mail reader' },
+    at: '2026-11-07T04:30:00Z',
+    date: '2026-11-07',
+    timezone: 'Europe/Copenhagen',
+  };
+  const titled = (id: string, t: string) => `[${t}](<${url(id)}>)`;
+
+  it('names all eight: two with their leads, six folded in one line under the mail reader’s archive, each by its title', () => {
+    const parts = paragraphParts(dailyLines(day), url);
+    expect(parts.folds).toEqual([{ producer: 'mail', name: 'the mail reader', action: 'archive', action_label: 'Archive', ids: [1, 2, 3, 4, 5, 6].map((n) => `mail:inbox:${n}`) }]);
+    expect(composeParagraphs(parts)).toEqual([
+      `8 decisions: ${titled('hermes:gmail:anna', 'Reply to Anna')} — Anna asks whether the invoice can wait; ${titled('goalpath:item:9', 'Accept the roadmap item')} — The item is finished, accept it; ` +
+        `6 the mail reader proposes archiving: ${titled('mail:inbox:1', 'Order receipt')}, ${titled('mail:inbox:2', 'Weekly newsletter')}, ${titled('mail:inbox:3', 'Shipping update')}, ` +
+        `${titled('mail:inbox:4', 'Password reset')}, ${titled('mail:inbox:5', 'Event reminder')} and ${titled('mail:inbox:6', 'Bank statement')}.`,
+    ]);
+    // The view's fold: one line, its six cards' entries (titles alone) to open to.
+    expect(foldViews(parts).map((f) => [f.phrase, f.entries.length])).toEqual([['6 the mail reader proposes archiving', 6]]);
+  });
+
+  it('never folds an immediate card, by its urgency as sent, whatever its delivery; a producer without a display name is its root', () => {
+    const urgent = stored('mail:inbox:9', { kind: 'decision', title: 'Card declined', summary: 'Your card was declined at the airport.', urgency: 'immediate', delivery: 'brief', ...archive } as Partial<Card>);
+    const quiet = (n: number) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `Receipt ${n}`, summary: 'A receipt.', urgency: 'brief', delivery: 'immediate', ...archive } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, names: {}, openDecisions: [urgent, quiet(10), quiet(11)] }), url);
+    expect(parts.folds?.map((f) => f.ids)).toEqual([['mail:inbox:10', 'mail:inbox:11']]);
+    expect(composeParagraphs(parts)[0]).toBe(`3 decisions: ${titled('mail:inbox:9', 'Card declined')} — Your card was declined at the airport; 2 mail proposes archiving: ${titled('mail:inbox:10', 'Receipt 10')} and ${titled('mail:inbox:11', 'Receipt 11')}.`);
+  });
+
+  it('does not fold a card alone under its producer’s default: it is named with its title and lead, and no fold is written', () => {
+    const anna = stored('hermes:mail:anna', { kind: 'decision', title: 'Reply to Anna', summary: 'Anna asks whether the invoice can wait until the 20th.', actions: [{ id: 'agree', label: 'Agree', default: true }, 'reject'] } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, openDecisions: [anna] }), url);
+    expect(parts.folds).toEqual([]);
+    expect(composeParagraphs(parts)).toEqual([`1 decision: ${titled('hermes:mail:anna', 'Reply to Anna')} — Anna asks whether the invoice can wait until the 20th.`]);
+    expect(composeParagraphs(parts, [], { spoken: true })).toEqual(['1 decision: Reply to Anna — Anna asks whether the invoice can wait until the 20th.']);
+  });
+
+  it('keeps each producer’s and each default’s cards apart, and follows the label filter into a fold', () => {
+    const tagged = (n: number, labels: string[]) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `M${n}`, labels, ...archive } as Partial<Card>);
+    const kept = (n: number) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `M${n}`, actions: [{ id: 'keep', default: true }, 'archive'] } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, openDecisions: [tagged(21, ['shop']), tagged(22, ['news']), kept(30), tagged(23, ['shop']), kept(31)] }), url);
+    expect(parts.folds?.map((f) => [f.action, f.ids])).toEqual([['archive', ['mail:inbox:21', 'mail:inbox:22', 'mail:inbox:23']], ['keep', ['mail:inbox:30', 'mail:inbox:31']]]);
+    expect(composeParagraphs(parts, ['shop'])).toEqual([`2 decisions: 2 the mail reader proposes archiving: ${titled('mail:inbox:21', 'M21')} and ${titled('mail:inbox:23', 'M23')}.`]);
+  });
+
+  it('spoken: the same day in plain words; a private card is counted, never named, in a fold or out of one', () => {
+    const parts = paragraphParts(dailyLines(day), url);
+    expect(composeParagraphs(parts, [], { spoken: true })).toEqual([
+      '8 decisions: Reply to Anna — Anna asks whether the invoice can wait; Accept the roadmap item — The item is finished, accept it; 6 the mail reader proposes archiving: Order receipt, Weekly newsletter, Shipping update, Password reset, Event reminder and Bank statement.',
+    ]);
+    const marked = { ...parts, decisions: parts.decisions.map((e) => ({ ...e, effective_sensitivity: e.id === 'mail:inbox:6' || e.id === 'hermes:gmail:anna' ? ('private' as const) : ('normal' as const) })) };
+    expect(composeParagraphs(marked, [], { spoken: true })[0]).toBe(
+      '8 decisions: Accept the roadmap item — The item is finished, accept it; 5 the mail reader proposes archiving: Order receipt, Weekly newsletter, Shipping update, Password reset and Event reminder; and 2 private decisions.',
+    );
+  });
+
+  it('counts a `count` label’s tasks as routine in the paragraph and lists them under Routine in the card', () => {
+    const task = (id: string, extra: Partial<Card>) => stored(id, { kind: 'task', ...extra } as Partial<Card>);
+    const tasks = [
+      task('todo:task:bins', { title: 'Put the bins out', about: '2026-11-06' } as Partial<Card>),
+      task('todo:task:pass', { title: 'Renew the passport', about: '2026-11-07' } as Partial<Card>),
+      ...[1, 2, 3, 4, 5].map((n) => task(`todo:task:pill${n}`, { title: `Supplement ${n}`, about: '2026-11-07', labels: ['supplements'] } as Partial<Card>)),
+    ];
+    const lines = dailyLines({ ...day, openDecisions: [], tasks, countLabels: ['supplements'] });
+    expect(lines.tasks.filter((t) => t.routine).length).toBe(5);
+    expect(composeParagraphs(paragraphParts(lines, url))).toEqual(['Tasks: 2 due, 1 overdue and 5 routine.']);
+    expect(composeParagraphs(paragraphParts(dailyLines({ ...day, openDecisions: [], tasks: tasks.slice(2), countLabels: ['supplements'] }), url))).toEqual(['Tasks: 5 routine.']);
+    const body = foldDaily({ owner: 'morten', date: day.date, emittedAt: day.at, cardUrl: url, timezone: day.timezone, openDecisions: [], yesterday: [], tasks, countLabels: ['supplements'] }).body;
+    expect(body.split('**Tasks**')[1]!.split('**Routine (5)**')[0]).not.toContain('Supplement');
+    expect(body.split('**Routine (5)**')[1]!.split('\n').filter((l) => l.startsWith('- '))).toHaveLength(5);
+  });
+
+  it('says what a producer proposes from the action’s label', () => {
+    expect(['Archive', 'Keep', 'Pay now', 'Ship', 'approve', 'Reply', 'Tie up', 'Sending', 'OK'].map(proposing)).toEqual(['archiving', 'keeping', 'paying now', 'shipping', 'approving', 'replying', 'tying up', 'sending', 'OK']);
   });
 });

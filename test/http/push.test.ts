@@ -13,6 +13,7 @@ import { notifyUrgent } from '../../lib/push/urgent';
 import { toCard } from '../../lib/store';
 import { TEST_CRON_SECRET, TEST_VAPID_PUBLIC_KEY } from '../env';
 import { card, cardPath } from './cards';
+import { putFoldDay } from './fold-day';
 import { call, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
 // --- the stand-in push service ---------------------------------------------------------------------------------
@@ -177,6 +178,19 @@ describe('the cron sends the daily notification', () => {
     await cron();
     const body = decrypt(received.find((r) => r.path === later.sub.path)!, later.sub).body as string;
     expect(body).toBe('2 decisions: Reply to Anna 2 — About the invoice, part 2; Reply to Anna 1 — About the invoice, part 1.');
+  });
+
+  it('opens with the folded decisions (RFC 0.9 §8): two leads, then the fold, cut after its last whole title that fits', async () => {
+    await putFoldDay('2026-10-07T02:00:00Z', hermes);
+    const d = await device('d', { time: '07:00' });
+    await clock('2026-10-07T03:30:00Z'); // 05:30: the card
+    await cron();
+    await clock('2026-10-07T05:00:00Z');
+    await cron();
+    const body = decrypt(received.find((r) => r.path === d.sub.path)!, d.sub).body as string;
+    expect(body).toBe(
+      '8 decisions: Reply to Anna — Anna asks whether the invoice can wait until the 20th; Join the offsite — Two days in Aarhus from the 14th, travel booked by the office; 6 the mail reader proposes archiving: Order receipt, Weekly newsletter…',
+    );
   });
 
   it('counts a private or confirm entry in the first sentence, never naming it (RFC 0.9 §4.1)', async () => {

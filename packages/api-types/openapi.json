@@ -2910,7 +2910,47 @@
               ],
               "additionalProperties": false
             },
-            "description": "Open decisions that are not snoozed"
+            "description": "Open decisions that are not snoozed, every one named (RFC 0.9 §8): \"<title> — <lead>\" for one with no default action or sent `immediate`, the title alone for one in a fold"
+          },
+          "folds": {
+            "description": "RFC 0.9 §8: decisions folded under their producer’s shared default action, \"6 the mail reader proposes archiving: <title>, …\". A fold offers no control: each card is decided on its own card",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "producer": {
+                  "type": "string",
+                  "description": "The producer’s root"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "How the brief names it: its display name, or the root"
+                },
+                "action": {
+                  "type": "string",
+                  "description": "The default action’s id the cards share"
+                },
+                "action_label": {
+                  "type": "string",
+                  "description": "Its label from the card (the id when the card gives none)"
+                },
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The folded cards, entries of `decisions`, in order"
+                }
+              },
+              "required": [
+                "producer",
+                "name",
+                "action",
+                "action_label",
+                "ids"
+              ],
+              "additionalProperties": false
+            }
           },
           "snoozed": {
             "type": "array",
@@ -2923,7 +2963,7 @@
             "description": "The labels of each snoozed decision: counted, never listed (§8)"
           },
           "tasks": {
-            "description": "Open tasks due on the day or before, by when they are due (RFC 0.9 §8): \"Tasks: 3 due, 1 overdue: <entry>; ….\"",
+            "description": "Open tasks due on the day or before, by when they are due (RFC 0.9 §8): counted in the paragraph, \"Tasks: 23 due, 21 overdue and 5 routine.\"; the Tasks section names them",
             "type": "array",
             "items": {
               "type": "object",
@@ -2976,6 +3016,11 @@
                 "overdue": {
                   "type": "boolean",
                   "description": "Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded"
+                },
+                "routine": {
+                  "description": "Under a label the owner set to fold as a count (RFC 0.9 §9): counted apart",
+                  "type": "boolean",
+                  "const": true
                 }
               },
               "required": [
@@ -4714,6 +4759,11 @@
                   "description": "An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card",
                   "type": "boolean",
                   "const": true
+                },
+                "routine": {
+                  "description": "The task carries a label the owner set to fold as a count (RFC 0.9 §9): listed in a collapsed Routine group, counted apart in the paragraph",
+                  "type": "boolean",
+                  "const": true
                 }
               },
               "required": [
@@ -5469,10 +5519,30 @@
             "additionalProperties": false,
             "description": "Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself"
           },
+          "fold_policies": {
+            "type": "object",
+            "properties": {
+              "labels": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "const": "count"
+                }
+              }
+            },
+            "required": [
+              "labels"
+            ],
+            "additionalProperties": false,
+            "description": "The labels the owner set to fold as a count in the brief (RFC 0.9 §9 \"Folding\"); every other label is `list`, so a device folds as the head does"
+          },
           "settings_seq": {
             "type": "integer",
             "minimum": 0,
-            "description": "As in GET /api/me/seq: moves with every floor change"
+            "description": "As in GET /api/me/seq: moves with every floor or fold policy change"
           }
         },
         "required": [
@@ -5484,6 +5554,7 @@
           "device_timezone",
           "sensitivity_floor",
           "sensitivity_floors",
+          "fold_policies",
           "settings_seq"
         ],
         "additionalProperties": false
@@ -5644,13 +5715,22 @@
               }
             ],
             "description": "The owner’s sensitivity floor on it (RFC 0.9 §9), or null"
+          },
+          "fold_policy": {
+            "type": "string",
+            "enum": [
+              "list",
+              "count"
+            ],
+            "description": "How the brief folds its cards (RFC 0.9 §9 \"Folding\"): `list`, the default, or `count`: its tasks counted as routine in the paragraph and grouped apart in the Tasks section"
           }
         },
         "required": [
           "label",
           "cards",
           "ceiling",
-          "sensitivity_floor"
+          "sensitivity_floor",
+          "fold_policy"
         ],
         "additionalProperties": false
       },
@@ -6521,6 +6601,14 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "fold_policy": {
+            "description": "How the brief folds the label’s cards (RFC 0.9 §9 \"Folding\"): `list` (the default) or `count`; changes no card",
+            "type": "string",
+            "enum": [
+              "list",
+              "count"
             ]
           }
         }

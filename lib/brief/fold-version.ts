@@ -15,8 +15,12 @@
 //   8  tasks (RFC 0.9 §8): "Tasks: N due, M overdue: <title> — <lead>; …" after the decisions, a Tasks list with when
 //      each is due; a task done the day before is "<title> — done" among what was decided, never a thread
 
+//   9  folds (RFC 0.9 §8): a decision's lead only when it has no default action or is `immediate`; the others folded
+//      by producer and default action ("6 the mail reader proposes archiving: …"), the parts' `folds`; tasks counted
+//      in the paragraph, not named ("Tasks: 23 due, 21 overdue and 5 routine."), routine ones (§9 `count`) apart
+
 export const FOLD_FIELD = 'x-pbcp-fold';
-export const FOLD_VERSION = 8;
+export const FOLD_VERSION = 9;
 /** The first fold whose lead is the daily paragraph. */
 const PARAGRAPH_SINCE = 2;
 

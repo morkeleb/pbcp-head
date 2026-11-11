@@ -159,10 +159,13 @@ export async function refreshBrief(): Promise<boolean> {
 
 /** The owner's floors, from GET /api/me/settings, and every stored card's effective sensitivity recomputed under them. */
 async function refreshFloors(settingsSeq: number): Promise<boolean> {
-  const r = await api<{ sensitivity_floor: Sensitivity | null; sensitivity_floors: { producers: Record<string, Sensitivity>; labels: Record<string, Sensitivity> } }>('/api/me/settings', { network: true }).catch(() => null);
+  const r = await api<{ sensitivity_floor: Sensitivity | null; sensitivity_floors: { producers: Record<string, Sensitivity>; labels: Record<string, Sensitivity> }; fold_policies?: { labels: Record<string, 'count'> } }>('/api/me/settings', { network: true }).catch(() => null);
   if (!r || r.status !== 200) return false;
   const floors: Floors = { all: r.body.sensitivity_floor, producers: r.body.sensitivity_floors?.producers ?? {}, labels: r.body.sensitivity_floors?.labels ?? {} };
   await setMeta('floors', floors);
+  // RFC 0.9 §9 "Folding": kept beside the floors; the brief's composition (its Routine group) is the head's, so it is read again.
+  await setMeta('fold_policies', r.body.fold_policies?.labels ?? {});
+  await refreshBrief();
   const cards = (await allCards()) ?? [];
   const changed = cards.filter((c) => effectiveUnder(c, floors) !== c.effective_sensitivity).map((c) => ({ ...c, effective_sensitivity: effectiveUnder(c, floors) }));
   if (changed.length > 0) await putCards(changed, { force: true });

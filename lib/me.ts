@@ -21,7 +21,7 @@ import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
 import { formatTime } from './push/daily';
-import { annotateParts, effectiveOf, loadPolicy, type Sensitivity, type SensitivityPolicy } from './sensitivity';
+import { annotateParts, countLabels, effectiveOf, loadPolicy, type Sensitivity, type SensitivityPolicy } from './sensitivity';
 
 type Row = typeof cards.$inferSelect;
 
@@ -249,11 +249,13 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     )
     .orderBy(asc(cards.receivedAt), asc(cards.id)) // ties in when they are due keep the order they came in
     .limit(200).then((rows) => openRows(db, rows));
+  const counting = new Set(await countLabels(db, headId));
   const tasks = (await presentCards(db, taskRows))
     .filter((c) => c.state !== 'superseded' || c.replaced_by?.kind !== 'task')
     .sort(byDue(head.timezone))
-    // §4.5: overdue as the head presents it now, on the response only; never a field of the card.
-    .map((c) => (isOverdue(c, at, head.timezone) ? { ...c, overdue: true as const } : c));
+    // §4.5: overdue as the head presents it now, on the response only; never a field of the card. §9 "Folding": a task
+    // under a label the owner set to `count` is routine, grouped apart in the Tasks section; the card is unchanged.
+    .map((c) => ({ ...c, ...(isOverdue(c, at, head.timezone) ? { overdue: true as const } : {}), ...((c.labels ?? []).some((l) => counting.has(l)) ? { routine: true as const } : {}) }));
 
   const attention = await db
     .select()

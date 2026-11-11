@@ -9,8 +9,15 @@
 //   rest      every other thread (log delivery, or an artifact from a busy producer): counted by producer, no titles
 //   orders    each order whose outcome arrived the day before, "<order title> — done: <outcome lead>" (A.3); an order
 //             whose thread only progressed is counted among the rest, as its executor's
-//   tasks     every open task that is not snoozed and whose day is the brief's or earlier (RFC 0.9 §8 MUST), "<title> —
-//             <lead>", counted as due and overdue ("Tasks: 3 due, 1 overdue: …"); the card's list says when each is due
+//   tasks     every open task that is not snoozed and whose day is the brief's or earlier (RFC 0.9 §8 MUST), counted in
+//             the paragraph as due and overdue ("Tasks: 3 due, 1 overdue."), and named in the card's Tasks list with
+//             when each is due; a task under a label the owner set to fold as a count (§9) is routine: counted apart
+//             ("and 5 routine") and listed under Routine
+//
+// Decisions (RFC 0.9 §8): every open one is named; one with no `default` action or with `urgency: immediate` with its
+// lead, the others folded under their default action with their producer's other cards that share it ("6 the mail
+// reader proposes archiving: <title>, …"). The paragraph's parts carry the folds beside the entries
+// (lib/brief/paragraph.ts).
 //
 // The body opens with the daily paragraph, prose made of those parts (lib/brief/paragraph.ts), which is therefore the
 // card's own lead (§3.1); then every open decision, and every one of the previous day's threads with its title and
@@ -21,7 +28,7 @@ import { actionId, effectiveActions, leadOf, type Card, type ProducerCard } from
 import { instant, localDate } from '../time';
 import { cutSummary, inlineLead } from '../render/lead';
 import { FOLD_FIELD, FOLD_VERSION } from './fold-version';
-import { composeParagraph, plural, type ParagraphParts } from './paragraph';
+import { composeParagraph, plural, type ParagraphFold, type ParagraphParts } from './paragraph';
 import { byDue, dueDay, isOverdue } from './tasks';
 
 export { plural };
@@ -43,6 +50,10 @@ export interface FoldInput {
   timezone?: string;
   /** The head's own page for a card: an absolute https URL to this head (lib/render keeps it an in-app link). */
   cardUrl: (id: string) => string;
+  /** Producers' display names by root (producer_tokens.name), for a fold; a root without one is named by the root. */
+  names?: Readonly<Record<string, string>>;
+  /** Labels the owner set to fold as a count (RFC 0.9 §9 `count`): a task carrying one is routine. */
+  countLabels?: readonly string[];
 }
 
 /** One line of the brief: a card and what it says. `count` is the size of the thread it stands for. */
@@ -60,6 +71,10 @@ export interface FoldLine {
   delivery: Card['delivery'];
   /** The card's labels (§4.1), in the producer's order: the paragraph's entries keep them for filtering. */
   labels: string[];
+  /** The card's own `urgency` as sent (§4.1a), not its `delivery`: an `immediate` decision is never folded (§8). */
+  urgency: Card['urgency'];
+  /** A decision's `default` action (§4.4), with its label from the card (the id when it gives none); none without one. */
+  defaultAction?: { id: string; label: string };
 }
 
 export interface FoldLines {
@@ -75,8 +90,10 @@ export interface FoldLines {
   rest: FoldLine[];
   /** Orders whose outcome arrived the day before, each with it ("done: Booked Tuesday 09:00"); the line is the order's. */
   orders: Array<FoldLine & { result: string }>;
-  /** Open tasks due on the brief's day or before, not snoozed, by when they are due: each with when, and whether overdue. */
-  tasks: Array<FoldLine & { due: string; overdue: boolean }>;
+  /** Open tasks due on the brief's day or before, not snoozed, by when they are due: each with when, whether overdue, and whether routine (§9). */
+  tasks: Array<FoldLine & { due: string; overdue: boolean; routine: boolean }>;
+  /** Producers' display names by root, for the folds. */
+  names: Readonly<Record<string, string>>;
   /** "2 open decisions, 1 snoozed · 14 cards yesterday from 5 producers" */
   counts: string;
 }
@@ -117,6 +134,14 @@ function phrase(c: Card): string {
   return md;
 }
 
+/** A decision's default action (§4.4), with the label the card gives it. */
+function defaultOf(c: Card): { id: string; label: string } | undefined {
+  if (c.kind !== 'decision') return undefined;
+  const d = effectiveActions(c).find((a) => typeof a !== 'string' && a.default === true);
+  if (!d || typeof d === 'string') return undefined;
+  return { id: actionId(d), label: d.label ?? actionId(d) };
+}
+
 const line = (c: Card, at: string, count = 1): FoldLine => ({
   id: c.id,
   producer: c.producer,
@@ -127,6 +152,8 @@ const line = (c: Card, at: string, count = 1): FoldLine => ({
   labels: [...(c.labels ?? [])],
   kind: c.kind,
   delivery: c.delivery,
+  urgency: c.urgency ?? 'brief',
+  ...(defaultOf(c) ? { defaultAction: defaultOf(c)! } : {}),
   // Snoozed now: a snooze that has run out leaves the decision open like any other (§4.2 `snoozed_until`).
   snoozed: !!c.snoozed_until && Date.parse(c.snoozed_until) > Date.parse(at),
 });
@@ -188,7 +215,7 @@ export function dueText(t: Pick<Card, 'at' | 'about'>, date: string, timezone: s
 const NO_DUE = 'no due date';
 
 /** `at` is now: a decision whose `snoozed_until` is later is snoozed. */
-export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' | 'decidedYesterday' | 'orders' | 'tasks' | 'timezone'> & { at: string; date?: string }): FoldLines {
+export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' | 'decidedYesterday' | 'orders' | 'tasks' | 'timezone' | 'names' | 'countLabels'> & { at: string; date?: string }): FoldLines {
   const timezone = input.timezone ?? 'UTC';
   const now = instant(input.at);
   const date = input.date ?? localDate(now, timezone);
@@ -216,10 +243,11 @@ export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' 
   const decided = [...(input.decidedYesterday ?? [])]
     .sort((a, b) => Date.parse(a.decided_at ?? '') - Date.parse(b.decided_at ?? ''))
     .map((c) => ({ ...line(c, input.at), value: decidedValue(c) }));
+  const counting = new Set(input.countLabels ?? []);
   const tasks = [...(input.tasks ?? [])]
     .filter((c) => c.state === 'open')
     .sort(byDue(timezone))
-    .map((c) => ({ ...line(c, input.at), due: dueText(c, date, timezone), overdue: isOverdue(c, now, timezone) }))
+    .map((c) => ({ ...line(c, input.at), due: dueText(c, date, timezone), overdue: isOverdue(c, now, timezone), routine: (c.labels ?? []).some((l) => counting.has(l)) }))
     .filter((l) => !l.snoozed);
   return {
     decisions,
@@ -229,6 +257,7 @@ export function dailyLines(input: Pick<FoldInput, 'openDecisions' | 'yesterday' 
     mattered: others.filter((l) => matters(l, sent)),
     rest: [...others.filter((l) => !matters(l, sent)), ...quietOrders],
     orders,
+    names: { ...(input.names ?? {}) },
     counts: `${decisionCount(decisions, 'open decision')} · ${plural(input.yesterday.length, 'card')} yesterday from ${plural(producers.size, 'producer')}`,
   };
 }
@@ -253,24 +282,49 @@ function markdownLine(l: FoldLine, cardUrl: (id: string) => string): string {
  * every open decision is snoozed, "0 decisions, 2 snoozed." Empty when nothing is open and nothing arrived the day
  * before: no sentence for its own sake.
  */
-export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders' | 'tasks'>>, cardUrl: (id: string) => string): string {
+export function dailyParagraph(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders' | 'tasks' | 'names'>>, cardUrl: (id: string) => string): string {
   return composeParagraph(paragraphParts(lines, cardUrl));
 }
 
 /** The paragraph's entries as markdown, each with its card's id and labels (lib/brief/paragraph.ts composes them). */
-export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders' | 'tasks'>>, cardUrl: (id: string) => string): ParagraphParts {
+export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 'mattered' | 'rest'> & Partial<Pick<FoldLines, 'orders' | 'tasks' | 'names'>>, cardUrl: (id: string) => string): ParagraphParts {
   const title = (l: FoldLine) => `[${escapeMarkdown(l.title)}](<${cardUrl(l.id)}>)`;
   const entry = (l: FoldLine) => ({ id: l.id, labels: l.labels, text: `${title(l)}${l.phrase ? ` — ${l.phrase}` : ''}` });
+  const awake = lines.decisions.filter((l) => !l.snoozed);
+  const folds = foldDecisions(awake, lines.names ?? {});
+  const folded = new Set(folds.flatMap((f) => f.ids));
   return {
-    decisions: lines.decisions.filter((l) => !l.snoozed).map(entry),
+    // A folded decision is named by its title alone; the fold says what its producer proposes (§8).
+    decisions: awake.map((l) => (folded.has(l.id) ? { id: l.id, labels: l.labels, text: title(l) } : entry(l))),
+    folds,
     snoozed: lines.decisions.filter((l) => l.snoozed).map((l) => l.labels),
-    tasks: (lines.tasks ?? []).map((l) => ({ ...entry(l), overdue: l.overdue })),
+    tasks: (lines.tasks ?? []).map((l) => ({ ...entry(l), overdue: l.overdue, ...(l.routine ? { routine: true } : {}) })),
     // A task done is told as done ("— done"), not as a decision ("— decided done").
     decided: lines.decided.map((l) => ({ id: l.id, labels: l.labels, text: `${title(l)} — ${l.kind === 'task' ? '' : 'decided '}${escapeMarkdown(l.value, Infinity)}` })),
     mattered: lines.mattered.slice(0, MAX_THREADS).map(entry),
     rest: lines.rest.map((l) => ({ producer: l.producer, labels: l.labels })),
     orders: (lines.orders ?? []).map((l) => ({ id: l.id, labels: l.labels, text: `${title(l)} — ${escapeMarkdown(l.result)}${l.phrase ? `: ${l.phrase}` : ''}` })),
   };
+}
+
+/** Whether a decision is named with its lead (§8): it has no default action, or its producer sent it `immediate`. */
+export const needsLead = (l: Pick<FoldLine, 'defaultAction' | 'urgency'>) => l.defaultAction === undefined || l.urgency === 'immediate';
+
+/**
+ * The folds (§8): the decisions that do not need their lead, grouped by producer and default action, in the order the
+ * decisions come. A fold needs at least two cards: a group of one is not folded, and its card is named with its title
+ * and lead like a card with no default.
+ */
+export function foldDecisions(decisions: readonly FoldLine[], names: Readonly<Record<string, string>>): ParagraphFold[] {
+  const folds = new Map<string, ParagraphFold>();
+  for (const l of decisions) {
+    if (needsLead(l)) continue;
+    const key = `${l.producer}\u0000${l.defaultAction!.id}`;
+    const f = folds.get(key) ?? { producer: l.producer, name: names[l.producer] ?? l.producer, action: l.defaultAction!.id, action_label: l.defaultAction!.label, ids: [] };
+    f.ids.push(l.id);
+    folds.set(key, f);
+  }
+  return [...folds.values()].filter((f) => f.ids.length >= 2);
 }
 
 /** The nightly card: on a quiet day, one that says "Nothing waiting for you." */
@@ -289,11 +343,19 @@ export function foldDaily(input: FoldInput): ProducerCard {
   }
 
   // Every open task due today or before that is not snoozed (§8 MUST), with when it is due; overdue ones first and marked (§4.5).
-  if (tasks.length > 0) {
+  // Routine ones (§9 `count`) under their own heading, after the rest.
+  const taskLine = (l: (typeof tasks)[number]) =>
+    `- [${escapeMarkdown(l.title)}](<${input.cardUrl(l.id)}>) — ${l.overdue ? 'overdue, ' : ''}${l.due === NO_DUE ? NO_DUE : `due ${escapeMarkdown(l.due, Infinity)}`}${l.lead ? ` — ${l.lead}` : ''}`;
+  const named = tasks.filter((t) => !t.routine);
+  const routine = tasks.filter((t) => t.routine);
+  if (named.length > 0) {
     lines.push('**Tasks**', '');
-    for (const l of [...tasks.filter((t) => t.overdue), ...tasks.filter((t) => !t.overdue)]) {
-      lines.push(`- [${escapeMarkdown(l.title)}](<${input.cardUrl(l.id)}>) — ${l.overdue ? 'overdue, ' : ''}${l.due === NO_DUE ? NO_DUE : `due ${escapeMarkdown(l.due, Infinity)}`}${l.lead ? ` — ${l.lead}` : ''}`);
-    }
+    for (const l of [...named.filter((t) => t.overdue), ...named.filter((t) => !t.overdue)]) lines.push(taskLine(l));
+    lines.push('');
+  }
+  if (routine.length > 0) {
+    lines.push(`**Routine (${routine.length})**`, '');
+    for (const l of [...routine.filter((t) => t.overdue), ...routine.filter((t) => !t.overdue)]) lines.push(taskLine(l));
     lines.push('');
   }
 

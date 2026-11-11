@@ -32,6 +32,7 @@ const Seq = z.number().int().nonnegative();
 
 /** RFC 0.9 §4.1 `sensitivity`. */
 const SENSITIVITY = z.enum(['normal', 'private', 'confirm']);
+const FOLD_POLICY = z.enum(['list', 'count']);
 
 export const ErrorBody = z
   .object({
@@ -74,9 +75,29 @@ const ParagraphEntry = z.object({
 });
 
 export const ParagraphParts = z.object({
-  decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed'),
+  decisions: z.array(ParagraphEntry).describe('Open decisions that are not snoozed, every one named (RFC 0.9 §8): "<title> — <lead>" for one with no default action or sent `immediate`, the title alone for one in a fold'),
+  folds: z
+    .array(
+      z.object({
+        producer: z.string().describe('The producer’s root'),
+        name: z.string().describe('How the brief names it: its display name, or the root'),
+        action: z.string().describe('The default action’s id the cards share'),
+        action_label: z.string().describe('Its label from the card (the id when the card gives none)'),
+        ids: z.array(z.string()).describe('The folded cards, entries of `decisions`, in order'),
+      }),
+    )
+    .optional()
+    .describe('RFC 0.9 §8: decisions folded under their producer’s shared default action, "6 the mail reader proposes archiving: <title>, …". A fold offers no control: each card is decided on its own card'),
   snoozed: z.array(z.array(z.string())).describe('The labels of each snoozed decision: counted, never listed (§8)'),
-  tasks: z.array(ParagraphEntry.extend({ overdue: z.boolean().describe('Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded') })).optional().describe('Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "Tasks: 3 due, 1 overdue: <entry>; …."'),
+  tasks: z
+    .array(
+      ParagraphEntry.extend({
+        overdue: z.boolean().describe('Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded'),
+        routine: z.literal(true).optional().describe('Under a label the owner set to fold as a count (RFC 0.9 §9): counted apart'),
+      }),
+    )
+    .optional()
+    .describe('Open tasks due on the day or before, by when they are due (RFC 0.9 §8): counted in the paragraph, "Tasks: 23 due, 21 overdue and 5 routine."; the Tasks section names them'),
   decided: z.array(ParagraphEntry).optional().describe('Decisions made the day before: "<title> — decided <value>" ("<title> — done" for a task)'),
   orders: z.array(ParagraphEntry).optional().describe('Orders whose outcome arrived the day before: "<order title> — done: <outcome lead>" (A.3)'),
   mattered: z.array(ParagraphEntry).optional().describe('The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then "and N more"'),
@@ -189,7 +210,12 @@ export const Brief = z.object({
     .describe('What is already set for tomorrow'),
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
   tasks: z
-    .array(MeCard.extend({ overdue: z.literal(true).optional().describe('An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card') }))
+    .array(
+      MeCard.extend({
+        overdue: z.literal(true).optional().describe('An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card'),
+        routine: z.literal(true).optional().describe('The task carries a label the owner set to fold as a count (RFC 0.9 §9): listed in a collapsed Routine group, counted apart in the paragraph'),
+      }),
+    )
     .describe('Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day'),
   threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
   snoozed: z.number().int().nonnegative(),
@@ -262,7 +288,8 @@ export const Settings = z.object({
   device_timezone: z.object({ device_id: z.string(), timezone: Zone, seen_at: Timestamp }).nullable().describe('The most recent zone a device sent'),
   sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s floor for every card (RFC 0.9 §9), or null'),
   sensitivity_floors: z.object({ producers: z.record(z.string(), SENSITIVITY), labels: z.record(z.string(), SENSITIVITY) }).describe('Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself'),
-  settings_seq: z.number().int().nonnegative().describe('As in GET /api/me/seq: moves with every floor change'),
+  fold_policies: z.object({ labels: z.record(z.string(), z.literal('count')) }).describe('The labels the owner set to fold as a count in the brief (RFC 0.9 §9 "Folding"); every other label is `list`, so a device folds as the head does'),
+  settings_seq: z.number().int().nonnegative().describe('As in GET /api/me/seq: moves with every floor or fold policy change'),
 }).register(responses, { id: 'Settings' });
 
 export const SettingsPatch = z.object({
@@ -294,6 +321,7 @@ export const Label = z.object({
   cards: z.number().int().nonnegative().describe('How many of the head’s cards carry it'),
   ceiling: z.enum(URGENCIES).nullable().describe('The owner’s ceiling on it (§9), or null'),
   sensitivity_floor: SENSITIVITY.nullable().describe('The owner’s sensitivity floor on it (RFC 0.9 §9), or null'),
+  fold_policy: FOLD_POLICY.describe('How the brief folds its cards (RFC 0.9 §9 "Folding"): `list`, the default, or `count`: its tasks counted as routine in the paragraph and grouped apart in the Tasks section'),
 }).register(responses, { id: 'Label' });
 
 export const LabelList = z.object({ labels: z.array(Label) }).register(responses, { id: 'LabelList' });
@@ -301,7 +329,8 @@ export const LabelList = z.object({ labels: z.array(Label) }).register(responses
 export const LabelPatch = z.object({
   ceiling: z.enum(URGENCIES).nullable().optional().describe('Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)'),
   sensitivity_floor: SENSITIVITY.nullable().optional().describe('The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it'),
-}).refine((p) => p.ceiling !== undefined || p.sensitivity_floor !== undefined, 'give ceiling, sensitivity_floor, or both').register(requests, { id: 'LabelPatch' });
+  fold_policy: FOLD_POLICY.optional().describe('How the brief folds the label’s cards (RFC 0.9 §9 "Folding"): `list` (the default) or `count`; changes no card'),
+}).refine((p) => p.ceiling !== undefined || p.sensitivity_floor !== undefined || p.fold_policy !== undefined, 'give ceiling, sensitivity_floor or fold_policy').register(requests, { id: 'LabelPatch' });
 
 export const Device = z.object({
   id: z.string(),

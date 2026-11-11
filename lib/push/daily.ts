@@ -39,11 +39,21 @@ function passedSince(from: Date, to: Date, tz: string, at: number): boolean {
   return localDate(from, tz) < today || localMinutes(from, tz) < at;
 }
 
-/** The first sentence of a paragraph of plain text. */
+const PUSH_MAX = 240;
+
+/**
+ * The first sentence of a paragraph of plain text, at most PUSH_MAX characters: a longer one (a fold names every card it
+ * folds, RFC 0.9 §8) is cut after the last whole item that fits ("; " or ", "), else the last whole word, and ends "…".
+ */
 export function firstSentence(text: string): string {
   const t = text.replace(/\s+/g, ' ').trim();
   const m = /^.*?[.!?](?=\s|$)/.exec(t);
-  return (m ? m[0] : t).slice(0, 240);
+  const s = m ? m[0] : t;
+  if (s.length <= PUSH_MAX) return s;
+  const head = s.slice(0, PUSH_MAX - 1);
+  const item = Math.max(head.lastIndexOf('; '), head.lastIndexOf(', '));
+  const cut = item > PUSH_MAX / 2 ? item : head.lastIndexOf(' ');
+  return `${head.slice(0, cut > 0 ? cut : head.length).replace(/[\s;,:—-]+$/, '')}…`;
 }
 
 /**
