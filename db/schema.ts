@@ -181,14 +181,16 @@ export const labelCeilings = pgTable(
 
 // RFC 0.9 §9 "Sensitivity": the owner's floors per producer root and per label (normal | private | confirm). Applied when a
 // card is handled, not when it is stored, so raising one protects the cards already stored (lib/sensitivity.ts). Kept
-// apart from producer_tokens so a floor outlives the tokens of its root.
+// apart from producer_tokens so a floor outlives the tokens of its root. A label's row also keeps its fold policy (§9
+// "Folding": `count`; absent is `list`, the default), so a row may hold a policy and no floor; one with neither is removed.
 export const sensitivityFloors = pgTable(
   'sensitivity_floors',
   {
     headId: text('head_id').notNull().references(() => heads.id),
     scope: text('scope').notNull(), // producer | label
     key: text('key').notNull(), // the producer's root, or the label
-    floor: text('floor').notNull(), // normal | private | confirm
+    floor: text('floor'), // normal | private | confirm; null: no floor (the row keeps a fold policy)
+    foldPolicy: text('fold_policy'), // count; null: list (labels only)
   },
   (t) => [primaryKey({ columns: [t.headId, t.scope, t.key] })],
 );

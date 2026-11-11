@@ -9,6 +9,7 @@ import { cards, decisionLog, heads } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { startSession } from '../../lib/auth/session';
 import { card, cardPath } from './cards';
+import { putFoldDay } from './fold-day';
 import { call, headUrl, OWNER, ownerSession, resetHead, testDb, cardRow } from './helpers';
 
 let browser: Browser;
@@ -2036,6 +2037,73 @@ describe('sensitivity (RFC 0.9 §4.1, §4.5 "Identifying again", §9)', () => {
     await page.goto(`${headUrl()}/settings/preferences`, { waitUntil: 'networkidle0' });
     await page.select('[aria-label="Sensitivity floor for every card"]', 'private');
     await until(async () => (await call('GET', '/api/me/settings', { auth: `Session ${session.access_token}` })).body.sensitivity_floor === 'private');
+    expect(errors).toEqual([]);
+  });
+});
+
+describe('brief folds (RFC 0.9 §8, §9)', () => {
+  const shots = process.env.PBCP_SHOTS;
+  const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const fold = (text: string) => page.$(`xpath/.//span[@data-fold][button[contains(., "${text}")]]`);
+  const shoot = async (sel: string, name: string) => {
+    await page.evaluate((s) => document.querySelector(s)!.scrollIntoView({ block: 'center' }), sel);
+    await new Promise((r) => setTimeout(r, 400));
+    await page.screenshot({ path: `${shots}/${name}.png` });
+  };
+
+  it('shows a fold as one line in the paragraph that opens in place to its cards, each linked; it offers no control, and the decisions below are unchanged', async () => {
+    const hermes = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'hermes' })}`;
+    await putFoldDay(minutesAgo(20), hermes);
+    await call('POST', '/api/test', { body: { clock: null } });
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-fold]');
+    const mail = (await fold('the mail reader'))!;
+    expect(await mail.$eval('button', (b) => [b.textContent, b.getAttribute('aria-expanded')])).toEqual(['6 the mail reader proposes archiving', 'false']);
+    expect(await mail.$('[data-fold-cards]')).toBeNull();
+    expect(await page.$eval('.daily-paragraph p', (p) => p.textContent)).toMatch(/^9 decisions: Reply to Anna — Anna asks whether the invoice can wait until the 20th; Join the offsite — Two days in Aarhus from the 14th, travel booked by the office; /);
+    if (shots) await shoot('.daily-paragraph', 'fold-360-collapsed');
+
+    await press(await mail.$('button'));
+    await page.waitForSelector('[data-fold-open] [data-fold-cards]');
+    expect(await mail.$$eval('[data-fold-cards] a', (as) => as.map((a) => [a.textContent, decodeURIComponent(new URL((a as HTMLAnchorElement).href).pathname)]))).toEqual(
+      ['Order receipt', 'Weekly newsletter', 'Shipping update', 'Password reset', 'Event reminder', 'Bank statement'].map((t, i) => [t, `/card/mail:inbox:${i + 1}`]),
+    );
+    expect(await mail.$$('[data-fold-cards] button, [data-fold-cards] [data-action]')).toHaveLength(0); // no control of its own
+    if (shots) await shoot('.daily-paragraph', 'fold-360-expanded');
+    // Each folded card is still a decision of its own, with its own actions.
+    expect(await page.$$eval('article[data-kind="decision"]', (as) => as.length)).toBe(9);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  it('a label set to count in Settings → Producers: its tasks under a collapsed Routine group, ticked from there, and counted as routine in the paragraph', async () => {
+    const todo = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todo' })}`;
+    const today = new Date().toISOString().slice(0, 10);
+    await call('PUT', cardPath('todo:task:pass'), { auth: todo, body: card('todo:task:pass', { kind: 'task', title: 'Renew the passport', about: today }) });
+    for (const n of [1, 2, 3, 4, 5]) await call('PUT', cardPath(`todo:task:pill${n}`), { auth: todo, body: card(`todo:task:pill${n}`, { kind: 'task', title: `Supplement ${n}`, about: today, labels: ['supplements'] }) });
+    await page.setViewport({ width: 360, height: 844 });
+    await page.goto(`${headUrl()}/settings/producers`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-fold-policy="supplements"]');
+    await page.select('[data-fold-policy="supplements"]', 'count');
+    await until(async () => (await call('GET', '/api/me/settings/labels', { auth: `Session ${session.access_token}` })).body.labels.find((l: { label: string }) => l.label === 'supplements')?.fold_policy === 'count');
+    await until(async () => (await page.$eval('[data-fold-policy="supplements"]', (s) => (s as HTMLSelectElement).value)) === 'count');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (shots) await shoot('[data-fold-policy="supplements"]', 'producers-fold-policy-360');
+
+    await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('[data-routine-toggle]');
+    expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 1 open');
+    expect(await page.$eval('[data-routine-toggle]', (b) => [b.textContent, b.getAttribute('aria-expanded')])).toEqual(['▸ Routine (5)', 'false']);
+    expect(await page.$('[data-routine-tasks]')).toBeNull();
+    expect(await page.$$eval('.daily-paragraph p', (ps) => ps.map((p) => p.textContent))).toContain('Tasks: 1 due and 5 routine.');
+    await press(await page.$('[data-routine-toggle]'));
+    await page.waitForSelector('[data-routine-tasks] article[data-kind="task"]');
+    expect(await page.$$eval('[data-routine-tasks] article', (as) => as.map((a) => a.getAttribute('data-card')))).toEqual([1, 2, 3, 4, 5].map((n) => `todo:task:pill${n}`));
+    await press(await page.$('[data-routine-tasks] article[data-card="todo:task:pill1"] [data-done-control]'));
+    await until(async () => (await row('todo:task:pill1')).decision === 'done');
+    await page.waitForSelector('[data-routine-tasks] article[data-card="todo:task:pill1"] [data-done-control][aria-checked="true"]');
+    expect(await page.$eval('[data-routine-toggle]', (b) => b.textContent)).toBe('▾ Routine (4)');
     expect(errors).toEqual([]);
   });
 });

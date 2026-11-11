@@ -1,8 +1,10 @@
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cards, diagrams } from '../../db/schema';
+import { cards, diagrams, sensitivityFloors } from '../../db/schema';
 import { mintProducerToken } from '../../lib/auth/producer';
 import { card, cardPath } from './cards';
+import { FOLD_DAY_SPOKEN, putFoldDay } from './fold-day';
+import { TEST_CRON_SECRET } from '../env';
 import { call, headUrl, OWNER, ownerSession, resetHead, testDb } from './helpers';
 
 let hermes: string;
@@ -232,7 +234,7 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
 
   it('stores a card under a producer ceiling and label ceilings with the lowest of them', async () => {
     // hermes's ceiling is immediate.
-    expect((await me('PATCH', '/api/me/settings/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log', sensitivity_floor: null });
+    expect((await me('PATCH', '/api/me/settings/labels/newsletters', { ceiling: 'log' })).body).toEqual({ label: 'newsletters', cards: 0, ceiling: 'log', sensitivity_floor: null, fold_policy: 'list' });
     await me('PATCH', '/api/me/settings/labels/billing-revamp', { ceiling: 'brief' });
     await put('hermes:gmail:n1', { kind: 'signal', urgency: 'immediate', labels: ['newsletters'] });
     await put('hermes:gmail:n2', { kind: 'signal', urgency: 'immediate', labels: ['billing-revamp', 'newsletters'] }); // both: the lowest
@@ -252,8 +254,8 @@ describe('ceilings per label (RFC 0.7 §9)', () => {
     await put('hermes:gmail:l2', { kind: 'artifact', labels: ['a-label'] });
     await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: 'brief' });
     expect((await me('GET', '/api/me/settings/labels')).body.labels).toEqual([
-      { label: 'a-label', cards: 2, ceiling: 'brief', sensitivity_floor: null },
-      { label: 'b-label', cards: 1, ceiling: null, sensitivity_floor: null },
+      { label: 'a-label', cards: 2, ceiling: 'brief', sensitivity_floor: null, fold_policy: 'list' },
+      { label: 'b-label', cards: 1, ceiling: null, sensitivity_floor: null, fold_policy: 'list' },
     ]);
     expect((await me('PATCH', '/api/me/settings/labels/a-label', { ceiling: null })).body.ceiling).toBeNull();
     expect((await me('PATCH', '/api/me/settings/labels/Not_A_Label', { ceiling: 'log' })).status).toBe(400);
@@ -425,7 +427,7 @@ describe('timezone and settings', () => {
   const settings = async () => (await me('GET', '/api/me/settings')).body;
 
   it('takes the zone from the device most recently seen; UTC before any device has said', async () => {
-    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null, sensitivity_floor: null, sensitivity_floors: { producers: {}, labels: {} }, settings_seq: 0 });
+    expect(await settings()).toEqual({ head: OWNER, display_name: null, timezone: 'UTC', timezone_source: 'default', timezone_override: null, device_timezone: null, sensitivity_floor: null, sensitivity_floors: { producers: {}, labels: {} }, fold_policies: { labels: {} }, settings_seq: 0 });
     const phone = await ownerSession(OWNER, 'phone');
     expect((await zone(phone.auth, 'america/denver')).status).toBe(200); // stored in its canonical spelling
     expect(await settings()).toMatchObject({
@@ -603,7 +605,8 @@ describe('tasks (RFC 0.9 §4.1, §4.3, §4.5, §8)', () => {
     expect(ids(b.decisions)).toEqual([]);
     expect(ids(b.tomorrow.cards)).toContain('todo:task:tomorrow');
     // The paragraph counts and names them (§8).
-    expect(b.daily_paragraph.html).toMatch(/^Tasks: 3 due, 1 overdue: <a [^>]*>overdue<\/a> — Evidence; <a [^>]*>noon<\/a> — Evidence; <a [^>]*>undated<\/a> — Evidence\.$/);
+    // RFC 0.9 §8 (fold 9): the paragraph counts them; the Tasks section names each.
+    expect(b.daily_paragraph.html).toBe('Tasks: 3 due, 1 overdue.');
     // The next day, what was closed today has dropped.
     await clock('2026-10-08T07:00:00Z');
     // The next morning: what was closed has dropped, the snooze has run out, and the task about that day is due today.
@@ -645,5 +648,60 @@ describe('tasks (RFC 0.9 §4.1, §4.3, §4.5, §8)', () => {
   it('pushes an open task the producer sent immediate, as any card (§9); nothing new for tasks', async () => {
     const r = await task('todo:task:soon', { urgency: 'immediate', at: '2026-10-07T10:30:00Z' });
     expect(r.body).toMatchObject({ kind: 'task', delivery: 'immediate', state: 'open' });
+  });
+});
+
+describe('the brief’s folds (RFC 0.9 §8, §9)', () => {
+  it('names eight decisions in one sentence: two with their leads, six in one fold under the mail reader’s archive; the parts carry the fold; spoken, the same in plain words', async () => {
+    await putFoldDay('2026-10-07T07:00:00Z', hermes);
+    const b = (await me('GET', '/api/me/brief')).body;
+    const p = b.daily_paragraph;
+    expect(p.so_far).toBe(true);
+    expect(p.parts.folds).toEqual([{ producer: 'mail', name: 'the mail reader', action: 'archive', action_label: 'Archive', ids: [1, 2, 3, 4, 5, 6].map((n) => `mail:inbox:${n}`) }]);
+    // Every decision named, linked; the folded ones by their titles alone.
+    expect(p.parts.decisions.map((e: { id: string; text: string }) => [e.id, e.text.replace(/<[^>]*>/g, '')])).toEqual([
+      ['hermes:gmail:anna', 'Reply to Anna — Anna asks whether the invoice can wait until the 20th'],
+      ['hermes:gmail:offsite', 'Join the offsite — Two days in Aarhus from the 14th, travel booked by the office'],
+      ...['Order receipt', 'Weekly newsletter', 'Shipping update', 'Password reset', 'Event reminder', 'Bank statement'].map((t, i) => [`mail:inbox:${i + 1}`, t]),
+    ]);
+    expect(p.html.replace(/<[^>]*>/g, '')).toBe(FOLD_DAY_SPOKEN);
+    expect((p.html.match(/<a /g) ?? []).length).toBe(8);
+    // The Decide view is unchanged: eight cards, each with its own actions.
+    expect(ids(b.decisions)).toEqual(['hermes:gmail:anna', 'hermes:gmail:offsite', ...[6, 5, 4, 3, 2, 1].map((n) => `mail:inbox:${n}`).reverse()]);
+    const spoken = (await me('GET', '/api/me/brief?spoken=1')).body.daily_paragraph;
+    expect(spoken.text).toBe(FOLD_DAY_SPOKEN);
+    // The nightly card: the same parts, frozen.
+    await clock('2026-10-08T05:31:00Z');
+    expect((await call('GET', '/api/cron/brief', { auth: `Bearer ${TEST_CRON_SECRET}` })).status).toBe(200);
+    const next = (await me('GET', '/api/me/brief?spoken=1')).body.daily_paragraph;
+    expect([next.so_far, next.text]).toEqual([false, FOLD_DAY_SPOKEN]);
+  });
+
+  it('a label set to `count`: stored beside its floor, moving settings_seq; in /api/me/settings; its tasks routine in the paragraph and the Tasks section', async () => {
+    const todo = `Bearer ${await mintProducerToken(testDb(), { headId: OWNER, root: 'todo', ceiling: 'immediate' })}`;
+    const task = (id: string, extra: Record<string, unknown>) => put(id, { kind: 'task', title: id.split(':').at(-1), ...extra }, todo);
+    await task('todo:task:bins', { about: '2026-10-06' });
+    await task('todo:task:pass', { about: '2026-10-07' });
+    for (const n of [1, 2, 3, 4, 5]) await task(`todo:task:pill${n}`, { about: '2026-10-07', labels: ['supplements'] });
+    const before = (await call('GET', '/api/me/seq', { auth: owner.auth })).body.settings_seq;
+    expect((await me('GET', '/api/me/brief')).body.daily_paragraph.html).toBe('Tasks: 7 due, 1 overdue.');
+
+    const r = await me('PATCH', '/api/me/settings/labels/supplements', { fold_policy: 'count', sensitivity_floor: 'private' });
+    expect(r.body).toMatchObject({ label: 'supplements', cards: 5, fold_policy: 'count', sensitivity_floor: 'private' });
+    expect((await call('GET', '/api/me/seq', { auth: owner.auth })).body.settings_seq).toBe(before + 2);
+    expect((await me('GET', '/api/me/settings')).body).toMatchObject({ fold_policies: { labels: { supplements: 'count' } }, sensitivity_floors: { labels: { supplements: 'private' } } });
+
+    const b = (await me('GET', '/api/me/brief')).body;
+    expect(b.daily_paragraph.html).toBe('Tasks: 2 due, 1 overdue and 5 routine.');
+    expect(b.tasks.filter((t: { routine?: true }) => t.routine).map((t: { id: string }) => t.id).sort()).toEqual([1, 2, 3, 4, 5].map((n) => `todo:task:pill${n}`));
+    expect(b.tasks.find((t: { id: string }) => t.id === 'todo:task:bins').routine).toBeUndefined();
+
+    // The floor cleared keeps the policy; the policy back to list clears the row.
+    await me('PATCH', '/api/me/settings/labels/supplements', { sensitivity_floor: null });
+    expect((await me('GET', '/api/me/settings')).body.fold_policies).toEqual({ labels: { supplements: 'count' } });
+    await me('PATCH', '/api/me/settings/labels/supplements', { fold_policy: 'list' });
+    expect((await me('GET', '/api/me/settings')).body.fold_policies).toEqual({ labels: {} });
+    expect((await testDb().select().from(sensitivityFloors)).length).toBe(0);
+    expect((await me('PATCH', '/api/me/settings/labels/supplements', { fold_policy: 'hide' })).status).toBe(400);
   });
 });

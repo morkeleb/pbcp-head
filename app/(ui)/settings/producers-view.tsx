@@ -19,7 +19,7 @@ interface Token {
   paired: { name: string | null; address: string | null; at: string } | null;
 }
 interface OpenCode { id: string; created_at: string; expires_at: string }
-interface Label { label: string; cards: number; ceiling: Urgency | null; sensitivity_floor: Sensitivity | null }
+interface Label { label: string; cards: number; ceiling: Urgency | null; sensitivity_floor: Sensitivity | null; fold_policy: 'list' | 'count' }
 
 export function ProducersView() {
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +169,7 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
 
       <Pairing onPaired={load} onError={onError} />
 
-      <h4 className="pb-2 pt-6 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-label-ceilings-title>Ceilings and sensitivity by label</h4>
+      <h4 className="pb-2 pt-6 text-meta font-semibold uppercase tracking-meta text-muted-foreground" data-label-ceilings-title>Ceilings, sensitivity and the brief by label</h4>
       {labels === null ? null : labels.length === 0 ? (
         <p className="text-lead text-muted-foreground">No card carries a label yet.</p>
       ) : (
@@ -177,8 +177,9 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
           <tbody className="divide-y border-y">
             {labels.map((l) => (
               <tr key={l.label}>
-                <th scope="row" className="py-2 pr-3 text-left font-normal">
-                  {l.label} <span className="text-lead text-muted-foreground">· {l.cards} {l.cards === 1 ? 'card' : 'cards'}</span>
+                {/* The label whole on its line, its count under it: three selects beside it leave a phone little room. */}
+                <th scope="row" className="whitespace-nowrap py-2 pr-3 text-left align-top font-normal">
+                  {l.label} <span className="block text-lead text-muted-foreground">{l.cards} {l.cards === 1 ? 'card' : 'cards'}</span>
                 </th>
                 <td className="py-2 text-right">
                   <span className="inline-flex flex-wrap justify-end gap-2">
@@ -189,6 +190,12 @@ function Producers({ onError }: { onError: (e: unknown) => void }) {
                     </select>
                     <FloorSelect label={`Sensitivity floor for label ${l.label}`} value={l.sensitivity_floor} disabled={!online}
                       onChange={(v) => void act(() => call(`/api/me/settings/labels/${encodeURIComponent(l.label)}`, 'PATCH', { sensitivity_floor: v }))} />
+                    {/* RFC 0.9 §9 "Folding": list the label's tasks in the brief, or count them as routine. */}
+                    <select aria-label={`In the brief, label ${l.label}`} className={field} value={l.fold_policy} disabled={!online} data-fold-policy={l.label}
+                      onChange={(e) => void act(() => call(`/api/me/settings/labels/${encodeURIComponent(l.label)}`, 'PATCH', { fold_policy: e.target.value }))}>
+                      <option value="list">list in the brief</option>
+                      <option value="count">count as routine</option>
+                    </select>
                   </span>
                 </td>
               </tr>

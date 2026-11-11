@@ -77,6 +77,8 @@ export interface MeCard {
   replaced_by?: { id: string; title: string; kind?: MeCard['kind']; state: 'open' | 'decided' | 'superseded'; decision?: string };
   /** On a 409 from the decision route: what happened, in words. */
   message?: string;
+  /** In the brief's Tasks section: under a label the owner set to fold as a count (RFC 0.9 §9), listed under Routine. */
+  routine?: true;
   /** On a `head:daily` card: its paragraph in parts, for the label filter. */
   paragraph?: ParagraphParts;
 }

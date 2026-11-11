@@ -172,7 +172,11 @@ export function registerOwnerTools(server: McpServer, client: OwnerClient): void
       title: 'Read the brief',
       description:
         'The owner’s brief for today, or for an earlier `day` (YYYY-MM-DD). Start here when the owner asks what is new or what needs them. ' +
-        '`paragraph` is the day’s summary in one paragraph, written to be read aloud as it is. `decisions` are the questions waiting for the owner, newest first: ' +
+        '`paragraph` is the day’s summary in one paragraph, written to be read aloud as it is. It gives the lead only of a decision that needs the owner (no ' +
+        'default action, or urgent) and folds the others by producer and default action, naming each card: "6 the mail reader proposes archiving: Order ' +
+        'receipt, Weekly newsletter, …". A fold is not a decision and has no answer of its own: its cards are in `decisions`, and each is decided one by one ' +
+        'with decide, once the owner has said so for that card (or said so for each of them by name). It counts tasks; `tasks` names them. ' +
+        '`decisions` are the questions waiting for the owner, newest first: ' +
         'read each one’s title and lead, then its choices (`actions`, the one marked `default` is what the producer proposes); never decide on the owner’s behalf ' +
         'without asking them. `tasks` are what the owner has to do themselves, due today or overdue (overdue ones marked), by when they are due, and those ' +
         'closed today; read each title, lead and when it is due; one is marked done with decide `done`. `updates` (artifacts) and `signals` are folded by thread, the newest card of each with how many came in it. `snoozed` counts decisions ' +

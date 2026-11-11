@@ -3,17 +3,24 @@
 // the owner filters by and still write the same sentences. Pure and dependency-free: the fold composes markdown with
 // it, the head HTML, the browser the filtered paragraph.
 //
-// A brief says the few things and counts the rest, weighted by `delivery` (RFC §9). Up to four sentences, each a
-// paragraph of its own in a view, one run of prose in the card's lead:
+// A brief names everything and explains only what needs the person (RFC 0.9 §8), and counts the rest, weighted by
+// `delivery` (§9). Up to five sentences, each a paragraph of its own in a view, one run of prose in the card's lead:
 //
-//   "2 decisions, 1 snoozed: <entry>; <entry>."                     (or "Nothing waiting for you.")
-//   "Tasks: 3 due, 1 overdue: <entry>; <entry>; <entry>."            (RFC 0.9 §8; none when no task is due)
+//   "8 decisions, 1 snoozed: <title> — <lead>; <title> — <lead>; 6 the mail reader proposes archiving: <title>, … and <title>."
+//                                                                   (or "Nothing waiting for you.")
+//   "Tasks: 23 due, 21 overdue and 5 routine."                       (RFC 0.9 §8, §9; none when no task is due)
 //   "Yesterday you decided: <title> — decided <value>; …; and your orders came back: <order> — done: <lead>."
 //   "What mattered yesterday: <entry>; …; and 3 more."              (at most MATTERED_SHOWN entries)
 //   "And 9 updates from mail, goalpath, hermes and obsidian."        (counted, no titles)
 //
 // A part with nothing is left out. Fold 5 and earlier kept one `yesterday` list instead of the last three; a day
 // folded then is still written its way ("Yesterday: <entry>; ….").
+//
+// The fold (§8): a decision with no `default` action, or whose `urgency` is `immediate`, is named with its lead. Every
+// other open decision is folded under its default action with the other cards from its producer that share it, each
+// named by its title: "6 the mail reader proposes archiving: Order receipt, Weekly newsletter, …". A fold offers no
+// control; each card is decided on its own card. Tasks are counted here and listed in the brief's Tasks section; tasks
+// under a label the owner set to fold as a count (§9 `count`) are counted apart, as routine.
 
 export interface ParagraphEntry {
   id: string;
@@ -39,13 +46,33 @@ export interface CountedThread {
   labels: string[];
 }
 
+/**
+ * Decisions folded under their producer's shared default action (RFC 0.9 §8): named, never decided, by the fold. The
+ * cards are entries of `decisions` (each its linked title alone); `ids` is their order in the fold.
+ */
+export interface ParagraphFold {
+  /** The producer's root. */
+  producer: string;
+  /** How the brief names the producer: its display name when the owner gave one (producer_tokens.name), else the root. */
+  name: string;
+  /** The default action's id, and its label from the card (the id when the card gives none). */
+  action: string;
+  action_label: string;
+  ids: string[];
+}
+
 export interface ParagraphParts {
-  /** Open decisions that are not snoozed, listed (§8). */
+  /** Open decisions that are not snoozed, every one named (§8): "<title> — <lead>", or the title alone when folded. */
   decisions: ParagraphEntry[];
+  /** Fold 9 on: the decisions folded by producer and default action, beside the entries. */
+  folds?: ParagraphFold[];
   /** Snoozed decisions, counted and never listed (§8): only their labels, so a filtered count stays right. */
   snoozed: string[][];
-  /** Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "<title> — <lead>", and whether overdue. */
-  tasks?: Array<ParagraphEntry & { overdue: boolean }>;
+  /**
+   * Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "<title> — <lead>", whether overdue, and
+   * whether routine (a label the owner set to fold as a count, §9). The paragraph counts them; the Tasks section lists them.
+   */
+  tasks?: Array<ParagraphEntry & { overdue: boolean; routine?: boolean }>;
   /** Decisions the owner made the day before: "<title> — decided <value>" ("<title> — done" for a task). */
   decided?: ParagraphEntry[];
   /** The day before's signals delivered immediate or brief, and its brief artifacts from quiet producers, newest first. */
@@ -68,6 +95,26 @@ export const matchesLabels = (labels: readonly string[], chosen: readonly string
 
 /** "a", "a and b", "a, b and c". */
 export const listing = (items: readonly string[]) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+
+/**
+ * An action's label as what the producer proposes doing: "Archive" → "archiving", "Pay now" → "paying now", "Ship" →
+ * "shipping". Mechanical, on the first word: a closing silent e is dropped, a short closing consonant after one vowel
+ * doubled; a word already ending in -ing stays.
+ */
+export function proposing(label: string): string {
+  const [first = '', ...rest] = label.trim().split(/\s+/);
+  const w = /^[A-Z][a-z]*$/.test(first) ? first.toLowerCase() : first;
+  let g: string;
+  if (!/^[a-z]+$/.test(w) || w.endsWith('ing')) g = w;
+  else if (/ie$/.test(w)) g = `${w.slice(0, -2)}ying`;
+  else if (/[^aeiou]e$/.test(w) && w.length > 2) g = `${w.slice(0, -1)}ing`;
+  else if (/^[^aeiou]*[aeiou][^aeiouwxy]$/.test(w)) g = `${w}${w.at(-1)}ing`;
+  else g = `${w}ing`;
+  return [g, ...rest].join(' ');
+}
+
+/** "the mail reader proposes archiving" */
+export const foldPhrase = (f: Pick<ParagraphFold, 'name' | 'action_label'>) => `${f.name} proposes ${proposing(f.action_label)}`;
 
 /** "9 updates from mail, goalpath and hermes": producers by how many threads each has, most first, then by name. */
 function counted(rest: CountedThread[]): string {
@@ -101,6 +148,51 @@ export interface ComposeOptions {
    * text is plain, not HTML.
    */
   spoken?: boolean;
+  /**
+   * For a view that shows each fold as one line it can open (DailyBrief): a fold is written as FOLD_MARK, its index in
+   * `parts.folds`, FOLD_MARK, and foldViews gives what the line says and the cards it opens to.
+   */
+  foldMarks?: boolean;
+}
+
+/** Brackets a fold's index in a paragraph composed with `foldMarks`. */
+export const FOLD_MARK = '\u0001';
+
+/** A fold as a view shows it: "6 the mail reader proposes archiving", and its cards' entries the filter kept. */
+export interface FoldView {
+  index: number;
+  phrase: string;
+  entries: ParagraphEntry[];
+}
+
+/** Each fold of `parts` after the label filter, by its index; a fold with no card left is absent. */
+export function foldViews(parts: ParagraphParts, chosen: readonly string[] = []): FoldView[] {
+  const byId = new Map(parts.decisions.filter((e) => matchesLabels(e.labels, chosen)).map((e) => [e.id, e]));
+  return (parts.folds ?? []).flatMap((f, index) => {
+    const entries = f.ids.map((id) => byId.get(id)).filter((e): e is ParagraphEntry => e !== undefined);
+    return entries.length === 0 ? [] : [{ index, phrase: `${entries.length > 1 ? `${entries.length} ` : ''}${foldPhrase(f)}`, entries }];
+  });
+}
+
+/**
+ * The decisions sentence's items (§8): first each card that needs the person, "<title> — <lead>", in the parts' order;
+ * then each fold, "6 the mail reader proposes archiving: <title>, … and <title>", its cards those the filter kept. Spoken,
+ * a private card is named nowhere, in a fold or out of one, and all of them are counted last ("and 2 private decisions").
+ */
+function decisionItems(decisions: readonly ParagraphEntry[], folds: readonly ParagraphFold[], opts: ComposeOptions, say: (e: ParagraphEntry) => string): string[] {
+  const hide = (e: ParagraphEntry) => opts.spoken === true && isPrivateEntry(e);
+  const folded = new Set(folds.flatMap((f) => f.ids));
+  const byId = new Map(decisions.map((e) => [e.id, e]));
+  const own = decisions.filter((e) => !folded.has(e.id) && !hide(e)).map(say);
+  const grouped = folds.flatMap((f, i) => {
+    const named = f.ids.map((id) => byId.get(id)).filter((e): e is ParagraphEntry => e !== undefined && !hide(e));
+    if (named.length === 0) return [];
+    if (opts.foldMarks) return [`${FOLD_MARK}${i}${FOLD_MARK}`];
+    return [`${named.length > 1 ? `${named.length} ` : ''}${foldPhrase(f)}: ${listing(named.map(say))}`];
+  });
+  const hidden = decisions.filter(hide).length;
+  const shown = [...own, ...grouped];
+  return hidden === 0 ? shown : [...shown, `${shown.length > 0 ? 'and ' : ''}${plural(hidden, 'private decision')}`];
 }
 
 /**
@@ -126,14 +218,18 @@ export function composeParagraphs(parts: ParagraphParts, chosen: readonly string
     out.push(
       allPrivate(decisions)
         ? `${plural(decisions.length, 'private decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}.`
-        : `${plural(decisions.length, 'decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}: ${items(decisions, 'decision').join('; ')}.`,
+        : `${plural(decisions.length, 'decision')}${snoozed > 0 ? `, ${snoozed} snoozed` : ''}: ${decisionItems(decisions, parts.folds ?? [], opts, say).join('; ')}.`,
     );
   else if (tasks.length === 0) out.push(snoozed > 0 ? `Nothing waiting for you; ${plural(snoozed, 'decision')} snoozed.` : 'Nothing waiting for you.');
   else if (snoozed > 0) out.push(`No decisions; ${snoozed} snoozed.`);
   if (tasks.length > 0) {
-    const overdue = tasks.filter((t) => t.overdue).length;
-    const head = `Tasks: ${tasks.length} due${overdue > 0 ? `, ${overdue} overdue` : ''}`;
-    out.push(allPrivate(tasks) ? `${head}, ${tasks.length === 1 ? 'a private one' : 'all private'}.` : `${head}: ${items(tasks, 'task').join('; ')}.`);
+    // Counted, not named: the Tasks section names each with when it is due (§8). Routine ones (§9 `count`) apart.
+    const named = tasks.filter((t) => !t.routine);
+    const overdue = named.filter((t) => t.overdue).length;
+    const routine = tasks.length - named.length;
+    // Overdue is among the due ("23 due, 21 overdue", §4.5); routine is apart ("… and 5 routine").
+    const due = named.length > 0 ? `${named.length} due${overdue > 0 ? `, ${overdue} overdue` : ''}` : '';
+    out.push(`Tasks: ${[due, routine > 0 ? `${routine} routine` : ''].filter(Boolean).join(' and ')}.`);
   }
 
   const before = keep(parts.yesterday);

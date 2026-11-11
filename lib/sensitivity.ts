@@ -8,7 +8,7 @@
 // card's own `sensitivity` is never rewritten: it stays as sent, for equality (§5) and in what the head returns and syncs.
 
 import { effectiveSensitivity, SENSITIVITIES, type Sensitivity } from '@pbcp/core';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { cards, heads, sensitivityFloors } from '../db/schema';
 import type { ParagraphParts } from './brief/paragraph';
@@ -58,14 +58,40 @@ export const isPrivate = (s: Sensitivity): boolean => s !== 'normal';
 
 /** Sets or clears (null) the owner's floor on a producer root or a label. */
 export async function setFloor(db: Db, headId: string, scope: 'producer' | 'label', key: string, floor: Sensitivity | null): Promise<void> {
-  const where = and(eq(sensitivityFloors.headId, headId), eq(sensitivityFloors.scope, scope), eq(sensitivityFloors.key, key));
   await db.transaction(async (tx) => {
-    if (floor === null) await tx.delete(sensitivityFloors).where(where);
-    else
-      await tx
-        .insert(sensitivityFloors)
-        .values({ headId, scope, key, floor })
-        .onConflictDoUpdate({ target: [sensitivityFloors.headId, sensitivityFloors.scope, sensitivityFloors.key], set: { floor } });
+    await upsertPolicy(tx, headId, scope, key, { floor });
+    await bumpSettingsSeq(tx, headId);
+  });
+}
+
+/** A label's row in sensitivity_floors: one field set, the other kept; a row left with neither is removed. */
+async function upsertPolicy(tx: Db | Tx, headId: string, scope: 'producer' | 'label', key: string, set: { floor?: Sensitivity | null; foldPolicy?: 'count' | null }) {
+  const where = and(eq(sensitivityFloors.headId, headId), eq(sensitivityFloors.scope, scope), eq(sensitivityFloors.key, key));
+  await tx
+    .insert(sensitivityFloors)
+    .values({ headId, scope, key, floor: set.floor ?? null, foldPolicy: set.foldPolicy ?? null })
+    .onConflictDoUpdate({ target: [sensitivityFloors.headId, sensitivityFloors.scope, sensitivityFloors.key], set });
+  await tx.delete(sensitivityFloors).where(and(where, isNull(sensitivityFloors.floor), isNull(sensitivityFloors.foldPolicy)));
+}
+
+// RFC 0.9 §9 "Folding": a fold policy per label, `list` (the default) or `count`. It changes the brief's fold, never the
+// card: a task under a `count` label is counted as routine in the paragraph and grouped apart in the Tasks section.
+export const FOLD_POLICIES = ['list', 'count'] as const;
+export type FoldPolicy = (typeof FOLD_POLICIES)[number];
+
+/** Labels the owner set to fold as a count. */
+export async function countLabels(db: Db | Tx, headId: string): Promise<string[]> {
+  const rows = await db
+    .select({ key: sensitivityFloors.key })
+    .from(sensitivityFloors)
+    .where(and(eq(sensitivityFloors.headId, headId), eq(sensitivityFloors.scope, 'label'), eq(sensitivityFloors.foldPolicy, 'count')));
+  return rows.map((r) => r.key).sort();
+}
+
+/** Sets a label's fold policy; `list` (or null) is the default and clears it. Moves settings_seq, as a floor does. */
+export async function setFoldPolicy(db: Db, headId: string, label: string, policy: FoldPolicy | null): Promise<void> {
+  await db.transaction(async (tx) => {
+    await upsertPolicy(tx, headId, 'label', label, { foldPolicy: policy === 'count' ? 'count' : null });
     await bumpSettingsSeq(tx, headId);
   });
 }

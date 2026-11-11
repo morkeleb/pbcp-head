@@ -153,7 +153,8 @@ describe('the whole flow', () => {
     expect(brief.date).toBe('2026-10-07');
     expect(brief.decisions).toEqual([expect.objectContaining({ id: 'hermes:mail:anna', title: 'Reply to Anna re invoice timing', lead: 'Anna asks to pay on the 20th.', labels: ['billing'], editable: true, actions: [{ id: 'agree', label: 'Agree', default: true }, { id: 'reject', label: 'reject' }] })]);
     expect(brief.updates).toEqual([expect.objectContaining({ id: 'hermes:report:1', title: 'Weekly report' })]);
-    expect(brief.paragraph).toMatch(/^1 decision: Reply to Anna re invoice timing — Anna asks to pay on the 20th\./);
+    // RFC 0.9 §8: a decision with a default action is folded under it, named by its title; decided on its own with decide.
+    expect(brief.paragraph).toMatch(/^1 decision: hermes proposes agreeing: Reply to Anna re invoice timing\./);
     const decided = parse(await client.callTool({ name: 'decide', arguments: { id: 'hermes:mail:anna', decision: 'agree', comment: 'Fine by me.' } }));
     expect(decided).toMatchObject({ id: 'hermes:mail:anna', state: 'decided', decision: 'agree', comment: 'Fine by me.' });
     const list = (await call('GET', '/api/me/settings/devices', { auth: owner.auth })).body.devices;

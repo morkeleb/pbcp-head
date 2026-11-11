@@ -13,7 +13,7 @@ import { canonicalZone, effectiveTimezone } from './timezone';
 import { listDevices } from './me';
 import { openRows } from './store';
 import { parseQuarterHour } from './push/daily';
-import { bumpSettingsSeq, floorsOf, isSensitivity, loadPolicy, parseFloor, setFloor, type Sensitivity } from './sensitivity';
+import { bumpSettingsSeq, countLabels, floorsOf, isSensitivity, loadPolicy, parseFloor, setFloor, setFoldPolicy, type FoldPolicy, type Sensitivity } from './sensitivity';
 
 /**
  * POST /api/me/visit: the owner left the brief having seen everything up to `seq` (default: now). The
@@ -98,9 +98,16 @@ export async function listLabels(db: Db, headId: string) {
   const set = await db.select().from(labelCeilings).where(eq(labelCeilings.headId, headId));
   const ceilings = new Map(set.map((r) => [r.label, r.ceiling as Urgency]));
   const floors = (await loadPolicy(db, headId)).labels;
-  const names = [...new Set([...used.map((u) => u.label), ...ceilings.keys(), ...floors.keys()])].sort();
+  const counting = new Set(await countLabels(db, headId));
+  const names = [...new Set([...used.map((u) => u.label), ...ceilings.keys(), ...floors.keys(), ...counting])].sort();
   const counts = new Map(used.map((u) => [u.label, u.cards]));
-  return names.map((label) => ({ label, cards: counts.get(label) ?? 0, ceiling: ceilings.get(label) ?? null, sensitivity_floor: floors.get(label) ?? null }));
+  return names.map((label) => ({
+    label,
+    cards: counts.get(label) ?? 0,
+    ceiling: ceilings.get(label) ?? null,
+    sensitivity_floor: floors.get(label) ?? null,
+    fold_policy: (counting.has(label) ? 'count' : 'list') as FoldPolicy,
+  }));
 }
 
 /**
@@ -108,13 +115,15 @@ export async function listLabels(db: Db, headId: string) {
  * label (§9). A card under a producer ceiling and label ceilings is stored with the lowest; like a producer ceiling it
  * applies to content stored from now on.
  */
-export async function setLabelCeiling(db: Db, headId: string, label: string, ceiling: Urgency | null | undefined, floor?: Sensitivity | null) {
+export async function setLabelCeiling(db: Db, headId: string, label: string, ceiling: Urgency | null | undefined, floor?: Sensitivity | null, foldPolicy?: FoldPolicy) {
   if (!isLabel(label)) throw new HttpError(400, 'invalid_request', 'a label is 1 to 32 lowercase letters, digits or - (§4.1)');
   if (ceiling === null) await db.delete(labelCeilings).where(and(eq(labelCeilings.headId, headId), eq(labelCeilings.label, label)));
   else if (ceiling !== undefined) await db.insert(labelCeilings).values({ headId, label, ceiling }).onConflictDoUpdate({ target: [labelCeilings.headId, labelCeilings.label], set: { ceiling } });
   // RFC 0.9 §9: the owner's sensitivity floor on the label, applied to every card carrying it from now on, stored or not.
   if (floor !== undefined) await setFloor(db, headId, 'label', label, floor);
-  return (await listLabels(db, headId)).find((l) => l.label === label) ?? { label, cards: 0, ceiling: ceiling ?? null, sensitivity_floor: floor ?? null };
+  // RFC 0.9 §9 "Folding": how the brief folds the label's cards, `list` (the default) or `count`.
+  if (foldPolicy !== undefined) await setFoldPolicy(db, headId, label, foldPolicy);
+  return (await listLabels(db, headId)).find((l) => l.label === label) ?? { label, cards: 0, ceiling: ceiling ?? null, sensitivity_floor: floor ?? null, fold_policy: foldPolicy ?? 'list' };
 }
 
 /** DELETE /api/me/devices/{id}: signs that device out (its refresh token and access tokens stop working). */
@@ -178,6 +187,8 @@ export async function settings(db: Db, headId: string) {
     sensitivity_floor: isSensitivity(head.sensitivityFloor) ? head.sensitivityFloor : null,
     // Every floor in one place, for a device that recomputes effective sensitivity itself (local store).
     sensitivity_floors: await floorsOf(db, headId),
+    // RFC 0.9 §9 "Folding": the labels set to fold as a count (any other is `list`), so a device folds as the head does.
+    fold_policies: { labels: Object.fromEntries((await countLabels(db, headId)).map((l) => [l, 'count' as const])) },
     settings_seq: head.settingsSeq,
   };
 }
