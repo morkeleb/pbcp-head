@@ -619,6 +619,29 @@ describe('tasks (RFC 0.9 §4.1, §4.3, §4.5, §8)', () => {
     expect(ids((await me('GET', '/api/me/brief')).body.tasks)).toEqual([]);
   });
 
+  it('leaves a decided task superseded by a task out of the brief’s tasks, open and closed, and lists the successor on its own day; a task superseded by a log artifact is closed (§4.3, §8; C59)', async () => {
+    // Moved: decided `tomorrow`, then superseded by a task for the new day (§4.3 `moved-<n>`).
+    await task('todo:task:7731', { about: '2026-10-07', actions: ['tomorrow'] });
+    await decide('todo:task:7731', { decision: 'tomorrow' });
+    expect((await task('todo:task:7731:moved-1', { title: '7731', about: '2026-10-08', actions: ['tomorrow'], supersedes: 'todo:task:7731' })).status).toBe(201);
+    // Ended: decided `done`, then superseded by the producer's log artifact.
+    await task('todo:task:bins', { about: '2026-10-07' });
+    await decide('todo:task:bins', { decision: 'done' });
+    await put('todo:task:bins:closed', { kind: 'artifact', urgency: 'log', title: 'Done in Todoist', supersedes: 'todo:task:bins' }, todo);
+
+    const today = (await me('GET', '/api/me/brief')).body;
+    expect(ids(today.tasks)).toEqual(['todo:task:bins']);
+    expect(today.tasks[0]).toMatchObject({ state: 'superseded', decision: 'done', replaced_by: { id: 'todo:task:bins:closed', kind: 'artifact' } });
+    expect(ids(today.tomorrow.cards)).toContain('todo:task:7731:moved-1');
+    expect(ids(today.tomorrow.cards)).not.toContain('todo:task:7731');
+
+    // The successor's day: it is the open task, once; the predecessor is in no list, and the closed one has dropped.
+    await clock('2026-10-08T07:00:00Z');
+    const next = (await me('GET', '/api/me/brief')).body;
+    expect(ids(next.tasks)).toEqual(['todo:task:7731:moved-1']);
+    expect(next.tasks[0]).toMatchObject({ state: 'open', about: '2026-10-08' });
+  });
+
   it('pushes an open task the producer sent immediate, as any card (§9); nothing new for tasks', async () => {
     const r = await task('todo:task:soon', { urgency: 'immediate', at: '2026-10-07T10:30:00Z' });
     expect(r.body).toMatchObject({ kind: 'task', delivery: 'immediate', state: 'open' });
