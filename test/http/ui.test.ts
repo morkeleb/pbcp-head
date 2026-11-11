@@ -2061,7 +2061,9 @@ describe('brief folds (RFC 0.9 §8, §9)', () => {
     const mail = (await fold('the mail reader'))!;
     expect(await mail.$eval('button', (b) => [b.textContent, b.getAttribute('aria-expanded')])).toEqual(['6 the mail reader proposes archiving', 'false']);
     expect(await mail.$('[data-fold-cards]')).toBeNull();
-    expect(await page.$eval('.daily-paragraph p', (p) => p.textContent)).toMatch(/^9 decisions: Reply to Anna — Anna asks whether the invoice can wait until the 20th; Join the offsite — Two days in Aarhus from the 14th, travel booked by the office; /);
+    // The goalpath decision is alone under its default, so it is named with its lead, not folded (a fold needs two).
+    expect(await page.$eval('.daily-paragraph p', (p) => p.textContent)).toMatch(/^9 decisions: When should M4 ship\? — Evidence; Reply to Anna — Anna asks whether the invoice can wait until the 20th; Join the offsite — Two days in Aarhus from the 14th, travel booked by the office; 6 the mail reader proposes archiving\.$/);
+    expect(await page.$$('[data-fold]')).toHaveLength(1);
     if (shots) await shoot('.daily-paragraph', 'fold-360-collapsed');
 
     await press(await mail.$('button'));

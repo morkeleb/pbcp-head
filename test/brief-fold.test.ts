@@ -316,17 +316,25 @@ describe('folds (RFC 0.9 §8, §9)', () => {
 
   it('never folds an immediate card, by its urgency as sent, whatever its delivery; a producer without a display name is its root', () => {
     const urgent = stored('mail:inbox:9', { kind: 'decision', title: 'Card declined', summary: 'Your card was declined at the airport.', urgency: 'immediate', delivery: 'brief', ...archive } as Partial<Card>);
-    const quiet = stored('mail:inbox:10', { kind: 'decision', title: 'Receipt', summary: 'A receipt.', urgency: 'brief', delivery: 'immediate', ...archive } as Partial<Card>);
-    const parts = paragraphParts(dailyLines({ ...day, names: {}, openDecisions: [urgent, quiet] }), url);
-    expect(parts.folds?.map((f) => f.ids)).toEqual([['mail:inbox:10']]);
-    expect(composeParagraphs(parts)[0]).toBe(`2 decisions: ${titled('mail:inbox:9', 'Card declined')} — Your card was declined at the airport; mail proposes archiving: ${titled('mail:inbox:10', 'Receipt')}.`);
+    const quiet = (n: number) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `Receipt ${n}`, summary: 'A receipt.', urgency: 'brief', delivery: 'immediate', ...archive } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, names: {}, openDecisions: [urgent, quiet(10), quiet(11)] }), url);
+    expect(parts.folds?.map((f) => f.ids)).toEqual([['mail:inbox:10', 'mail:inbox:11']]);
+    expect(composeParagraphs(parts)[0]).toBe(`3 decisions: ${titled('mail:inbox:9', 'Card declined')} — Your card was declined at the airport; 2 mail proposes archiving: ${titled('mail:inbox:10', 'Receipt 10')} and ${titled('mail:inbox:11', 'Receipt 11')}.`);
+  });
+
+  it('does not fold a card alone under its producer’s default: it is named with its title and lead, and no fold is written', () => {
+    const anna = stored('hermes:mail:anna', { kind: 'decision', title: 'Reply to Anna', summary: 'Anna asks whether the invoice can wait until the 20th.', actions: [{ id: 'agree', label: 'Agree', default: true }, 'reject'] } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, openDecisions: [anna] }), url);
+    expect(parts.folds).toEqual([]);
+    expect(composeParagraphs(parts)).toEqual([`1 decision: ${titled('hermes:mail:anna', 'Reply to Anna')} — Anna asks whether the invoice can wait until the 20th.`]);
+    expect(composeParagraphs(parts, [], { spoken: true })).toEqual(['1 decision: Reply to Anna — Anna asks whether the invoice can wait until the 20th.']);
   });
 
   it('keeps each producer’s and each default’s cards apart, and follows the label filter into a fold', () => {
     const tagged = (n: number, labels: string[]) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `M${n}`, labels, ...archive } as Partial<Card>);
-    const kept = stored('mail:inbox:30', { kind: 'decision', title: 'M30', actions: [{ id: 'keep', default: true }, 'archive'] } as Partial<Card>);
-    const parts = paragraphParts(dailyLines({ ...day, openDecisions: [tagged(21, ['shop']), tagged(22, ['news']), kept, tagged(23, ['shop'])] }), url);
-    expect(parts.folds?.map((f) => [f.action, f.ids])).toEqual([['archive', ['mail:inbox:21', 'mail:inbox:22', 'mail:inbox:23']], ['keep', ['mail:inbox:30']]]);
+    const kept = (n: number) => stored(`mail:inbox:${n}`, { kind: 'decision', title: `M${n}`, actions: [{ id: 'keep', default: true }, 'archive'] } as Partial<Card>);
+    const parts = paragraphParts(dailyLines({ ...day, openDecisions: [tagged(21, ['shop']), tagged(22, ['news']), kept(30), tagged(23, ['shop']), kept(31)] }), url);
+    expect(parts.folds?.map((f) => [f.action, f.ids])).toEqual([['archive', ['mail:inbox:21', 'mail:inbox:22', 'mail:inbox:23']], ['keep', ['mail:inbox:30', 'mail:inbox:31']]]);
     expect(composeParagraphs(parts, ['shop'])).toEqual([`2 decisions: 2 the mail reader proposes archiving: ${titled('mail:inbox:21', 'M21')} and ${titled('mail:inbox:23', 'M23')}.`]);
   });
 

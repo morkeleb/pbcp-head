@@ -18,7 +18,8 @@
 //
 // The fold (§8): a decision with no `default` action, or whose `urgency` is `immediate`, is named with its lead. Every
 // other open decision is folded under its default action with the other cards from its producer that share it, each
-// named by its title: "6 the mail reader proposes archiving: Order receipt, Weekly newsletter, …". A fold offers no
+// named by its title: "6 the mail reader proposes archiving: Order receipt, Weekly newsletter, …". A fold needs at least
+// two cards: a card alone under its producer's default is named with its title and lead. A fold offers no
 // control; each card is decided on its own card. Tasks are counted here and listed in the brief's Tasks section; tasks
 // under a label the owner set to fold as a count (§9 `count`) are counted apart, as routine.
 

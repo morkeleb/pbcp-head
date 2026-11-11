@@ -311,8 +311,9 @@ export function paragraphParts(lines: Pick<FoldLines, 'decisions' | 'decided' | 
 export const needsLead = (l: Pick<FoldLine, 'defaultAction' | 'urgency'>) => l.defaultAction === undefined || l.urgency === 'immediate';
 
 /**
- * The folds (§8): every decision that does not need its lead, grouped by producer and default action, in the order the
- * decisions come; a fold of one is still a fold, so a card is named the same way whatever else waits.
+ * The folds (§8): the decisions that do not need their lead, grouped by producer and default action, in the order the
+ * decisions come. A fold needs at least two cards: a group of one is not folded, and its card is named with its title
+ * and lead like a card with no default.
  */
 export function foldDecisions(decisions: readonly FoldLine[], names: Readonly<Record<string, string>>): ParagraphFold[] {
   const folds = new Map<string, ParagraphFold>();
@@ -323,7 +324,7 @@ export function foldDecisions(decisions: readonly FoldLine[], names: Readonly<Re
     f.ids.push(l.id);
     folds.set(key, f);
   }
-  return [...folds.values()];
+  return [...folds.values()].filter((f) => f.ids.length >= 2);
 }
 
 /** The nightly card: on a quiet day, one that says "Nothing waiting for you." */
