@@ -71,8 +71,12 @@ export function dueLabel(card: Pick<MeCard, 'at' | 'about'>, today: string, time
   return day ? named(day) : null;
 }
 
-/** The task is closed and that counts as done: decided `done`, or closed by its producer with a record of it (§4.3). */
-export const isDone = (c: MeCard) => c.decision === 'done' || (c.state === 'superseded' && !c.decision && !!c.replaced_by);
+/**
+ * The task was marked done here: decided `done` (§4.3). A task its producer closed without a decision is not counted as
+ * done: §4.3's closing record is free text, and it says "Done in the tool" or "Rescheduled" alike, so the head shows the
+ * producer's words and no tick.
+ */
+export const isDone = (c: MeCard) => c.decision === 'done';
 
 export function TaskRow({ card, timezone, today, onChange, overdue = false, focused, handle, expanded = false }: TaskRowProps) {
   const locale = useLocale();
@@ -137,7 +141,7 @@ export function TaskRow({ card, timezone, today, onChange, overdue = false, focu
     <button
       role="checkbox"
       aria-checked={done}
-      aria-label={done ? `Done: ${card.title}` : `Mark done: ${card.title}${confirm ? ' (asks for your passkey)' : ''}`}
+      aria-label={done ? `Done: ${card.title}` : !open ? `Closed: ${card.title}` : `Mark done: ${card.title}${confirm ? ' (asks for your passkey)' : ''}`}
       {...(confirm && open ? { title: 'Confirming asks for your passkey', 'data-confirm': '' } : {})}
       disabled={!open || !canAct || !!deferred.pending}
       onClick={() => void decide('done')}

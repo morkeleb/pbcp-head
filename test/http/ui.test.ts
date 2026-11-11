@@ -1888,12 +1888,14 @@ describe('tasks (RFC 0.9 §4.5 "Presenting a task")', () => {
     expect(errors).toEqual([]);
   });
 
-  it('shows a task its producer closed ticked, with the producer’s words, for the rest of the day; then it drops', async () => {
+  it('shows a task its producer closed with the producer’s words and no tick, since its record may say moved as well as done, for the rest of the day; then it drops', async () => {
     await threeTasks();
-    await call('PUT', cardPath('todoist:task:bins:done'), { auth: todoist, body: card('todoist:task:bins:done', { kind: 'artifact', urgency: 'log', title: 'Done in Todoist', body: 'Completed in Todoist.', supersedes: ids.bins }) });
+    await call('PUT', cardPath('todoist:task:bins:done'), { auth: todoist, body: card('todoist:task:bins:done', { kind: 'artifact', urgency: 'log', title: 'Changed in Todoist', body: 'Moved to Saturday in Todoist.', supersedes: ids.bins }) });
     await page.goto(`${headUrl()}/brief`, { waitUntil: 'networkidle0' });
-    await page.waitForSelector(`${taskRow(ids.bins)} [data-done-control][aria-checked="true"]`);
-    expect(await page.$eval(`${taskRow(ids.bins)} [data-task-closed]`, (s) => s.textContent)).toBe(' — Done in Todoist');
+    await page.waitForSelector(`${taskRow(ids.bins)} [data-task-closed]`);
+    expect(await page.$eval(`${taskRow(ids.bins)} [data-task-closed]`, (s) => s.textContent)).toBe(' — Changed in Todoist');
+    expect(await page.$eval(`${taskRow(ids.bins)} [data-done-control]`, (b) => [b.getAttribute('aria-checked'), (b as HTMLButtonElement).disabled, b.getAttribute('aria-label')])).toEqual(['false', true, 'Closed: Put the bins out']);
+    expect(await page.$eval(`${taskRow(ids.bins)} [data-task-line] .font-medium`, (t) => getComputedStyle(t).textDecorationLine)).toBe('none');
     expect(await page.$eval('[data-tasks] h3', (h) => h.textContent)).toBe('Tasks · 2 open');
     // The head's next day: it has dropped.
     await call('POST', '/api/test', { body: { clock: new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z') } });

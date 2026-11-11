@@ -4738,7 +4738,7 @@
               ],
               "additionalProperties": {}
             },
-            "description": "Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day"
+            "description": "Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown closed for the rest of the day (done only when decided `done`)"
           },
           "threads": {
             "type": "array",

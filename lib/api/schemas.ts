@@ -190,7 +190,7 @@ export const Brief = z.object({
   decisions: z.array(MeCard).describe('Open decisions, newest first, snoozed ones left out'),
   tasks: z
     .array(MeCard.extend({ overdue: z.literal(true).optional().describe('An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card') }))
-    .describe('Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day'),
+    .describe('Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown closed for the rest of the day (done only when decided `done`)'),
   threads: z.array(Fold).describe('Today’s artifacts and signals, folded by thread; immediate first'),
   snoozed: z.number().int().nonnegative(),
   late_outcomes: z.array(MeCard).describe('Order outcomes that came late or from an earlier claim (A.3)'),
