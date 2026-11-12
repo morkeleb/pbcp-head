@@ -172,21 +172,19 @@ curl https://<your domain>/          # {"protocol":"pbcp/1","owner":"morten","se
 
 Sign in at `https://<your domain>/signin` with the enrolled passkey. The brief is at `/brief`.
 
-### At rest: encrypting card content, in two deploys
+### At rest: card content is encrypted
 
-Card content is encrypted in the database under a data key per head, wrapped with `HEAD_MASTER_KEY` (docs/trust.md says what is encrypted and what is not). A database written before this change is sealed in two deploys, because production builds apply migrations by themselves.
-
-**Before merging the encryption PR, by hand:**
+Card content is encrypted in the database under a data key per head, wrapped with `HEAD_MASTER_KEY` (docs/trust.md says what is encrypted and what is not). Set it before the first deploy:
 1. Generate the key: `openssl rand -base64 32`.
-2. Set it as `HEAD_MASTER_KEY` in the production environment (Settings → Environment Variables), and **keep a copy outside Vercel** (a password manager). After the second deploy it is the only way to read the content. A missing key fails the deploy loudly: the backfill refuses to seal without it, and the head refuses to start without it once any content is encrypted.
+2. Set it as `HEAD_MASTER_KEY` in the production environment (Settings → Environment Variables), and **keep a copy outside Vercel** (a password manager). It is the only way to read the content. A missing key fails the deploy loudly: the head refuses to start without it once any content is encrypted.
 
-**Deploy 1: the encryption PR.** Its migration only adds the `content` columns and the head's wrapped data key. The build runs `pnpm db:migrate` and then `pnpm encrypt-backfill` (the build command above), which seals every row still in plaintext: resumable, idempotent, with a progress line. The app reads both forms and writes only the sealed one. **Nothing is dropped:** the plaintext columns stay, so this deploy cannot lose anything. Check it with the production environment loaded, as in step 5:
+Check it any time with the production environment loaded, as in step 5:
 
 ```sh
 pnpm encrypt-backfill --verify    # "0 rows still plaintext", exit 0; otherwise the counts per table, exit 1
 ```
 
-**Deploy 2: the drop-columns PR** (a later PR). Its migration drops the plaintext columns (`cards.rendered_html`, `rendered_actions`, `rendered_meta`, `rendered_paragraph`, `comment`, `edited_proposal`; `decision_log.comment`, `edited_proposal`; `diagrams.svg`, `svg_dark`, `error`, `error_dark`), strips the content fields from `cards.producer_doc` and `decided_doc` and `decision_log.decided_doc`, deletes the diagram rows marked `migrated`, and replaces old invite emails with their digests. **Merge it only after `--verify` reports zero on production.** It is the point of no return: from then on `HEAD_MASTER_KEY` is the only way to read the content.
+**A database from before encryption** (migration 0022) was sealed in two deploys. Deploy 1 added the `content` columns, and its build sealed every row beside the plaintext columns (`pnpm encrypt-backfill`). Deploy 2, migration 0024, strips the producer documents to their clear fields, deletes the diagram rows deploy 1 copied to their heads, and drops the plaintext columns (`cards.rendered_html`, `rendered_actions`, `rendered_meta`, `rendered_paragraph`, `comment`, `edited_proposal`; `decision_log.comment`, `edited_proposal`; `diagrams.svg`, `svg_dark`, `error`, `error_dark`). It refuses to run while any row still holds content only in plaintext, and then changes nothing. To upgrade a head older than 0022, deploy commit `41a5adc` first with `HEAD_MASTER_KEY` set, check that `--verify` reports zero, then deploy the current version. The backfill now has one job: an invite address recorded before the deployment had a head is sealed, and its keyed digest replaces it.
 
 **Operating it:**
 - `pnpm rewrap --new-master <key>`: rewraps every head's data key under a new master key, one transaction per head, with the current key in the environment; then set `HEAD_MASTER_KEY` to the new one. No card is re-encrypted.

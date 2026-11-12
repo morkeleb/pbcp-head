@@ -45,8 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ hash: st
   const q = new URL(req.url).searchParams;
   const dark = q.get('theme') === 'dark';
   // At rest: a head's drawing is sealed under its data key, so the address names the head (`h`) whose key opens it for
-  // this response; one that does not open (another head, tampered) is not found. Without `h`, a public (demo) drawing,
-  // or one from before encryption.
+  // this response; one that does not open (another head, tampered) is not found. Without `h`, a public (demo) drawing.
   let row: { svg: string | null; svgDark: string | null } | null;
   try {
     row = await servedDiagram(db(), q.get('h'), hash);

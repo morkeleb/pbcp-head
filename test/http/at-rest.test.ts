@@ -1,7 +1,7 @@
 // Card content at rest (lib/crypto.ts, lib/vault.ts, lib/at-rest.ts): what reaches the database is ciphertext, the head
 // reads it back through its routes as before, a tampered row fails closed while the rest is served, the master key can
-// be rotated, the backfill seals a database written before encryption without dropping anything, and deleting a head
-// destroys its key first.
+// be rotated, the backfill seals an invite address kept in clear, and deleting a head destroys its key first. Migration
+// 0024, which dropped the plaintext columns, is test/db/drop-plaintext.test.ts.
 
 import { and, eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -55,7 +55,8 @@ describe('content at rest', () => {
     // The metadata the head routes and syncs by is clear.
     const [row] = await testDb().select().from(cards).where(and(eq(cards.headId, OWNER), eq(cards.id, 'mail:x:1')));
     expect(row!.producerDoc).toMatchObject({ id: 'mail:x:1', kind: 'decision', producer: 'mail' });
-    expect(row).toMatchObject({ state: 'decided', decision: 'approve', renderedHtml: null, comment: null });
+    expect(row).toMatchObject({ state: 'decided', decision: 'approve' });
+    expect(row).not.toHaveProperty('renderedHtml'); // no plaintext column left (migration 0024)
   });
 
   it('fails closed on a tampered card: left out with a logged error, and the brief renders the rest', async () => {
@@ -103,7 +104,8 @@ describe('content at rest', () => {
     expect((await call('GET', src!.replace('?h=morten', ''))).status).toBe(404);
     expect(await rowsWith('diagrams', 'Kiwi')).toBe(0);
     const [d] = await testDb().select().from(diagrams).where(eq(diagrams.hash, /svg\/([0-9a-f]{64})/.exec(src!)![1]!));
-    expect(d).toMatchObject({ svg: null, svgDark: null, error: null });
+    expect(d).not.toHaveProperty('svg');
+    expect((d!.content as { svg: string }).svg.startsWith('e1:')).toBe(true);
 
     expect((await call('POST', '/api/invite', { body: { email: 'Kiwi.Person@example.com' } })).status).toBe(202);
     expect((await call('POST', '/api/invite', { body: { email: 'kiwi.person@EXAMPLE.com' } })).status).toBe(202); // the same, in other case
@@ -162,39 +164,17 @@ describe('content at rest', () => {
 });
 
 describe('the backfill (pnpm encrypt-backfill)', () => {
-  it('seals a database written before encryption, idempotently, drops nothing, and --verify then counts zero', async () => {
-    // A head and rows as they were before this change: plaintext producer_doc, rendered columns, comment, decision log,
-    // an unscoped diagram the card's HTML points at, and an invite request.
-    const doc = { protocol: 'pbcp/1', id: 'mail:old:1', kind: 'decision', to_person: OWNER, producer: 'mail', title: `Old ${SECRET}`, body: `Body ${SECRET}`, labels: ['old-label'], emitted_at: '2026-10-01T09:00:00Z' };
-    const hash = 'a'.repeat(64);
-    await testDb().execute(sql`update change_counter set seq = 1 where head_id = ${OWNER}`);
-    await testDb().insert(cards).values({
-      headId: OWNER, id: 'mail:old:1', producer: 'mail', namespace: 'old', producerDoc: doc, delivery: 'brief', state: 'decided', changeSeq: 1, decision: 'approve',
-      receivedAt: new Date('2026-10-01T09:00:00Z'), changedAt: new Date('2026-10-01T09:00:00Z'), day: '2026-10-01', decidedAt: new Date('2026-10-01T10:00:00Z'),
-      comment: `Comment ${SECRET}`, decidedDoc: doc, renderedHtml: `<p>Body ${SECRET}</p><img src="/api/me/svg/${hash}">`, renderedFrom: 'x',
-      renderedMeta: { firstVisual: null, fences: [], lead: { text: `Body ${SECRET}`, source: 'body', html: `Body ${SECRET}` } },
-    });
-    await testDb().insert(decisionLog).values({ headId: OWNER, cardId: 'mail:old:1', decision: 'approve', comment: `Comment ${SECRET}`, decidedAt: new Date('2026-10-01T10:00:00Z'), decidedDoc: doc, actor: 'x' });
-    await testDb().insert(diagrams).values({ hash, type: 'pie', svg: `<svg><text>${SECRET}</text></svg>` });
-    await testDb().insert(inviteRequests).values({ email: 'old.person@example.com' });
-
-    expect(await remaining(testDb())).toEqual({ cards: 1, decision_log: 1, diagrams: 1, invite_requests: 1 });
+  it('seals an invite address recorded in clear and replaces it by its digest, idempotently; --verify then counts zero', async () => {
+    // Recorded before the deployment had a head: the address in clear, nothing sealed.
+    await testDb().insert(inviteRequests).values({ email: 'Old.Person@example.com' });
+    expect(await remaining(testDb())).toEqual({ cards: 0, decision_log: 0, diagrams: 0, invite_requests: 1 });
     expect(await backfill(testDb())).toEqual({ cards: 0, decision_log: 0, diagrams: 0, invite_requests: 0 });
     expect(await backfill(testDb())).toEqual({ cards: 0, decision_log: 0, diagrams: 0, invite_requests: 0 }); // again: nothing to do
-
-    // Read through the head as before, from the sealed content.
-    const d = (await call('GET', `/api/me/cards/${encodeURIComponent('mail:old:1')}`, { auth: owner.auth })).body;
-    expect(d.card).toMatchObject({ title: `Old ${SECRET}`, labels: ['old-label'], comment: `Comment ${SECRET}` });
-    expect(d.decisions[0]).toMatchObject({ comment: `Comment ${SECRET}` });
-    // Nothing dropped: the plaintext columns are still there, for the drop-columns migration to remove.
-    const [row] = await testDb().select().from(cards).where(eq(cards.id, 'mail:old:1'));
-    expect(row!.renderedHtml).toContain(SECRET);
-    expect((row!.content as Record<string, string>).doc!.startsWith('e1:')).toBe(true);
-    // The diagram, copied sealed under the head's scoped hash; the old row marked, not deleted.
-    const old = await testDb().select().from(diagrams).where(eq(diagrams.hash, hash));
-    expect(old[0]).toMatchObject({ content: { migrated: true } });
-    expect((await testDb().select().from(diagrams)).length).toBe(2);
+    expect(await rowsWith('invite_requests', 'example.com')).toBe(0);
     const list = (await call('GET', '/api/me/settings/invites', { auth: owner.auth })).body.requests;
-    expect(list[0].email).toBe('old.person@example.com');
+    expect(list[0].email).toBe('Old.Person@example.com');
+    // The digest keeps the unique index working: the same address again, in another case, adds nothing.
+    await call('POST', '/api/invite', { body: { email: 'old.person@EXAMPLE.com' } });
+    expect((await call('GET', '/api/me/settings/invites', { auth: owner.auth })).body.requests).toHaveLength(1);
   });
 });

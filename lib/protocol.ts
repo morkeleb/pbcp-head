@@ -196,8 +196,6 @@ export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: un
         headId: ctx.headId,
         cardId: card.id,
         decision: card.decision!,
-        editedProposal: null,
-        comment: null,
         delegatedTo: card.delegated_to ?? null,
         decidedAt: new Date(at),
         decidedDoc: log.clearDoc,

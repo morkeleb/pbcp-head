@@ -62,15 +62,17 @@ create table cards (
   id            text not null,
   producer      text not null,             -- denormalised from id, checked on write
   namespace     text not null,             -- second id segment, for supersedes checks
-  producer_doc  jsonb not null,            -- the ProducerCard exactly as accepted (equality is computed on this)
+  producer_doc  jsonb not null,            -- the ProducerCard's clear fields (lib/vault.ts); the rest is sealed in content
   state         text not null,             -- open | decided | superseded
   change_seq    bigint not null,
   received_at   timestamptz not null, changed_at timestamptz not null,
   seen_at timestamptz, acknowledged_at timestamptz, snoozed_until timestamptz,
-  decision text, edited_proposal text, comment text, decided_at timestamptz, delegated_to text,
-  decided_doc   jsonb,                     -- frozen copy of producer_doc at decision time (§4.3)
+  decision text, decided_at timestamptz, delegated_to text,
+  decided_doc   jsonb,                     -- frozen copy of producer_doc's clear fields at decision time (§4.3)
   exec_state text, claimed_by text, claim_expires_at timestamptz, claim_seq int,
   wildcard_eligible text[],                -- executors snapshotted at mint time (A.1)
+  content       jsonb,                     -- sealed under the head's data key: the rest of the document, the decided-on
+                                           -- one, the rendered output, comment and edited proposal (docs/trust.md)
   primary key (head_id, id)
 );
 create index cards_sync on cards (head_id, change_seq);
@@ -83,7 +85,8 @@ create table change_counter (
 -- every write: update change_counter set seq = seq + 1 where head_id = $1 returning seq  (same transaction)
 
 create table decision_log (                -- append-only; the thing the hosted version is really keeping
-  head_id text, card_id text, decision text, decided_at timestamptz, decided_doc jsonb, actor text
+  head_id text, card_id text, decision text, decided_at timestamptz, decided_doc jsonb, actor text,
+  content jsonb                            -- sealed: the rest of decided_doc, comment, edited proposal
 );
 ```
 

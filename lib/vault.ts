@@ -15,8 +15,7 @@
 // about stay clear (the schedule, the day query and the week strip are indexes over them); the decision value stays
 // clear (producers read it through sync, and the conformance suite asserts it).
 //
-// Rows written before this keep their plaintext columns until the drop-columns migration (docs/deploy.md): `openCardRow`
-// reads `content` first and falls back to them, so the app reads both forms and writes only the new one.
+// Every row is in this form: migration 0024 dropped the plaintext columns once every row was sealed.
 
 import type { ProducerCard } from '@pbcp/core';
 import type { cards, decisionLog } from '../db/schema';
@@ -24,6 +23,19 @@ import { canonicalJson, digest, isSealed, open, seal } from './crypto';
 
 type CardRow = typeof cards.$inferSelect;
 type LogRow = typeof decisionLog.$inferSelect;
+
+/** A card's sealed content opened: what the rest of the head reads, in memory only (never a column). */
+export interface OpenFields {
+  renderedHtml: string | null;
+  renderedActions: unknown;
+  renderedMeta: unknown;
+  renderedParagraph: unknown;
+  comment: string | null;
+  editedProposal: string | null;
+}
+
+/** A cards row with its content opened (`openCardRow`). */
+export type OpenCardRow = CardRow & OpenFields;
 
 /** Producer fields the head reads in queries, routes and orders by: kept in clear in producer_doc. */
 export const CLEAR_FIELDS = new Set([
@@ -79,18 +91,17 @@ function openField<T>(key: Buffer, headId: string, cardId: string, field: keyof 
 }
 
 /**
- * A cards row with its sealed content opened into the plaintext columns the rest of the head reads (producer_doc
- * whole again, decided_doc, rendered_*, comment, edited_proposal). A row without `content` (written before encryption) is
- * returned as it is. Throws CryptoError when a sealed value does not authenticate: the caller decides whether that card
+ * A cards row with its sealed content opened: producer_doc whole again, decided_doc, the rendered output, comment and
+ * edited proposal. Throws CryptoError when a sealed value does not authenticate: the caller decides whether that card
  * is left out (the brief) or the request fails.
  */
-export function openCardRow(row: CardRow, key: Buffer | null): CardRow {
+export function openCardRow(row: CardRow, key: Buffer | null): OpenCardRow {
+  const out: OpenCardRow = { ...row, renderedHtml: null, renderedActions: null, renderedMeta: null, renderedParagraph: null, comment: null, editedProposal: null };
   const c = row.content as CardContent | null;
-  if (!c) return row;
+  if (!c) return out;
   if (!key) throw new Error(`card ${row.id} is sealed and its head has no data key`);
-  const out: CardRow = { ...row };
   if (c.doc) out.producerDoc = { ...(openField<Record<string, unknown>>(key, row.headId, row.id, 'doc', c.doc)), ...(row.producerDoc as Record<string, unknown>) };
-  if (c.decided) out.decidedDoc = openField(key, row.headId, row.id, 'decided', c.decided);
+  if (c.decided) out.decidedDoc = { ...(openField<Record<string, unknown>>(key, row.headId, row.id, 'decided', c.decided)), ...((row.decidedDoc ?? {}) as Record<string, unknown>) };
   if (c.html) out.renderedHtml = openField(key, row.headId, row.id, 'html', c.html);
   if (c.actions) out.renderedActions = openField(key, row.headId, row.id, 'actions', c.actions);
   if (c.meta) out.renderedMeta = openField(key, row.headId, row.id, 'meta', c.meta);
@@ -100,40 +111,11 @@ export function openCardRow(row: CardRow, key: Buffer | null): CardRow {
   return out;
 }
 
-/** Whether a cards row still has content only in plaintext columns (the backfill's work, and --verify's count). */
-export function cardNeedsSealing(row: CardRow): boolean {
-  const c = (row.content as CardContent | null) ?? null;
-  if (!c?.doc || !c.mac) return true;
-  if (row.decidedDoc && !c.decided && hasSecret(row.decidedDoc)) return true;
-  if (row.renderedHtml !== null && !c.html) return true;
-  if (row.renderedActions !== null && !c.actions) return true;
-  if (row.renderedMeta !== null && !c.meta) return true;
-  if (row.renderedParagraph !== null && !c.paragraph) return true;
-  if (row.comment !== null && !c.comment) return true;
-  if (row.editedProposal !== null && !c.edited) return true;
-  return false;
-}
-
-const hasSecret = (doc: unknown) => Object.keys(splitDoc((doc ?? {}) as Record<string, unknown>).secret).length > 0;
-
-/** The sealed content of a row still in the old form (or partly so), from its plaintext columns; merged over what it has. */
-export function sealCardRow(row: CardRow, key: Buffer): CardContent {
-  const c: CardContent = { ...((row.content as CardContent | null) ?? { v: 1 }), v: 1 };
-  const plainDoc = row.producerDoc as Record<string, unknown>;
-  if (!c.doc || !c.mac) {
-    const s = sealDoc(key, row.headId, row.id, plainDoc);
-    c.doc = s.doc;
-    c.mac = s.mac;
-  }
-  if (row.decidedDoc && !c.decided && hasSecret(row.decidedDoc)) c.decided = sealField(key, row.headId, row.id, 'decided', row.decidedDoc);
-  if (row.renderedHtml !== null && !c.html) c.html = sealField(key, row.headId, row.id, 'html', row.renderedHtml);
-  if (row.renderedActions !== null && !c.actions) c.actions = sealField(key, row.headId, row.id, 'actions', row.renderedActions);
-  if (row.renderedMeta !== null && !c.meta) c.meta = sealField(key, row.headId, row.id, 'meta', row.renderedMeta);
-  if (row.renderedParagraph !== null && !c.paragraph) c.paragraph = sealField(key, row.headId, row.id, 'paragraph', row.renderedParagraph);
-  if (row.comment !== null && !c.comment) c.comment = sealField(key, row.headId, row.id, 'comment', row.comment);
-  if (row.editedProposal !== null && !c.edited) c.edited = sealField(key, row.headId, row.id, 'edited', row.editedProposal);
-  return c;
-}
+/** Whether a cards row lacks its sealed document (a row migration 0024 would have refused): --verify's count. */
+export const cardUnsealed = (row: Pick<CardRow, 'content'>): boolean => {
+  const c = row.content as CardContent | null;
+  return !c?.doc || !c.mac;
+};
 
 // --- decision_log -------------------------------------------------------------------------------------------------
 
@@ -157,13 +139,16 @@ export function sealLog(key: Buffer, headId: string, seq: number, entry: { decid
   };
 }
 
-export function openLogRow<T extends Pick<LogRow, 'headId' | 'seq' | 'comment' | 'editedProposal'> & { content?: unknown; decidedDoc?: unknown }>(row: T, key: Buffer | null): T {
+/** A decision-log row with its content opened: the decided-on document whole again (when selected), comment and edited proposal. */
+export function openLogRow<T extends Pick<LogRow, 'headId' | 'seq'> & { content?: unknown; decidedDoc?: unknown }>(row: T, key: Buffer | null): T & { comment: string | null; editedProposal: string | null } {
   const c = row.content as LogContent | null | undefined;
-  if (!c) return row;
+  if (!c) return { ...row, comment: null, editedProposal: null };
   if (!key) throw new Error('a decision-log row is sealed and its head has no data key');
   const id = String(row.seq);
   return {
     ...row,
+    comment: null,
+    editedProposal: null,
     ...(c.doc && row.decidedDoc !== undefined ? { decidedDoc: { ...JSON.parse(open(key, row.headId, 'decision_log.decided_doc', id, c.doc)), ...(row.decidedDoc as Record<string, unknown>) } } : {}),
     ...(c.comment ? { comment: open(key, row.headId, 'decision_log.comment', id, c.comment) } : {}),
     ...(c.edited ? { editedProposal: open(key, row.headId, 'decision_log.edited_proposal', id, c.edited) } : {}),
@@ -194,10 +179,9 @@ export function sealDiagram(key: Buffer | null, headId: string | null, hash: str
   return out;
 }
 
-/** A diagram's drawings in clear, from its content or (rows before encryption) its plaintext columns. */
-export function openDiagram(row: DiagramFields & { content: unknown; hash: string }, key: Buffer | null, headId: string | null): DiagramFields {
-  const c = row.content as DiagramContent | null;
-  if (!c || (!c.public && !c.svg && !c.svgDark && !c.error && !c.errorDark)) return { svg: row.svg, svgDark: row.svgDark, error: row.error, errorDark: row.errorDark };
+/** A diagram's drawings in clear, from its content. */
+export function openDiagram(row: { content: unknown; hash: string }, key: Buffer | null, headId: string | null): DiagramFields {
+  const c = (row.content ?? {}) as DiagramContent;
   const get = (k: keyof DiagramFields) => {
     const v = c[k];
     if (v === undefined) return null;
