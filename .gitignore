@@ -9,3 +9,8 @@ coverage/
 
 # The owner MCP binary, bundled by `pnpm --filter @pbcp-head/owner-mcp build`
 packages/owner-mcp/dist/
+
+# The iOS app (ios/): SwiftPM's build, and the Xcode project XcodeGen makes from ios/App/project.yml
+ios/.build/
+ios/.swiftpm/
+ios/App/PBCP.xcodeproj/

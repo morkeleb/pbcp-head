@@ -156,6 +156,9 @@ importers:
       http_ece:
         specifier: 1.2.0
         version: 1.2.0
+      jiti:
+        specifier: 2.7.0
+        version: 2.7.0
       shadcn:
         specifier: 4.23.0
         version: 4.23.0

@@ -1,0 +1,2 @@
+<%# Clay's ts engine names its output after a .ts template, so it cannot write .swift: this EJS template (whose .ejs Clay strips) hands the model to emit.ts through jiti. Clay runs from the repo root, which holds .clay. -%>
+<%- process.getBuiltinModule('node:module').createRequire(process.cwd() + '/package.json')('jiti').createJiti(process.cwd() + '/package.json')('./model/generators/swift-models/emit.ts').emit(locals) -%>

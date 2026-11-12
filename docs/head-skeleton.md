@@ -20,7 +20,7 @@ head/
 │   │   ├── app/(ui)/brief, day/[date], card/[id]  the review surface, on /api/me
 │   │   ├── db/schema.ts        Drizzle schema (Postgres)
 │   │   └── lib/                auth (producer + session), counter, folding, push outbox
-│   └── ios/                   (deferred) SwiftUI; its client generated on demand from the head's OpenAPI
+│   └── ios/                   (in this repo at ios/) SwiftUI; models, store and client generated from model/ — ios/README.md
 ├── packages/
 │   └── api-types/             OpenAPI from the Zod schemas: the contract clients generate from
 ├── model/                     the shared model (Clay): shapes, generators, fixtures — see "Model"
@@ -133,7 +133,7 @@ This is also why the "dashboard" needs no feature of its own: the Brief renders 
 
 ### Model
 
-The shapes the head and its clients share live in `model/model.json`, one Clay model; `model/README.md` lists its entities, its format and the fixtures. `pnpm generate` writes `lib/api/schemas.generated.ts` (the Zod schemas of every `/api/me` body, from which `lib/api/openapi.ts` builds `packages/api-types/openapi.json` as before) and the web store's types in `app/(ui)/local/` (`model.generated.ts`, `commands.generated.ts`); `pnpm generate --check`, first in `pnpm test`, fails on a stale one. The model imports core's card by reference and never redefines a protocol field; it carries shapes and invariants, never behaviour. `model/fixtures/` is the contract across languages: `test/model/roundtrip.test.ts` decodes each sample, stores it, reads it back and encodes it to the same JSON, and a client in another language pins `model/` and does the same.
+The shapes the head and its clients share live in `model/model.json`, one Clay model; `model/README.md` lists its entities, its format and the fixtures. `pnpm generate` writes the iOS app's Swift (`ios/`: models, the SQLite store, the API client) and `lib/api/schemas.generated.ts` (the Zod schemas of every `/api/me` body, from which `lib/api/openapi.ts` builds `packages/api-types/openapi.json` as before) and the web store's types in `app/(ui)/local/` (`model.generated.ts`, `commands.generated.ts`); `pnpm generate --check`, first in `pnpm test`, fails on a stale one. The model imports core's card by reference and never redefines a protocol field; it carries shapes and invariants, never behaviour. `model/fixtures/` is the contract across languages: `test/model/roundtrip.test.ts` decodes each sample, stores it, reads it back and encodes it to the same JSON, and a client in another language pins `model/` and does the same.
 
 ## Build order and the open-source / hosted split
 

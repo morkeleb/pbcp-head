@@ -1,0 +1,7 @@
+{
+  "partials": [],
+  "formatters": [],
+  "steps": [
+    { "generate": "templates/Models.generated.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPModels/Sources/PBCPModels/", "engine": "ejs" }
+  ]
+}
