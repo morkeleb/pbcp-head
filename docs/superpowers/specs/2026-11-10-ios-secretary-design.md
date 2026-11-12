@@ -1,6 +1,6 @@
 # Design: the head on iOS, a secretary you talk to
 
-Nov 10, 2026 · @Morten Nielsen · design, before the plan · revised Nov 10 (gate, sensitivity, push, the machine as a shared spec)
+Nov 10, 2026 · @Morten Nielsen · design, before the plan · revised Nov 10 (gate, sensitivity, push, the machine as a shared spec) · revised Nov 12 for main as it stands (local first, folds, moves, the step-up route, at-rest step two)
 
 ## Intent
 
@@ -21,7 +21,7 @@ The app adds nothing to the protocol (docs/mobile-prd.md): it is one more client
 
 - No LLM in the app or the head for this. Siri AI does the language understanding; the app only exposes entities and intents. The brief arrives written (mobile-prd).
 - No change to the RFC, and no head behaviour only Siri can reach: every intent is an existing `/api/me/` call.
-- No offline decisions (mobile-prd: nothing is queued offline). The app may show a cached brief, read-only, when there is no network.
+- No offline mode of its own. The app is local first as the web app is (docs/local-first.md): the brief opens from the device's store, and a decision made without a network settles on the device and waits in the outbox until it returns. Giving an order needs the network (docs/local-first.md, "The outbox").
 - Not Android (later, same API, same machine), not iPad- or Mac-specific layouts in v1.
 - The app does not create tasks or cards of its own, and never appears to. Tasks belong to their producers (RFC §1.1: not a system of record for tasks); something the person wants done is an **order** (Appendix A), and a to-do tool is an executor (A.4).
 
@@ -52,8 +52,8 @@ The secretary's turns. Siri AI understands what you say; the order of the briefi
 
 **Morning: "Brief me."**
 > "Morning. Two decisions and one private one, three tasks due, one overdue. The mail agent drafted a reply to Anna about invoice timing. Want to go through them?"
-> "Yes." → "The reply to Anna: approve, edit, or dismiss?" → "Approve." → "Approved. Next, a private one from the bank. Open it on screen, or skip?" → "Skip." → …
-> "The bins are overdue since yesterday." → "Done." → "Ticked. That's everything. Anything you want me to pass on?" → "Tell the coding agent to update the docs for tasks." → "Sent to the coding agent."
+> "Yes." → "The reply to Anna: approve, edit, or dismiss?" → "Approve." → "Approved. Next, three the mail reader proposes archiving: Order receipt, Weekly newsletter and Parking notice. Go through them, or skip?" → "Skip." → "Next, a private one from the bank. Open it on screen, or skip?" → "Skip." → …
+> "Call the plumber, due today." → "Tomorrow." → "Moved to tomorrow." → "The bins are overdue since yesterday." → "Done." → "Ticked. That's everything. Anything you want me to pass on?" → "Tell the coding agent to update the docs for tasks." → "Sent to the coding agent."
 
 **Between meetings: "Anything new?" / "What did I miss?"**
 > "Since 10:15: one new decision from the project tracker — milestone 88 is at risk, who should review it? And the coding agent finished the docs order." → …
@@ -66,7 +66,7 @@ The events, what each calls at the head, and the states are specified in **[docs
 
 ## Sensitivity
 
-From RFC Draft 0.9 §4.1 `sensitivity` (with §4.5, §7.4, §9, §12). *Source note:* that text is uncommitted work on the `rfc-0.9-sensitivity` branch of `morkeleb/pbcp` as of Nov 10, 2026, with no PR yet; section numbers are as it stands and are to be checked when it is published. The app applies a card's **effective** sensitivity: the producer's value raised by the owner's policy at the head (§9), never lowered. The RFC lets a head show a `private` card's title; the app is stricter wherever speech or the lock screen is involved, which §9 allows.
+From RFC Draft 0.9 §4.1 `sensitivity` (with §4.5 "Identifying again", §7.3, §7.4, §9 "Sensitivity", §12 "Sensitivity is a floor"), as pinned at `8cbd0e6`; the head's side is docs/trust.md, "Sensitivity". The app applies a card's **effective** sensitivity: the producer's value raised by the owner's policy at the head (§9), never lowered. The RFC lets a head show a `private` card's title; the app is stricter wherever speech or the lock screen is involved, which §9 allows.
 
 - **`private`** — spoken as a count, never by content, whenever speech leaves the owner's control:
   - in a briefing's opening and in each section: "and three private matters", "one private decision";
@@ -76,14 +76,14 @@ From RFC Draft 0.9 §4.1 `sensitivity` (with §4.5, §7.4, §9, §12). *Source n
   - on screen, inside the signed-in app, it is shown in full as any card.
 - **`confirm`** — everything `private` is, and the machine never records a decision on it by voice or from a notification action:
   - `answer` (and `edit`, `dismiss`, `done`) on a confirm card goes to the machine's `needsPerson` step: "That one needs you to confirm on the phone", and opens the card;
-  - the app's done or decide control on it triggers the head's re-identification (Face ID through the head's passkey, or the head's own prompt) before the call; a `403 reauthentication_required` from the head is handled the same way;
+  - the app's done or decide control on it runs the head's passkey step-up first (`POST /api/auth/passkey/step-up/options`, then `POST /api/auth/passkey/step-up` with the assertion), which marks the session re-identified for `REAUTH_WINDOW_SECONDS` (300 s, lib/auth/reauth-window.ts) without rotating any token; a passkey sign-in or a Sign in with Apple sign-in starts a session already re-identified, and a refresh does not count (docs/trust.md). A `403 reauthentication_required` from the head is handled the same way: the outbox row waits, with every row behind it, until the step-up runs (docs/local-first.md, "The outbox");
   - its notification carries no actions;
   - snooze and acknowledge are unaffected.
 - **No "read private cards aloud" setting.** Not offered: private is the producer's floor and the owner may only raise it (RFC §9). The owner's "what Siri may see" setting applies on top, for `normal` cards.
 
 ## The briefing machine
 
-A spoken briefing is a finite state machine, specified once for every client in **[docs/briefing-machine.md](../../briefing-machine.md)**: the agenda frozen at the start, the states (`opening`, `decision(i)`, `task(i)`, `updates`, `orderNews`, `passOn`, `close`) and their inner steps (`confirming`, `needsPerson`, `blockedLocked`, `acting`), the events, the sensitivity and confidence rules, what each event calls at the head, how a briefing is kept between turns, and the event lists every implementation is tested against.
+A spoken briefing is a finite state machine, specified once for every client in **[docs/briefing-machine.md](../../briefing-machine.md)**: the agenda read from the device's store and frozen at the start, the states (`opening`, `decision(i)`, `fold(i)`, `task(i)`, `routine`, `updates`, `orderNews`, `passOn`, `close`) and their inner steps (`confirming`, `needsPerson`, `blockedLocked`, `acting`), the events, the sensitivity and confidence rules, folds (a fold is one item; it is gone through card by card or skipped, and never approved as a whole, RFC §8), moves (a task decided `tomorrow` has moved, §4.3), what each event calls at the head and how the outbox answers, how a briefing is kept between turns, and the event lists every implementation is tested against.
 
 On iOS it is a Swift package with no UI and no Siri: a pure transition function, tested against the specification's event lists. **The package implements the specification; it does not define it.** A change to the machine is a change to docs/briefing-machine.md first. Siri, App Shortcut prompts and talk mode are three front ends to it.
 
@@ -112,7 +112,7 @@ App Intents, entities, `IndexedEntity` and on-screen view annotations are as in 
 
 **Producers by name.** "Tell the mail agent…" resolves against each producer's `name` (Settings → Producers), then its root. None named: the order goes to `*`; a name that matches no producer or several: Siri asks.
 
-**Index.** The app indexes open `normal` cards (title, lead, producer, labels, within the "what Siri may see" setting) into the on-device semantic index after each fetch, and removes them when decided, superseded or past. Bodies are never indexed; `private` and `confirm` cards are never indexed.
+**Index.** The app indexes open `normal` cards (title, lead, producer, labels, within the "what Siri may see" setting) into the on-device semantic index from the store after each sync, and removes them when decided, superseded or past. Bodies are never indexed there; `private` and `confirm` cards are never indexed there. This is Siri's index, apart from the app's own search index (FTS5 over the store, as the web app's MiniSearch, docs/local-first.md), which never leaves the app.
 
 **On screen.** Rows carry `.appEntityIdentifier(...)` so "this one" and "the second" resolve against what's visible; the Card screen sets an `NSUserActivity` for its card [A3].
 
@@ -125,8 +125,9 @@ App Intents, entities, `IndexedEntity` and on-screen view annotations are as in 
 - **Screens and components:** as docs/mobile-prd.md (Brief, Card, Orders, Settings; `DecisionCard`, `TaskRow`, `UpdateRow`, `DailyBrief`, `TimeRail`, `WeekStrip`, `LabelFilter`), matched to the web app as it is now: on a phone the day reads brief, decisions, schedule, tasks under it, updates, signals.
 - **Gestures:** as docs/mobile-prd.md's gesture table and the web app: taps commit at once; a sideways swipe anywhere on the brief changes the day, as the week strip does, and never decides a card ("Taps commit; swipes move days"); on a task row a swipe right is done and a swipe left dismisses, each after a 4 s undo (the PRD's `TaskRow` row); long-press snoozes. *(Open: the revision brief asked for "horizontal swipes are card actions, the week strip changes days", citing the PRD; the PRD says the opposite for the brief as a whole. Left as the PRD has it until the owner decides.)*
 - **Rendering:** the head's sanitised HTML converted to native text (AttributedString) for the restricted profile; images and diagrams through `/api/me/img` and `/api/me/svg/{hash}` in the shared viewer.
-- **Freshness:** `GET /api/me/seq` to know when to refetch; pull to refresh.
-- **Settings:** devices, producers, notifications (per device: daily brief time, urgent cards), while locked, what Siri may see, theme. Pairing and producer tokens stay on the web (keyboard work, mobile-prd).
+- **Local first** (docs/local-first.md; the web app's `app/(ui)/local/` is the reference): a SQLite store (WAL) holding the cards as `/api/me` returns them, with a day index, and meta rows (the cursor, `settings_seq` and the floors, retention, the brief the head last composed, the orders list); an FTS5 index over title, summary, lead and the body's plain text; an outbox table. Every screen, the briefing machine and the intents read the store; the outbox is the only thing that writes to the head, and it drains in order, under one lock across the app and its extensions, through the existing owner routes, answering 2xx, 409, 403, other 4xx and network or 5xx as docs/local-first.md's table says.
+- **Freshness:** a sync asks `GET /api/me/seq` and stops when nothing moved, else pages `GET /api/me/cards?after=<cursor>` and applies each card by id. It runs on open, on focus, once a minute while the brief is on screen, and when a push arrives. When `settings_seq` in `/api/me/seq` moves, the app refetches the floors (`GET /api/me/settings`, `sensitivity_floors` and `fold_policies`) and recomputes every stored card's `effective_sensitivity` exactly as the web app does (`app/(ui)/local/feed.ts`, lib/me.ts `briefStamp`). A cold open shows the brief the head last composed, its cards from the store, marked "as of <time>" until the sync returns. Pull to refresh runs a sync.
+- **Settings:** devices, producers, notifications (per device: daily brief time, urgent cards), while locked, what Siri may see, on this device (retention, the store's size), theme. Pairing and producer tokens stay on the web (keyboard work, mobile-prd).
 
 ## Push
 
@@ -134,25 +135,29 @@ APNs alongside Web Push; the same two notifications the web app has (the daily b
 
 - **APNs carries the card id and title only.** An APNs payload is delivered by Apple and is not end-to-end encrypted to the device [A7], whereas a Web Push payload is (RFC 8291), which is why the web notification carries the lead. For a `private` or `confirm` card the payload carries the id, the producer name and the kind only ("A private decision from mail").
 - **A notification service extension** [A6] fetches the lead from the head (`GET /api/me/cards/{id}`, with the device's session) and adds it for display, for a `normal` card; it fetches nothing for a `private` or `confirm` card.
-- An urgent `normal` decision's notification carries its options as notification actions (subject to the while-locked setting); a `confirm` card's carries none; tapping opens the Card screen.
+- An urgent `normal` decision's notification carries its options as notification actions (subject to the while-locked setting), which go through the outbox like any decision; a `confirm` card's carries none; tapping opens the Card screen.
+- Every push also starts a sync (docs/local-first.md, "Sync").
 
 ## Connecting to a head
 
 Onboarding asks for the head's address (`pbcp.vercel.app`, or a self-hosted one), checks it is a head (its public `/api/openapi.json`), then signs in. Some of iOS is fixed at build time, which shapes this:
 - **Sign in with Apple** works with any head that lists the app's bundle id in its `APPLE_CLIENT_ID` (the identity token's audience is the bundle id). Self-hosters add it to their env.
-- **Passkeys** in a native app need the head's domain in the app's Associated Domains, so they work only for domains the app was built with. For other heads, sign in through the head's own web sign-in in an `ASWebAuthenticationSession` and hand the session back to the app, or enrol the phone from an already signed-in device with an enrolment link (`POST /api/me/settings/enrolment`). The builder picks; the head may need a small route to hand a session to the app after web sign-in. Re-identification for `confirm` cards follows the same path as sign-in on that head.
+- **Passkeys** in a native app need the head's domain in the app's Associated Domains, so they work only for domains the app was built with. For other heads, sign in through the head's own web sign-in in an `ASWebAuthenticationSession` and hand the session back to the app, or enrol the phone from an already signed-in device with an enrolment link (`POST /api/me/settings/enrolment`). The builder picks; the head may need a small route to hand a session to the app after web sign-in. Re-identification for `confirm` cards (the passkey step-up, `POST /api/auth/passkey/step-up`) follows the same path as sign-in on that head.
 - **Push.** An APNs key belongs to the team that publishes the app. In v1 the head sends APNs directly when it holds that key (the owner's head); any other head has no push in the app. A relay the publisher runs is the follow-up; out of v1. (My call.)
 
 ## Auth across surfaces
 
 Intents, notification actions, the notification service extension and the app are one device with one session and one refresh token (Keychain, shared through an app group). Refresh rotates with reuse detection (`rotateRefresh` in lib/auth/session.ts revokes the device when an old token comes back), so only one refresh may run at a time: the builder serialises it on the device (a lock in the shared container). If that proves unreliable across processes, the head may add a short grace window for a just-rotated token; a head change in lib/auth, not the protocol.
 
+**Keys.** Today the head reads cards under its own key: each head's data key is wrapped by the deployment's `HEAD_MASTER_KEY` and unwrapped for the request that needs it (at rest, step one; docs/trust.md "At rest", lib/keys.ts). The planned step two (`passkey-keys`) wraps the data key under each passkey's PRF output instead and carries it in the session, so the operator holds no key at all. Then the app's sign-in will obtain the PRF secret from the passkey during the assertion and hold key material for its session (in the Keychain, beside the refresh token, shared with its extensions), and Sign in with Apple will yield a session that reads no content until a passkey unlocks it. The app's auth design must leave room for that now: passkey sign-in is the primary path, Sign in with Apple a convenience, and nothing in the app assumes a session can always read content.
+
 ## What the head needs
 
-- **Sensitivity on every surface of the head first** — its own brief and PR (`sensitivity`): the pin moved to the published RFC with sensitivity, `confirm` enforced on the owner decide route with re-identification (`POST /api/auth/reauth`), owner floors per producer, label and head (§9), `effective_sensitivity` in `/api/me`, Web Push and the daily notification without private content, the owner MCP without private content and unable to decide a confirm card, the web brief's re-identification prompt. The iOS app depends on all of it.
-- **The brief's `parts` carry each entry's `sensitivity` and `effective_sensitivity`**, so a script can count private entries without their content (an `/api/me/` change, not the RFC); the `sensitivity` brief adds this, with `spoken: true` for the paragraph in that form.
+Sensitivity on every surface of the head, and the brief's parts carrying each entry's `sensitivity` and `effective_sensitivity`, are merged (PR #57). Still missing:
+
 - APNs sender and per-device APNs token registration beside the Web Push subscription (`/api/me/settings/push`, `lib/push/*`), behind config (`APNS_*` env), self-hosters optional; the id-and-title payload above.
-- Sign in with Apple from the app already works: `POST /api/auth/apple` takes `{ id_token }`; add the app's bundle id to `APPLE_CLIENT_ID`.
+- An endpoint for a spoken brief on demand, if the agenda is not built on the device. The design builds it on the device, from the store and the stored brief's `daily_paragraph.parts` (docs/briefing-machine.md, "The agenda"); `GET /api/me/brief?spoken=1` gives only the paragraph in spoken form, not the agenda.
+- Sign in with Apple from the app already works: `POST /api/auth/apple` takes `{ id_token }`; add the app's bundle id to `APPLE_CLIENT_ID` (configuration, not code).
 - Nothing in the protocol. If an intent needs data the brief does not give, add it to `/api/me/`, never to the RFC.
 - Correct docs/mobile-prd.md's rendering sentence and the app's status when the app starts.
 
@@ -162,21 +167,33 @@ Intents, notification actions, the notification service extension and the app ar
 2. **The briefing machine's fixtures and implementation**: the event lists in docs/briefing-machine.md as language-neutral fixtures, and an implementation tested against them.
 
    **The gate.** If Siri AI on iOS 27.3 does not route bare follow-ups to `BriefingReplyIntent` while a briefing is active, **the plan stops after step 2**: the briefing machine ships as the **web app's talk mode** (implemented in the web app against the same fixtures), and the native app waits for a Siri that can carry it. If it does, step 2's implementation is the Swift package and the plan continues.
-3. Sign-in, the generated client, Brief screen read-only.
-4. Decide/done/snooze/ack in the app, with re-identification for `confirm`; Card and Orders screens.
+3. Sign-in (passkey first, Sign in with Apple beside it), the generated client, the local store (SQLite, FTS5, the outbox table) and its sync from the change cursor with the `settings_seq` floor refetch; the Brief screen read-only from the store.
+4. Decide/done/snooze/ack through the outbox, with the passkey step-up for `confirm`; Card and Orders screens; search over the FTS5 index.
 5. Entities, indexing, intents (the briefing on the machine, then the quick commands), App Shortcuts; on-screen annotations.
 6. APNs, the notification service extension, notification actions.
 7. Talk mode.
 8. TestFlight to the owner as an **internal** tester (the preview's Siri integration is not available to external TestFlight testers or App Store builds [A2b]); App Store when submissions open in the spring [A2].
 
+## Later
+
+The app could become an executor of orders addressed to `phone` (Appendix A): claiming an order when it is in the foreground or woken by a push, and carrying out what iOS lets an app do (an event or reminder through EventKit, a named Shortcut, a message prepared for the person to send). While an order waits on the person (a message not yet sent, a permission not yet granted) the app lets the lease lapse rather than hold it; the order returns to `open`, and the app claims it again when it can go on, taking a new `claim_seq` (A.2), checking for cancellation on every renewal (A.5). It posts the outcome as the executor's card (A.3). An executor writes as a producer, so it would hold a producer token for the `phone` root in its own Keychain item, apart from the owner's session and never used for `/api/me/` (CLAUDE.md, two credentials never mixed). It changes nothing in the first app.
+
 ## Left to the builder
 
 - Exact phrasing of the secretary's speech, within docs/briefing-machine.md: short, counts first, title — lead, never bodies, private counted.
 - How the machine's state is encoded and stored, within: one briefing at a time per device, saved after every event, expiring with its day.
-- Project layout, persistence for the read-only cache, test approach (AppIntentsTesting for intents [A3]).
+- Project layout, the SQLite schema within docs/local-first.md's parts, test approach (AppIntentsTesting for intents [A3]).
 - How option names are made speakable when an option's id is terse.
 
 ## Sources
+
+The head and the protocol, on main as it stands (Nov 12, 2026):
+
+- RFC Draft 0.9, `vendor/pbcp/rfc/pbcp-draft-0.9.md`, pinned at `8cbd0e6`: §1, §1.1, §3.1, §4.1 (`sensitivity`), §4.3 ("Deciding a task": ending and moving), §4.5 ("Identifying again", "Presenting a task"), §7.3, §7.4, §8 ("What a brief contains": folds, a task superseded by a task has moved), §9 ("Sensitivity", "Folding"), §12, Appendix A (A.1–A.5).
+- docs/local-first.md and `app/(ui)/local/` (`feed.ts`, `store.ts`, `db.ts`, `search.ts`, `outbox.ts`): the store, the feed, the index and the outbox the app mirrors. It replaces docs/mobile-prd.md's former "nothing is queued offline".
+- docs/trust.md ("At rest", "Sensitivity"); lib/keys.ts (step one; step two, `passkey-keys`, is listed under "Not here yet" in CLAUDE.md).
+- `app/api/auth/passkey/step-up/` (and `/options`), lib/auth/reauth-window.ts (`REAUTH_WINDOW_SECONDS`), lib/auth/session.ts (a sign-in starts re-identified).
+- lib/brief/paragraph.ts (`ParagraphParts.folds`, the spoken composition), lib/brief/fold.ts (routine tasks under a `count` label), lib/me.ts `briefStamp` (`seq`, `date`, `settings_seq`).
 
 Apple claims and where they rest. Anything about iOS 27 not listed here is unverified.
 
