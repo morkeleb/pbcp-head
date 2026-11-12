@@ -41,3 +41,100 @@ targets:
         product: PBCPClient
       - package: PBCP
         product: PBCPSync
+
+  # --- THROWAWAY: the Siri spike (ios/Spike/FINDING.md). Deleted with ios/Spike when the finding is written. ---
+  # Depends on PBCPModels only; nothing in the app imports it, and it imports nothing from the app.
+  Spike:
+    type: application
+    platform: iOS
+    # The spike runs on the iOS 27.3 beta only; 26.0 is the newest this repo's Xcode knows.
+    deploymentTarget: "26.0"
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    sources:
+      - path: ../Spike/App
+      - path: ../Spike/Shared
+      - path: ../Spike/Skills.skillsbundle
+        type: folder
+        buildPhase: resources
+      - path: ../../model/fixtures/decision-private.json
+        buildPhase: resources
+      - path: ../../model/fixtures/task-confirm.json
+        buildPhase: resources
+      - path: ../../model/fixtures/card-minimal.json
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: software.morten.pbcp.spike
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Brief spike
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+    dependencies:
+      - package: PBCP
+        product: PBCPModels
+      - target: SpikeWidget
+  SpikeWidget:
+    type: app-extension
+    platform: iOS
+    # The spike runs on the iOS 27.3 beta only; 26.0 is the newest this repo's Xcode knows.
+    deploymentTarget: "26.0"
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    sources:
+      - path: ../Spike/Widget
+      - path: ../Spike/Shared
+    info:
+      path: ../Spike/Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Brief spike
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: software.morten.pbcp.spike.widget
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+    dependencies:
+      - package: PBCP
+        product: PBCPModels
+  SpikeEvaluations:
+    type: bundle.ui-testing
+    platform: iOS
+    # The spike runs on the iOS 27.3 beta only; 26.0 is the newest this repo's Xcode knows.
+    deploymentTarget: "26.0"
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    sources:
+      - path: ../Spike/Evaluations
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: software.morten.pbcp.spike.evaluations
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Spike
+    dependencies:
+      - target: Spike
+
+schemes:
+  PBCP:
+    build:
+      targets:
+        PBCP: all
+  Spike:
+    build:
+      targets:
+        Spike: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SpikeEvaluations

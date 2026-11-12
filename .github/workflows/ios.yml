@@ -28,6 +28,7 @@ jobs:
       - name: A main-actor type cannot reach the database or the network
         working-directory: ios
         run: ./scripts/check-invariants.sh
+      # The Siri spike (ios/Spike, scheme Spike) is not built or tested here: it needs a device and the Siri AI preview.
       - name: The app builds for the simulator
         working-directory: ios/App
         run: |
