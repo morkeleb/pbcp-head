@@ -15,8 +15,8 @@ import { dailyParagraphNow } from './brief/nightly';
 import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { openRows, replacedBy, toCard, type Successor } from './store';
-import { dataKey } from './keys';
 import { openLogRow, type OpenCardRow } from './vault';
+import { asKeyring, type Keyring } from './keyring';
 import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
@@ -54,7 +54,9 @@ export type MeCard = Card & {
 export type { Successor };
 
 /** A card for the owner: renders it first if its stored render is missing or stale (§3.1, render on receipt). */
-export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
+export async function presentCards(src: Db | Keyring<Db>, rows: Row[]): Promise<MeCard[]> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const out: MeCard[] = [];
   const policies = new Map<string, SensitivityPolicy>();
   const policyOf = async (headId: string) => policies.get(headId) ?? policies.set(headId, await loadPolicy(db, headId)).get(headId)!;
@@ -64,12 +66,12 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
     let actions = row.renderedActions as Record<string, string> | null;
     let meta = row.renderedMeta as RenderMeta | null;
     if (html === null || row.renderedFrom !== renderSource(card)) {
-      const r = await renderCard(db, row.headId, card);
+      const r = await renderCard(ring, row.headId, card);
       ({ html, actions, meta } = r);
     }
     // §8: a superseded card names its newest successor, which the owner is sent to instead.
-    const by = card.state === 'superseded' ? await replacedBy(db, row.headId, card) : null;
-    const parts = row.renderedParagraph ? await annotateParts(db, row.headId, row.renderedParagraph as ParagraphParts, await policyOf(row.headId)) : null;
+    const by = card.state === 'superseded' ? await replacedBy(ring, row.headId, card) : null;
+    const parts = row.renderedParagraph ? await annotateParts(ring, row.headId, row.renderedParagraph as ParagraphParts, await policyOf(row.headId)) : null;
     out.push({
       ...card,
       rendered_html: html,
@@ -88,8 +90,9 @@ export async function presentCards(db: Db, rows: Row[]): Promise<MeCard[]> {
   return out;
 }
 
-export async function rowsFor(db: Db, headId: string, ids: string[]): Promise<Row[]> {
-  return [...(await rowsById(db, headId, ids)).values()];
+export async function rowsFor(src: Db | Keyring<Db>, headId: string, ids: string[]): Promise<Row[]> {
+  const ring = asKeyring(src);
+  return [...(await rowsById(ring, headId, ids)).values()];
 }
 
 const isOrderId = (id: string | undefined) => id !== undefined && id.startsWith('head:order:');
@@ -98,13 +101,15 @@ const isOrderId = (id: string | undefined) => id !== undefined && id.startsWith(
  * An order's thread (A.3): the cards executors post under their own namespace with `thread` set to the order
  * id: progress signals and the outcome. Unlike a producer's thread it spans producers.
  */
-async function orderThread(db: Db, headId: string, orderId: string): Promise<Row[]> {
+async function orderThread(src: Db | Keyring<Db>, headId: string, orderId: string): Promise<Row[]> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   return db
     .select()
     .from(cards)
     .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' = ${orderId}`))
     .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
-    .limit(200).then((rows) => openRows(db, rows));
+    .limit(200).then((rows) => openRows(ring, rows));
 }
 
 /** An order's lease as the owner sees it (head-private, A.2). */
@@ -121,13 +126,14 @@ const isOutcome = (r: Row) => (r.producerDoc as Record<string, unknown>)['orders
  * renewed, when the last lease lapsed: head-private, A.2) and its thread (A.3): a count, the latest card in full, every
  * progress note newest first, and the latest outcome in full.
  */
-export async function orderProgress(db: Db, headId: string, orders: Card[]) {
-  const rows = await rowsFor(db, headId, orders.map((o) => o.id));
+export async function orderProgress(src: Db | Keyring<Db>, headId: string, orders: Card[]) {
+  const ring = asKeyring(src);
+  const rows = await rowsFor(ring, headId, orders.map((o) => o.id));
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const presented = new Map((await presentCards(db, rows)).map((c) => [c.id, c]));
+  const presented = new Map((await presentCards(ring, rows)).map((c) => [c.id, c]));
   return Promise.all(
     orders.map(async (o) => {
-      const thread = await orderThread(db, headId, o.id);
+      const thread = await orderThread(ring, headId, o.id);
       const latest = thread.at(-1);
       const outcome = thread.filter(isOutcome).at(-1);
       const row = byId.get(o.id);
@@ -136,9 +142,9 @@ export async function orderProgress(db: Db, headId: string, orders: Card[]) {
         lease: row ? leaseOf(row) : { claimed_at: null, renewals: 0, lapsed_at: null },
         progress: {
           count: thread.length,
-          latest: latest ? (await presentCards(db, [latest]))[0]! : null,
+          latest: latest ? (await presentCards(ring, [latest]))[0]! : null,
           notes: thread.filter((r) => !isOutcome(r)).reverse().map((r) => ({ id: r.id, title: (r.producerDoc as { title: string }).title, received_at: iso(r.receivedAt) })),
-          outcome: outcome ? (await presentCards(db, [outcome]))[0]! : null,
+          outcome: outcome ? (await presentCards(ring, [outcome]))[0]! : null,
         },
       };
     }),
@@ -198,7 +204,9 @@ export interface BriefOptions {
   spoken?: boolean;
 }
 
-export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
+export async function brief(src: Db | Keyring<Db>, headId: string, opts: BriefOptions = {}) {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const head = await headSettings(db, headId);
   await expireDueOrders(db, headId); // A.2: lapsed leases are visible as lapsed before the brief reads them
   const at = new Date(now());
@@ -210,14 +218,14 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.producer, 'head'), eq(cards.namespace, 'daily'), lte(cards.id, `head:daily:${today}`)))
     .orderBy(desc(cards.id))
-    .limit(1).then((rows) => openRows(db, rows));
+    .limit(1).then((rows) => openRows(ring, rows));
 
   const decisions = await db
     .select()
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'decision'`, notSnoozed(at)))
     .orderBy(desc(cards.receivedAt), desc(cards.changeSeq))
-    .limit(200).then((rows) => openRows(db, rows));
+    .limit(200).then((rows) => openRows(ring, rows));
 
   // §8, §4.5: every open task that is not snoozed and whose day is today or earlier (an earlier one is overdue), and the
   // tasks closed today: decided here (done, a listed action, dismissed) or superseded by the producer's record of what
@@ -248,9 +256,9 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
       ),
     )
     .orderBy(asc(cards.receivedAt), asc(cards.id)) // ties in when they are due keep the order they came in
-    .limit(200).then((rows) => openRows(db, rows));
+    .limit(200).then((rows) => openRows(ring, rows));
   const counting = new Set(await countLabels(db, headId));
-  const tasks = (await presentCards(db, taskRows))
+  const tasks = (await presentCards(ring, taskRows))
     .filter((c) => c.state !== 'superseded' || c.replaced_by?.kind !== 'task')
     .sort(byDue(head.timezone))
     // §4.5: overdue as the head presents it now, on the response only; never a field of the card. §9 "Folding": a task
@@ -271,7 +279,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
         notSnoozed(at),
       ),
     )
-    .orderBy(asc(cards.changeSeq)).then((rows) => openRows(db, rows));
+    .orderBy(asc(cards.changeSeq)).then((rows) => openRows(ring, rows));
 
   // Orders with progress or an outcome since the last visit (A.3): one row each in the brief, "<order> — <newest
   // card's lead>", which stands for those cards; an open order that has been quiet since has none. An outcome that
@@ -281,18 +289,18 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), sql`${cards.producerDoc}->>'thread' like 'head:order:%'`, sql`${cards.producerDoc}->>'kind' <> 'decision'`, gt(cards.changeSeq, head.lastVisitSeq)))
     .orderBy(asc(cards.changeSeq))
-    .limit(500).then((rows) => openRows(db, rows));
+    .limit(500).then((rows) => openRows(ring, rows));
   const newsByOrder = new Map<string, Row[]>();
   for (const r of news) {
     const order = (r.producerDoc as { thread: string }).thread;
     newsByOrder.set(order, [...(newsByOrder.get(order) ?? []), r]);
   }
-  const openOrders = (await rowsFor(db, headId, [...newsByOrder.keys()])).filter((o) => o.toProducer !== null && o.state === 'open');
+  const openOrders = (await rowsFor(ring, headId, [...newsByOrder.keys()])).filter((o) => o.toProducer !== null && o.state === 'open');
   const orderUpdates = await Promise.all(
     openOrders
       .map((o) => ({ o, rows: newsByOrder.get(o.id)! }))
       .sort((a, b) => b.rows.at(-1)!.changeSeq - a.rows.at(-1)!.changeSeq)
-      .map(async ({ o, rows }) => ({ id: o.id, title: (o.producerDoc as { title: string }).title, count: rows.length, latest: (await presentCards(db, [rows.at(-1)!]))[0]! })),
+      .map(async ({ o, rows }) => ({ id: o.id, title: (o.producerDoc as { title: string }).title, count: rows.length, latest: (await presentCards(ring, [rows.at(-1)!]))[0]! })),
   );
   const folded = new Set(orderUpdates.map((u) => u.id));
   const loose = attention.filter((r) => !folded.has((r.producerDoc as { thread?: string }).thread ?? ''));
@@ -312,7 +320,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
   const folds: Array<Fold & { immediate: boolean; order: number }> = [];
   for (const rows of groups.values()) {
     const newest = rows.at(-1)!;
-    const [latest] = await presentCards(db, [newest]);
+    const [latest] = await presentCards(ring, [newest]);
     folds.push({
       producer: newest.producer,
       thread: (newest.producerDoc as { thread?: string }).thread ?? null,
@@ -337,7 +345,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.outcome, 'stale'), eq(cards.state, 'open'), isNull(cards.acknowledgedAt)))
     .orderBy(desc(cards.changeSeq))
-    .limit(50).then((rows) => openRows(db, rows));
+    .limit(50).then((rows) => openRows(ring, rows));
   // A.2: a lease that lapsed with no outcome usually means a worker died. The head surfaces those orders here
   // rather than minting a signal card per lapse.
   const lapsed = await db
@@ -345,7 +353,7 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     .from(cards)
     .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), eq(cards.execState, 'open'), gt(cards.claimSeq, 0)))
     .orderBy(desc(cards.changeSeq))
-    .limit(50).then((rows) => openRows(db, rows));
+    .limit(50).then((rows) => openRows(ring, rows));
 
   // Tomorrow: cards snoozed until then, and cards whose day is tomorrow (§8: their `about`, the calendar's agenda).
   const tomorrow = addDays(today, 1);
@@ -361,18 +369,18 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
       ),
     )
     .orderBy(asc(cards.receivedAt))
-    .limit(100).then((rows) => openRows(db, rows));
+    .limit(100).then((rows) => openRows(ring, rows));
 
   // The day opens with its paragraph (lib/brief/fold.ts): the nightly card's lead once it exists, else the same
   // fold now, "so far today". None on a day with nothing open and nothing new. Either way with its parts, each entry
   // with its card's labels (lib/brief/paragraph.ts), for the label filter.
-  const presentedDaily = daily ? (await presentCards(db, [daily]))[0]! : null;
+  const presentedDaily = daily ? (await presentCards(ring, [daily]))[0]! : null;
   let paragraph: { html: string; so_far: boolean; parts: ParagraphParts; text?: string } | null = null;
   if (presentedDaily && presentedDaily.id === `head:daily:${today}` && currentFold(presentedDaily) && presentedDaily.paragraph) {
     if (presentedDaily.rendered_lead) paragraph = { html: presentedDaily.rendered_lead, so_far: false, parts: presentedDaily.paragraph };
   } else {
     // No card for today yet, or one folded by an older fold or minted before paragraphs had parts: fold now.
-    const parts = await annotateParts(db, headId, await dailyParagraphNow(db, headId, head.timezone, today));
+    const parts = await annotateParts(ring, headId, await dailyParagraphNow(ring, headId, head.timezone, today));
     const html = composeParagraph(parts);
     if (html) paragraph = { html, so_far: true, parts };
   }
@@ -394,14 +402,14 @@ export async function brief(db: Db, headId: string, opts: BriefOptions = {}) {
     first_day: oldest?.day ?? null,
     daily: presentedDaily,
     daily_paragraph: paragraph,
-    tomorrow: { date: tomorrow, cards: await presentCards(db, ahead) },
-    decisions: await presentCards(db, decisions),
+    tomorrow: { date: tomorrow, cards: await presentCards(ring, ahead) },
+    decisions: await presentCards(ring, decisions),
     tasks,
     threads: folds.map(({ immediate: _i, order: _o, ...f }) => f),
     snoozed,
-    late_outcomes: await presentCards(db, late),
+    late_outcomes: await presentCards(ring, late),
     order_updates: orderUpdates,
-    lapsed_orders: await presentCards(db, lapsed),
+    lapsed_orders: await presentCards(ring, lapsed),
     new: shown.filter((r) => r.changeSeq > head.lastVisitSeq).map((r) => r.id),
   };
 }
@@ -426,7 +434,9 @@ export interface CardQuery {
  * `before` is the latest earlier day that has a card (null when there is none), so the timeline skips empty weeks and
  * knows where the head's cards begin.
  */
-export async function listCards(db: Db, headId: string, q: CardQuery) {
+export async function listCards(src: Db | Keyring<Db>, headId: string, q: CardQuery) {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const head = await headSettings(db, headId);
   const where: SQL[] = [eq(cards.headId, headId)];
   if (q.date) {
@@ -465,7 +475,7 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
   const raw = await db.select().from(cards).where(and(...where)).orderBy(asc(cards.changeSeq)).limit(limit);
   // At rest: opened for this response; a row that fails its integrity check is left out, and the page's cursor still
   // comes from what was read, so paging goes on past it.
-  const presented = await presentCards(db, await openRows(db, raw));
+  const presented = await presentCards(ring, await openRows(ring, raw));
   return {
     // One day: in the day's order (§8, by `at`, then by received_at); the page and `next` stay in change_seq order.
     cards: q.date ? presented.sort(byTime) : presented,
@@ -477,9 +487,11 @@ export async function listCards(db: Db, headId: string, q: CardQuery) {
 
 // --- one card with its thread --------------------------------------------------------
 
-async function rowsById(db: Db, headId: string, ids: string[]): Promise<Map<string, Row>> {
+async function rowsById(src: Db | Keyring<Db>, headId: string, ids: string[]): Promise<Map<string, Row>> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   if (ids.length === 0) return new Map();
-  const rows = await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids))).then((rows) => openRows(db, rows));
+  const rows = await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids))).then((rows) => openRows(ring, rows));
   return new Map(rows.map((r) => [r.id, r]));
 }
 
@@ -487,15 +499,17 @@ async function rowsById(db: Db, headId: string, ids: string[]): Promise<Map<stri
  * GET /api/me/cards/{id}: the card, the chain it supersedes (oldest first) and the chain that supersedes it,
  * its references resolved (null when this head does not hold one), and every card of its thread, newest last.
  */
-export async function cardWithThread(db: Db, headId: string, id: string) {
-  const [row] = await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id))).then((rows) => openRows(db, rows));
+export async function cardWithThread(src: Db | Keyring<Db>, headId: string, id: string) {
+  const ring = asKeyring(src);
+  const db = ring.db;
+  const [row] = await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id))).then((rows) => openRows(ring, rows));
   if (!row) throw new HttpError(404, 'not_found', `no card ${id}`);
 
   const predecessors: Row[] = [];
   const seen = new Set([row.id]);
   for (let ref = (row.producerDoc as { supersedes?: string }).supersedes; ref && !seen.has(ref); ) {
     seen.add(ref);
-    const prev = (await rowsById(db, headId, [ref])).get(ref);
+    const prev = (await rowsById(ring, headId, [ref])).get(ref);
     if (!prev) break;
     predecessors.unshift(prev);
     ref = (prev.producerDoc as { supersedes?: string }).supersedes;
@@ -506,7 +520,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
       .select()
       .from(cards)
       .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'supersedes' = ${cur}`))
-      .limit(1).then((rows) => openRows(db, rows));
+      .limit(1).then((rows) => openRows(ring, rows));
     if (!next || seen.has(next.id)) break;
     seen.add(next.id);
     successors.push(next);
@@ -514,13 +528,13 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
   }
 
   const refs = ((row.producerDoc as { references?: string[] }).references ?? []).slice(0, 100);
-  const referenced = await rowsById(db, headId, refs);
+  const referenced = await rowsById(ring, headId, refs);
 
   const thread = (row.producerDoc as { thread?: string }).thread;
   // An order and the cards in its thread (A.3) are one conversation across producers: the order first.
   const orderId = row.toProducer !== null ? row.id : isOrderId(thread) ? thread : undefined;
   const threadRows = orderId
-    ? [...(await rowsFor(db, headId, [orderId])), ...(await orderThread(db, headId, orderId))]
+    ? [...(await rowsFor(ring, headId, [orderId])), ...(await orderThread(ring, headId, orderId))]
     : thread
       ? await db
           .select()
@@ -528,7 +542,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
           .where(and(eq(cards.headId, headId), eq(cards.producer, row.producer), sql`${cards.producerDoc}->>'thread' = ${thread}`))
           .orderBy(asc(cards.receivedAt), asc(cards.changeSeq))
           .limit(200)
-          .then((rows) => openRows(db, rows))
+          .then((rows) => openRows(ring, rows))
       : [];
 
   const summary = (r: Row) => {
@@ -550,14 +564,14 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
     .orderBy(asc(decisionLog.seq))
     // At rest: each row's comment and edited text opened for this response.
     .then(async (rows) => {
-      const key = await dataKey(db, headId);
+      const key = await ring(headId);
       return rows.map((r) => openLogRow({ ...r, headId }, key));
     });
   const head = await headSettings(db, headId);
   return {
     timezone: head.timezone,
-    card: { ...(await presentCards(db, [row]))[0]!, ...(row.toProducer !== null ? { lease: leaseOf(row) } : {}) },
-    predecessors: await presentCards(db, predecessors),
+    card: { ...(await presentCards(ring, [row]))[0]!, ...(row.toProducer !== null ? { lease: leaseOf(row) } : {}) },
+    predecessors: await presentCards(ring, predecessors),
     successors: successors.map(summary),
     references: await Promise.all(refs.map(async (ref) => ({ id: ref, card: referenced.has(ref) ? summary(referenced.get(ref)!) : null }))),
     thread: threadRows.map(summary),

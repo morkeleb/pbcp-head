@@ -13,7 +13,7 @@ import { now } from './clock';
 import { decodeId } from './http';
 import { applyOutcomeInTx, expireDueOrders, visibleOrders } from './orders';
 import { effectiveOf, loadPolicy, REAUTH_WINDOW_SECONDS } from './sensitivity';
-import { dataKey } from './keys';
+import { keyring, type Keyring } from './keyring';
 import { sealLog } from './vault';
 import { load, openRows, persist, toCard, writeTx, type Stored, type Tx } from './store';
 
@@ -56,15 +56,16 @@ export async function submitCard(db: Db, ctx: SubmitContext, raw: string, rawPat
   const ordered = checkOutcome(incoming);
 
   return writeTx(db, ctx.headId, async (tx) => {
-    const stored = await load(tx, ctx.headId, incoming.id);
-    const target = incoming.supersedes === undefined ? null : await load(tx, ctx.headId, incoming.supersedes);
+    const ring = keyring(tx);
+    const stored = await load(ring, ctx.headId, incoming.id);
+    const target = incoming.supersedes === undefined ? null : await load(ring, ctx.headId, incoming.supersedes);
     // §9: core clamps the stored content's `delivery` to the ceiling; `urgency` stays as sent. The ceiling is the
     // producer's, lowered by any the owner set on the card's labels: a card under both takes the lower.
     const ceiling = await ceilingFor(tx, ctx.headId, ctx.ceiling, incoming.labels ?? []);
     const r = submit(stored?.card ?? null, incoming, now(), target?.card ?? null, ceiling);
     let card = r.card;
     for (const c of r.changed) {
-      const saved = await persist(tx, ctx.headId, c);
+      const saved = await persist(ring, ctx.headId, c);
       if (c.id === incoming.id) card = saved;
     }
     // A.3: a stored outcome moves its order's exec_state only if it comes from the current lease.
@@ -102,6 +103,7 @@ export async function syncChanges(db: Db, ctx: { headId: string; root: string },
   await expireDueOrders(db, ctx.headId);
   return db.transaction(
     async (tx) => {
+    const ring = keyring(tx);
       const rows = await tx
         .select()
         .from(cards)
@@ -109,7 +111,7 @@ export async function syncChanges(db: Db, ctx: { headId: string; root: string },
         .orderBy(asc(cards.changeSeq))
         .limit(pageSize);
       // At rest: each card opened for this response; a row that fails its integrity check is left out (logged).
-      const opened = new Map((await openRows(tx, rows)).map((r) => [r.id, r]));
+      const opened = new Map((await openRows(ring, rows)).map((r) => [r.id, r]));
       const changes = rows.filter((row) => opened.has(row.id)).map((row) => ({ seq: row.changeSeq, card: toCard(opened.get(row.id)!) }));
       if (rows.length === pageSize) return { changes, next: rows.at(-1)!.changeSeq };
       const [top] = await tx
@@ -169,8 +171,8 @@ async function requireIdentified(tx: Tx, ctx: OwnerContext, card: Card): Promise
   }
 }
 
-async function loadOrThrow(tx: Tx, headId: string, id: string): Promise<Stored> {
-  const stored = await load(tx, headId, id);
+async function loadOrThrow(src: Tx | Keyring<Tx>, headId: string, id: string): Promise<Stored> {
+  const stored = await load(src, headId, id);
   if (!stored) throw new PbcpError('not_found', `no card ${id}`);
   return stored;
 }
@@ -178,7 +180,8 @@ async function loadOrThrow(tx: Tx, headId: string, id: string): Promise<Stored> 
 /** `POST /cards/{id}/decision` (§7.3): decide, freeze the decided version, append to the decision log. */
 export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: unknown): Promise<Outcome> {
   return writeTx(db, ctx.headId, async (tx) => {
-    const stored = await loadOrThrow(tx, ctx.headId, id);
+    const ring = keyring(tx);
+    const stored = await loadOrThrow(ring, ctx.headId, id);
     // The refusal comes before anything is written: no change_seq, no card change, no decision-log row.
     await requireIdentified(tx, ctx, stored.card);
     const at = now();
@@ -186,11 +189,11 @@ export async function decideCard(db: Db, ctx: OwnerContext, id: string, body: un
     let card = r.card;
     for (const c of r.changed) {
       const decidedDoc = producerPart(stored.card);
-      card = await persist(tx, ctx.headId, c, { decidedDoc });
+      card = await persist(ring, ctx.headId, c, { decidedDoc });
       // At rest: the decided-on document, comment and edited text sealed; the value, device and time in clear.
       // Bound to its row: the row's seq is taken before it is written, so the sealed values name it.
       const [{ seq }] = (await tx.execute(sql`select nextval(pg_get_serial_sequence('decision_log', 'seq'))::bigint as seq`)) as unknown as [{ seq: string | number }];
-      const log = sealLog((await dataKey(tx, ctx.headId, { create: true }))!, ctx.headId, Number(seq), { decidedDoc: decidedDoc as unknown as Record<string, unknown>, comment: card.comment ?? null, editedProposal: card.edited_proposal ?? null });
+      const log = sealLog((await ring(ctx.headId, { create: true }))!, ctx.headId, Number(seq), { decidedDoc: decidedDoc as unknown as Record<string, unknown>, comment: card.comment ?? null, editedProposal: card.edited_proposal ?? null });
       await tx.insert(decisionLog).values({
         seq: Number(seq),
         headId: ctx.headId,
@@ -221,10 +224,11 @@ export async function acknowledgeCard(db: Db, ctx: OwnerContext, id: string): Pr
 
 async function ownerUpdate(db: Db, ctx: OwnerContext, id: string, op: (c: Card) => { status: number; card: Card; changed: Card[] }): Promise<Outcome> {
   return writeTx(db, ctx.headId, async (tx) => {
-    const stored = await loadOrThrow(tx, ctx.headId, id);
+    const ring = keyring(tx);
+    const stored = await loadOrThrow(ring, ctx.headId, id);
     const r = op(stored.card);
     let card = r.card;
-    for (const c of r.changed) card = await persist(tx, ctx.headId, c);
+    for (const c of r.changed) card = await persist(ring, ctx.headId, c);
     return { status: r.status, card };
   });
 }
