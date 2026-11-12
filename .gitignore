@@ -14,3 +14,6 @@ packages/owner-mcp/dist/
 ios/.build/
 ios/.swiftpm/
 ios/App/PBCP.xcodeproj/
+
+# THROWAWAY with ios/Spike: a developer's signing team
+ios/App/Signing.local.xcconfig

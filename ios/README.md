@@ -2,6 +2,8 @@
 
 The foundation the native app builds on: generated models, a local store, an API client, the outbox and the sync, and an app shell with no screens yet. The design is `docs/superpowers/specs/2026-11-10-ios-secretary-design.md`; the store, sync and outbox mirror the web app's (`docs/local-first.md`, `app/(ui)/local/`). Not here yet, on purpose: screens, Siri and App Intents, the briefing machine's package (`docs/briefing-machine.md`), APNs.
 
+`Spike/` is a throwaway: the Siri AI gate of the iOS design (does Siri route a bare "approve" to the app while a briefing runs?), its own scheme and bundle id, depending on PBCPModels only, deleted in one commit when `Spike/FINDING.md` is written.
+
 It lives in this repo, beside the head, so a model change and the Swift that follows it land in one commit. It is under the repo's licence (`LICENSE`).
 
 ## Generated from the model
