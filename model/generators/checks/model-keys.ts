@@ -16,7 +16,7 @@ const ALLOWED: Record<string, string[]> = {
   field: SPEC,
   spread: ['spread'],
   store: ['version', 'doc', 'objectStores'],
-  objectStore: ['const', 'name', 'keyPath', 'autoIncrement', 'holds', 'indexes'],
+  objectStore: ['const', 'name', 'keyPath', 'autoIncrement', 'holds', 'indexes', 'search'],
 };
 const TYPES = ['string', 'integer', 'number', 'boolean', 'literal', 'enum', 'ref', 'array', 'record', 'object', 'unknown'];
 

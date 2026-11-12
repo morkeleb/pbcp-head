@@ -1,0 +1,8 @@
+{
+  "partials": [],
+  "formatters": [],
+  "steps": [
+    { "generate": "templates/Operations.generated.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPClient/Sources/PBCPClient/", "engine": "ejs" },
+    { "generate": "templates/Auth.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPClient/Sources/PBCPClient/", "engine": "ejs", "touch": true }
+  ]
+}

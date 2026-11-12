@@ -25,7 +25,7 @@ H1 (the core over HTTP, behind the conformance gate), H2 (the brief) and H3 (ord
 - Web Push for the daily notification and for urgent cards;
 - the landing page at `/`.
 
-The native phone app is deferred, and the Swift client was removed: the web app on a phone, with push, is the phone client for now. There is no milestone list to work through. New work arrives as a brief or an issue, and `docs/` describes what exists.
+The native phone app has a foundation in `ios/` (generated models, a SQLite store, the API client, the outbox and the sync, an app shell with no screens; ios/README.md) and is otherwise ahead: the web app on a phone, with push, is the phone client for now. There is no milestone list to work through. New work arrives as a brief or an issue, and `docs/` describes what exists.
 
 Not here yet, and known: the operator holding no key at all (step two of at-rest: per-passkey wraps, the key carried by the session; before anyone but the owner has an account); Obsidian vault sync of the decision log; OAuth clients identified by a Client ID Metadata Document.
 

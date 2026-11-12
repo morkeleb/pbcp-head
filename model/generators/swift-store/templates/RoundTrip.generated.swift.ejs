@@ -1,0 +1,2 @@
+<%# Clay's ts engine cannot write .swift (see swift-models): this EJS template hands the model to ../emit-roundtrip.ts through jiti, from the repo root. -%>
+<%- process.getBuiltinModule('node:module').createRequire(process.cwd() + '/package.json')('jiti').createJiti(process.cwd() + '/package.json')('./model/generators/swift-store/emit-roundtrip.ts').emit(locals) -%>

@@ -1,0 +1,9 @@
+{
+  "partials": [],
+  "formatters": [],
+  "steps": [
+    { "generate": "templates/Store.generated.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPStore/Sources/PBCPStore/", "engine": "ejs" },
+    { "generate": "templates/Queries.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPStore/Sources/PBCPStore/", "engine": "ejs", "touch": true },
+    { "generate": "templates/RoundTrip.generated.swift.ejs", "select": "$.model", "target": "ios/Packages/PBCPStore/Tests/PBCPStoreTests/", "engine": "ejs" }
+  ]
+}

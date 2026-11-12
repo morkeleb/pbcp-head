@@ -1,6 +1,6 @@
 {
   "name": "pbcp-head",
-  "generators": ["generators/ts-api/generator.json", "generators/ts-store/generator.json"],
+  "generators": ["generators/ts-api/generator.json", "generators/ts-store/generator.json", "generators/swift-models/generator.json", "generators/swift-store/generator.json", "generators/swift-client/generator.json"],
   "model": {
     "imports": [
       { "name": "ProducerCard", "import": "ProducerCardSchema", "from": "@pbcp/core", "kind": "schema", "doc": "RFC §4.1: the producer-owned card, read from core by reference, never copied" },
@@ -598,6 +598,22 @@
         ]
       },
       {
+        "name": "SessionTokens", "export": true, "doc": "docs/mobile-prd.md \"Auth\": what a sign-in and POST /api/auth/refresh answer (lib/auth/session.ts); /api/me takes `Authorization: Session <access_token>`",
+        "fields": [
+          { "name": "token_type", "type": "literal", "value": "Session" },
+          { "name": "access_token", "type": "string" },
+          { "name": "expires_in", "type": "integer", "positive": true, "describe": "Seconds the access token lives" },
+          { "name": "refresh_token", "type": "string", "describe": "Rotated on every use; an old one coming back signs the device out" },
+          { "name": "refresh_expires_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "device_id", "type": "string" },
+          { "name": "head", "type": "string", "describe": "The owner's person id", "doc": "RFC §10" }
+        ]
+      },
+      {
+        "name": "RefreshRequest", "export": true, "doc": "POST /api/auth/refresh",
+        "fields": [{ "name": "refresh_token", "type": "string" }]
+      },
+      {
         "name": "Floors", "layer": "store", "doc": "RFC 0.9 §9: the owner's floors as the device keeps them, to recompute `effective_sensitivity` with core's `effectiveSensitivity`",
         "fields": [
           { "name": "all", "type": "ref", "ref": "Sensitivity", "nullable": true },
@@ -660,7 +676,7 @@
       "version": 1,
       "doc": "docs/local-first.md: one database per owner, `pbcp-<head>`",
       "objectStores": [
-        { "const": "CARDS", "name": "cards", "keyPath": "id", "holds": "MeCard", "indexes": [{ "name": "day", "keyPath": "day" }, { "name": "change_seq", "keyPath": "change_seq" }] },
+        { "const": "CARDS", "name": "cards", "keyPath": "id", "holds": "MeCard", "indexes": [{ "name": "day", "keyPath": "day" }, { "name": "change_seq", "keyPath": "change_seq" }], "search": ["title", "summary", "lead", "body_text"] },
         { "const": "META", "name": "meta", "keyPath": "key", "holds": "Meta" },
         { "const": "OUTBOX", "name": "outbox", "keyPath": "seq", "autoIncrement": true, "holds": "OutboxRow" }
       ]

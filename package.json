@@ -85,6 +85,7 @@
     "drizzle-kit": "0.31.11",
     "fake-indexeddb": "6.2.8",
     "http_ece": "1.2.0",
+    "jiti": "2.7.0",
     "shadcn": "4.23.0",
     "sharp": "0.35.5",
     "tailwindcss": "4.3.3",
