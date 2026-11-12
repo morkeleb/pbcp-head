@@ -601,3 +601,20 @@ export const StepUpResult = z.object({
   reauthenticated_at: Timestamp,
   window_seconds: z.number().int().positive().describe('REAUTH_WINDOW_SECONDS: decide a `confirm` card within it'),
 });
+
+/** docs/mobile-prd.md "Auth": what a sign-in and POST /api/auth/refresh answer (lib/auth/session.ts); /api/me takes `Authorization: Session <access_token>` */
+export const SessionTokens = z.object({
+  token_type: z.literal('Session'),
+  access_token: z.string(),
+  expires_in: z.number().int().positive().describe('Seconds the access token lives'),
+  refresh_token: z.string().describe('Rotated on every use; an old one coming back signs the device out'),
+  refresh_expires_at: Timestamp,
+  device_id: z.string(),
+  /** RFC §10 */
+  head: z.string().describe('The owner\'s person id'),
+});
+
+/** POST /api/auth/refresh */
+export const RefreshRequest = z.object({
+  refresh_token: z.string(),
+});

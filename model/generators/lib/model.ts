@@ -107,6 +107,8 @@ export interface ObjectStore {
   /** The entity a row is (`Meta`: one row per field, `{ key, value }`). */
   holds: string;
   indexes?: Array<{ name: string; keyPath: string }>;
+  /** Fields of the held entity a client indexes for search on the device (`body_text`: the rendered body as plain text). */
+  search?: string[];
 }
 
 export interface Model {

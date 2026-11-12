@@ -1,0 +1,36 @@
+name: ios
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ['ios/**', 'model/**', 'scripts/generate.ts', 'lib/api/**', 'packages/api-types/**', '.github/workflows/ios.yml']
+
+jobs:
+  ios:
+    # Xcode 26 (Swift 6.2 tools); see ios/README.md.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Every generated file, TypeScript and Swift, matches the model.
+      - run: pnpm generate --check
+      - name: Packages build and test (warnings are errors)
+        working-directory: ios
+        run: swift test
+      - name: A main-actor type cannot reach the database or the network
+        working-directory: ios
+        run: ./scripts/check-invariants.sh
+      - name: The app builds for the simulator
+        working-directory: ios/App
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project PBCP.xcodeproj -scheme PBCP -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

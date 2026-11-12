@@ -17,7 +17,7 @@ It never redefines a protocol field. Core's producer-owned card and head fields 
 | `CardDetail`, `CardList`, `CardSummary`, `OrderWithProgress`, `OrderList` | The card page, the change feed, orders | api |
 | `Settings`, `Producer`, `Label`, `Device`, tokens, pairing, … | What Settings shows and changes | api |
 | request bodies (`DecisionRequest`, `SnoozeRequest`, `OrderRequest`, the patches, …) | What the routes parse | api |
-| `StepUpOptions`, `StepUpRequest`, `StepUpResult` | The passkey step-up (`/api/auth/passkey/step-up`; sign-in routes stay out of the OpenAPI document) | api, unregistered |
+| `StepUpOptions`, `StepUpRequest`, `StepUpResult`, `SessionTokens`, `RefreshRequest` | The passkey step-up and the session's tokens (`/api/auth/*`; sign-in routes stay out of the OpenAPI document) | api, unregistered |
 | `Floors` | The owner's floors as a device keeps them (§9) | store |
 | `OutboxRow`, `OutboxAction`, `OutboxStatus` | A command not yet sent | store |
 | `Meta` | The meta rows, by key: cursor, `settings_seq`, floors, fold policies, retention, archive, oldest day, the last brief, orders, `synced_at` | store |
@@ -32,12 +32,19 @@ It never redefines a protocol field. Core's producer-owned card and head fields 
 | --- | --- | --- |
 | `ts-api` | `lib/api/schemas.generated.ts`: a Zod schema for every api-layer entity, registered as `responses` or `requests` | The hand-written schemas in `lib/api/schemas.ts`, which now keeps `parseRequest` and re-exports these |
 | `ts-store` | `app/(ui)/local/model.generated.ts` (`MeCard` and the other API types it keeps, as `z.infer` of ts-api's schemas; `Floors`, `OutboxRow`, `Meta`, the object stores and `STORE_VERSION`); `app/(ui)/local/commands.generated.ts` (`Command`, `COMMAND_ROUTES`, `Outcome`); `test/model/roundtrip.test.ts` | The hand-written types in `components.tsx`, `store.ts`, `outbox.ts`, `feed.ts`, `db.ts` and `orders-view.tsx` |
+| `swift-models` | `ios/…/PBCPModels/Models.generated.swift`: every entity as Swift, core's card fields read from `@pbcp/core`'s schema at generation time | — |
+| `swift-store` | `ios/…/PBCPStore/Store.generated.swift` (the SQLite schema, records and the `Store` actor) and the Swift round-trip test | — |
+| `swift-client` | `ios/…/PBCPClient/Operations.generated.swift`: a method per `/api/me` operation of `packages/api-types/openapi.json` | — |
 
-Both are Clay `engine: "ts"` templates under `generators/`, sharing `generators/lib/`. A precheck (`generators/checks/model-keys.ts`) refuses a model with a key this README does not document, or a reference to a name the model does not have, before anything is written.
+`ios/README.md` covers the Swift side.
+
+The TypeScript generators are Clay `engine: "ts"` templates under `generators/`, sharing `generators/lib/`. Clay's ts engine names its output after a `.ts` template, so it cannot write a `.swift` file: each Swift generator is a one-line EJS template (Clay strips `.ejs` from the output name) that hands the model to a TypeScript emitter (`generators/swift-*/emit*.ts`) through jiti, from the repo root, where Clay always runs. A precheck (`generators/checks/model-keys.ts`) refuses a model with a key this README does not document, or a reference to a name the model does not have, before anything is written.
 
 **Generated files are never edited.** Change the model or a template and run `pnpm generate`. `clay init-claude` installed a Claude Code hook (`.claude/settings.json`) that refuses an edit to any file in Clay's ledger (`.clay`). `.gitattributes` marks those files as generated, so their diffs fold in review.
 
-**A touch file is emitted once and never overwritten.** ts-store's one touch file is `app/(ui)/local/store.local.ts`, for IndexedDB index choices the model does not state. Clay does not track it, and the device owns it from then on.
+**A touch file is emitted once and never overwritten.** The touch files are `app/(ui)/local/store.local.ts` (IndexedDB index choices the model does not state), `ios/…/PBCPStore/Queries.swift` (hand-tuned reads) and `ios/…/PBCPClient/Auth.swift` (Sign in with Apple and the passkey assertion). Clay does not track them.
+
+**`pnpm generate` runs Clay with `--force`.** Clay's input hash covers the model and the template files but not the modules templates import (`generators/lib/`, the emitters), so without it a change there would be skipped. Clay compares what it generates with its ledger, not with the file on disk, so even `--force` does not undo a hand edit; `pnpm generate --check` does catch one.
 
 ## The model format
 
@@ -61,7 +68,7 @@ Both are Clay `engine: "ts"` templates under `generators/`, sharing `generators/
   - `array` / `record` (`of`), `object` (`fields`, optional `extends`, optional `name` for clients that need one).
 
   Modifiers are `optional`, `nullable`, `min`, `nonnegative`, `positive` and `pattern`. `describe` is what the API document says. `doc` is where the rule comes from, and it never reaches the document. `{ "spread": "HeadFields" }` in a field list places every field of that import there.
-- `store` — `version`, and `objectStores: [{ const, name, keyPath, autoIncrement, holds, indexes }]`.
+- `store` — `version`, and `objectStores: [{ const, name, keyPath, autoIncrement, holds, indexes, search }]`. `search` names the fields of the held entity a client indexes for search on the device (`body_text`: the rendered body as plain text); the web's MiniSearch and the app's FTS5 index read the same list.
 
 ## Fixtures: the contract across languages
 
@@ -78,13 +85,13 @@ The generated test `test/model/roundtrip.test.ts` takes each fixture through the
 
 It also fails when a field of a stored entity appears in no fixture. A field added to the model needs a sample.
 
-A second language's generated test reads the same files and does the same: decode, store, read back, encode, compare. A field the web store keeps and another client drops then fails on one side. The briefing machine's event lists (`docs/briefing-machine.md`) are not here: they gauge behaviour, which the model does not carry.
+The Swift half (`ios/…/PBCPStore/Tests/PBCPStoreTests/RoundTrip.generated.swift`) reads the same files and does the same through the SQLite store: a field the web store keeps and Swift drops fails there. The briefing machine's event lists (`docs/briefing-machine.md`) are not here: they gauge behaviour, which the model does not carry.
 
-## Pinning `model/` from a client repo
+## Clients in this repo and elsewhere
 
-A client repo adds this repository as a git submodule (the way this repo pins `vendor/pbcp`), at a commit of `main`. It points Clay at the submodule's `model/model.json` with its own generators, and runs `clay init` in its own root for its own ledger. To take a model change, it moves the submodule pin in a commit of its own, regenerates, and runs its round-trip test over the submodule's `model/fixtures/`.
+The iOS app lives in this repo (`ios/`), so its generators sit beside the TypeScript ones and one `pnpm generate` writes both. A client in another repo would pin this one as a git submodule (the way this repo pins `vendor/pbcp`), point Clay at the submodule's `model/model.json` with its own generators, and run its round-trip test over the submodule's `model/fixtures/`.
 
-A generator in another language reads core's card fields the same way the TypeScript does: by reference, from `@pbcp/core`'s schema in the pinned `vendor/pbcp` (for example `z.toJSONSchema(ProducerCardSchema)` run at generation time). It never copies them into its own model.
+Either way, a generator in another language reads core's card fields by reference, from `@pbcp/core`'s schema (`z.toJSONSchema(ProducerCardSchema)` at generation time, as `generators/lib/swift.ts` does), and never copies them into its model.
 
 ## What Clay provided, and what is this repo's
 
@@ -92,4 +99,4 @@ Clay's own commands set up its parts:
 - `clay init --yes` wrote `.clay` (the ledger of generated files), the managed block in `.gitattributes`, and the `.clay` merge driver in the local `.git/config`. Each clone runs `pnpm exec clay config automerge true` once to get the driver.
 - `clay init-claude` wrote `.claude/settings.json`.
 
-Clay has no stale-file check and installs no git hooks. So `scripts/generate.ts` (`pnpm generate` and `--check`) and the test-script gate are this repo's.
+Clay has no stale-file check and installs no git hooks. So `scripts/generate.ts` (`pnpm generate` and `--check`) and the test-script gate are this repo's, as is `jiti` as a direct dev dependency (the Swift generators' bridge; the same version Clay uses).

@@ -11,8 +11,8 @@
           "date": "2026-11-12T21:38:38.478Z"
         },
         "lib/api/schemas.generated.ts": {
-          "md5": "92449e37869a0eef92304e10673e8b29",
-          "date": "2026-11-12T21:37:50.590Z"
+          "md5": "5e1b901718905acbeaa5a69091a7c4c2",
+          "date": "2026-11-12T22:04:53.558Z"
         },
         "app/(ui)/local/commands.generated.ts": {
           "md5": "dbb1a4c5b7ff8fb17bf9d17c07b679b0",
@@ -21,10 +21,26 @@
         "test/model/roundtrip.test.ts": {
           "md5": "12de351a31ceafc2251f2b78441f6d49",
           "date": "2026-11-12T21:37:50.827Z"
+        },
+        "ios/Packages/PBCPModels/Sources/PBCPModels/Models.generated.swift": {
+          "md5": "4c844705cdeecceafcf10c02a8f721cc",
+          "date": "2026-11-12T22:06:14.893Z"
+        },
+        "ios/Packages/PBCPStore/Sources/PBCPStore/Store.generated.swift": {
+          "md5": "fc5c8d2a4bf10099d8168179766937f9",
+          "date": "2026-11-12T22:08:40.314Z"
+        },
+        "ios/Packages/PBCPStore/Tests/PBCPStoreTests/RoundTrip.generated.swift": {
+          "md5": "946acfe8503fb9e548f97117ee17b709",
+          "date": "2026-11-12T22:09:14.373Z"
+        },
+        "ios/Packages/PBCPClient/Sources/PBCPClient/Operations.generated.swift": {
+          "md5": "4e57d03467496ca22330598b40349c7c",
+          "date": "2026-11-12T22:10:56.877Z"
         }
       },
-      "input_hash": "1893f319a29cd62a0902f48bfe82dbf4",
-      "last_generated": "2026-11-12T21:38:38.478Z"
+      "input_hash": "7b6922346e85e15650edac56e1b962af",
+      "last_generated": "2026-11-12T22:10:56.877Z"
     }
   ]
 }
