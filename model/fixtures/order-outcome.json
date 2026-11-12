@@ -1,0 +1,32 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "artifact",
+    "to_person": "m",
+    "producer": "coding-agent",
+    "body": "Opened PR 65.",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 44,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "log",
+    "rendered_html": "<p>Opened PR 65.</p>",
+    "lead": "Opened PR 65.",
+    "lead_source": "body",
+    "rendered_lead": "Opened PR 65.",
+    "day": "2026-11-12",
+    "effective_sensitivity": "normal",
+    "id": "coding-agent:run:01JCX8Z0000000000000000000-done",
+    "title": "Docs updated",
+    "thread": "head:order:01JCX8Z0000000000000000000",
+    "references": [
+      "head:order:01JCX8Z0000000000000000000"
+    ],
+    "orders.claim_seq": 2,
+    "orders.result": "done",
+    "order_outcome": "applied",
+    "acknowledged_at": "2026-11-12T08:20:00Z"
+  }
+}

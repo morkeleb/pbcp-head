@@ -756,7 +756,7 @@ export interface components {
             caption: string;
         };
         ParagraphParts: {
-            /** @description Open decisions that are not snoozed */
+            /** @description Open decisions that are not snoozed, every one named (RFC 0.9 §8): "<title> — <lead>" for one with no default action or sent `immediate`, the title alone for one in a fold */
             decisions: {
                 /** @description The card the entry is */
                 id: string;
@@ -781,9 +781,22 @@ export interface components {
                  */
                 effective_sensitivity?: "normal" | "private" | "confirm";
             }[];
+            /** @description RFC 0.9 §8: decisions folded under their producer’s shared default action, "6 the mail reader proposes archiving: <title>, …". A fold offers no control: each card is decided on its own card */
+            folds?: {
+                /** @description The producer’s root */
+                producer: string;
+                /** @description How the brief names it: its display name, or the root */
+                name: string;
+                /** @description The default action’s id the cards share */
+                action: string;
+                /** @description Its label from the card (the id when the card gives none) */
+                action_label: string;
+                /** @description The folded cards, entries of `decisions`, in order */
+                ids: string[];
+            }[];
             /** @description The labels of each snoozed decision: counted, never listed (§8) */
             snoozed: string[][];
-            /** @description Open tasks due on the day or before, by when they are due (RFC 0.9 §8): "Tasks: 3 due, 1 overdue: <entry>; …." */
+            /** @description Open tasks due on the day or before, by when they are due (RFC 0.9 §8): counted in the paragraph, "Tasks: 23 due, 21 overdue and 5 routine."; the Tasks section names them */
             tasks?: {
                 /** @description The card the entry is */
                 id: string;
@@ -809,6 +822,11 @@ export interface components {
                 effective_sensitivity?: "normal" | "private" | "confirm";
                 /** @description Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded */
                 overdue: boolean;
+                /**
+                 * @description Under a label the owner set to fold as a count (RFC 0.9 §9): counted apart
+                 * @constant
+                 */
+                routine?: true;
             }[];
             /** @description Decisions made the day before: "<title> — decided <value>" ("<title> — done" for a task) */
             decided?: {
@@ -1371,6 +1389,11 @@ export interface components {
                  * @constant
                  */
                 overdue?: true;
+                /**
+                 * @description The task carries a label the owner set to fold as a count (RFC 0.9 §9): listed in a collapsed Routine group, counted apart in the paragraph
+                 * @constant
+                 */
+                routine?: true;
             } & {
                 [key: string]: unknown;
             })[];
@@ -1580,7 +1603,13 @@ export interface components {
                     [key: string]: "normal" | "private" | "confirm";
                 };
             };
-            /** @description As in GET /api/me/seq: moves with every floor change */
+            /** @description The labels the owner set to fold as a count in the brief (RFC 0.9 §9 "Folding"); every other label is `list`, so a device folds as the head does */
+            fold_policies: {
+                labels: {
+                    [key: string]: "count";
+                };
+            };
+            /** @description As in GET /api/me/seq: moves with every floor or fold policy change */
             settings_seq: number;
         };
         Producer: {
@@ -1614,6 +1643,11 @@ export interface components {
             ceiling: ("immediate" | "brief" | "log") | null;
             /** @description The owner’s sensitivity floor on it (RFC 0.9 §9), or null */
             sensitivity_floor: ("normal" | "private" | "confirm") | null;
+            /**
+             * @description How the brief folds its cards (RFC 0.9 §9 "Folding"): `list`, the default, or `count`: its tasks counted as routine in the paragraph and grouped apart in the Tasks section
+             * @enum {string}
+             */
+            fold_policy: "list" | "count";
         };
         LabelList: {
             labels: components["schemas"]["Label"][];
@@ -1845,6 +1879,11 @@ export interface components {
             ceiling?: ("immediate" | "brief" | "log") | null;
             /** @description The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it */
             sensitivity_floor?: ("normal" | "private" | "confirm") | null;
+            /**
+             * @description How the brief folds the label’s cards (RFC 0.9 §9 "Folding"): `list` (the default) or `count`; changes no card
+             * @enum {string}
+             */
+            fold_policy?: "list" | "count";
         };
         DevicePatch: {
             daily_notification?: {

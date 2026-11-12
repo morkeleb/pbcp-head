@@ -1,0 +1,302 @@
+{
+  "entity": "Brief",
+  "value": {
+    "date": "2026-11-12",
+    "timezone": "Europe/Copenhagen",
+    "seq": 50,
+    "last_visit": {
+      "seq": 30,
+      "at": "2026-11-11T21:00:00Z"
+    },
+    "first_day": "2026-09-01",
+    "daily": {
+      "protocol": "pbcp/1",
+      "kind": "artifact",
+      "to_person": "m",
+      "producer": "head",
+      "body": "1 decision: Reply to Anna.",
+      "emitted_at": "2026-11-12T07:00:00Z",
+      "state": "open",
+      "change_seq": 50,
+      "received_at": "2026-11-12T07:00:01Z",
+      "changed_at": "2026-11-12T07:00:01Z",
+      "delivery": "brief",
+      "rendered_html": "<p>1 decision: Reply to Anna.</p>",
+      "lead": "1 decision: Reply to Anna.",
+      "lead_source": "body",
+      "rendered_lead": "1 decision: Reply to Anna.",
+      "day": "2026-11-12",
+      "effective_sensitivity": "normal",
+      "id": "head:daily:2026-11-12",
+      "title": "Thursday 12 November",
+      "supersedes": "head:daily:2026-11-11",
+      "paragraph": {
+        "decisions": [
+          {
+            "id": "mail:inbox:anna-1",
+            "labels": [
+              "invoices",
+              "family"
+            ],
+            "text": "<a href=\"/card/mail:inbox:anna-1\">Reply to Anna</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Reply to Anna",
+            "sensitivity": "private",
+            "effective_sensitivity": "private"
+          }
+        ],
+        "snoozed": [],
+        "tasks": [
+          {
+            "id": "bank:task:transfer-2026-11-12",
+            "labels": [],
+            "text": "<a href=\"/card/bank:task:transfer-2026-11-12\">Approve the transfer to the landlord</a>",
+            "producer": "bank",
+            "kind": "task",
+            "title": "Approve the transfer to the landlord",
+            "sensitivity": "confirm",
+            "effective_sensitivity": "confirm",
+            "overdue": false
+          }
+        ],
+        "decided": [],
+        "orders": [],
+        "mattered": [],
+        "rest": [
+          {
+            "producer": "github",
+            "labels": []
+          }
+        ]
+      },
+      "spoken_paragraph": "1 private decision. Tasks: 1 due."
+    },
+    "daily_paragraph": {
+      "html": "1 decision: Reply to Anna. Tasks: 1 due.",
+      "so_far": false,
+      "parts": {
+        "decisions": [
+          {
+            "id": "mail:inbox:anna-1",
+            "labels": [
+              "invoices",
+              "family"
+            ],
+            "text": "<a href=\"/card/mail:inbox:anna-1\">Reply to Anna</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Reply to Anna",
+            "sensitivity": "private",
+            "effective_sensitivity": "private"
+          }
+        ],
+        "snoozed": [],
+        "tasks": [
+          {
+            "id": "bank:task:transfer-2026-11-12",
+            "labels": [],
+            "text": "<a href=\"/card/bank:task:transfer-2026-11-12\">Approve the transfer to the landlord</a>",
+            "producer": "bank",
+            "kind": "task",
+            "title": "Approve the transfer to the landlord",
+            "sensitivity": "confirm",
+            "effective_sensitivity": "confirm",
+            "overdue": false
+          }
+        ],
+        "decided": [],
+        "orders": [],
+        "mattered": [],
+        "rest": [
+          {
+            "producer": "github",
+            "labels": []
+          }
+        ]
+      }
+    },
+    "tomorrow": {
+      "date": "2026-11-13",
+      "cards": []
+    },
+    "decisions": [
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "Anna asks about the invoice.\n\n## Proposed reply\n\nIt is due on the 20th.",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 12,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "<p>Anna asks about the invoice.</p><h2>Proposed reply</h2><p>It is due on the 20th.</p>",
+        "lead": "She asks when the invoice is due.",
+        "lead_source": "summary",
+        "rendered_lead": "She asks when the invoice is due.",
+        "day": "2026-11-12",
+        "effective_sensitivity": "private",
+        "id": "mail:inbox:anna-1",
+        "title": "Reply to Anna",
+        "summary": "She asks when the invoice is due.",
+        "urgency": "brief",
+        "sensitivity": "private",
+        "thread": "t-anna",
+        "labels": [
+          "invoices",
+          "family"
+        ],
+        "actions": [
+          {
+            "id": "send",
+            "label": "Send",
+            "default": true
+          },
+          "edit",
+          "dismiss"
+        ],
+        "source": {
+          "url": "https://mail.example/t/anna",
+          "label": "Gmail"
+        },
+        "seen_at": "2026-11-12T07:05:00Z",
+        "rendered_actions": {
+          "send": "<p>Send it.</p>"
+        },
+        "first_visual": {
+          "kind": "image",
+          "src": "/api/me/img?u=https%3A%2F%2Fmail.example%2Fa.png",
+          "caption": "The invoice"
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "protocol": "pbcp/1",
+        "kind": "task",
+        "to_person": "m",
+        "producer": "bank",
+        "body": "Rent for December.",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 20,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "immediate",
+        "rendered_html": "<p>Rent for December.</p>",
+        "lead": "Rent for December.",
+        "lead_source": "body",
+        "rendered_lead": "Rent for December.",
+        "day": "2026-11-12",
+        "effective_sensitivity": "confirm",
+        "id": "bank:task:transfer-2026-11-12",
+        "title": "Approve the transfer to the landlord",
+        "urgency": "immediate",
+        "sensitivity": "confirm",
+        "about": "2026-11-12",
+        "at": "2026-11-12T09:00:00Z",
+        "until": "2026-11-12T09:30:00Z",
+        "references": [
+          "mail:inbox:landlord-3"
+        ],
+        "actions": [
+          "tomorrow"
+        ],
+        "snoozed_until": "2026-11-12T08:00:00Z",
+        "routine": true
+      }
+    ],
+    "threads": [
+      {
+        "producer": "coding-agent",
+        "thread": "head:order:01JCX8Z0000000000000000000",
+        "count": 1,
+        "latest": {
+          "protocol": "pbcp/1",
+          "kind": "artifact",
+          "to_person": "m",
+          "producer": "coding-agent",
+          "body": "Opened PR 65.",
+          "emitted_at": "2026-11-12T07:00:00Z",
+          "state": "open",
+          "change_seq": 44,
+          "received_at": "2026-11-12T07:00:01Z",
+          "changed_at": "2026-11-12T07:00:01Z",
+          "delivery": "log",
+          "rendered_html": "<p>Opened PR 65.</p>",
+          "lead": "Opened PR 65.",
+          "lead_source": "body",
+          "rendered_lead": "Opened PR 65.",
+          "day": "2026-11-12",
+          "effective_sensitivity": "normal",
+          "id": "coding-agent:run:01JCX8Z0000000000000000000-done",
+          "title": "Docs updated",
+          "thread": "head:order:01JCX8Z0000000000000000000",
+          "references": [
+            "head:order:01JCX8Z0000000000000000000"
+          ],
+          "orders.claim_seq": 2,
+          "orders.result": "done",
+          "order_outcome": "applied",
+          "acknowledged_at": "2026-11-12T08:20:00Z"
+        },
+        "cards": [
+          {
+            "id": "coding-agent:run:01JCX8Z0000000000000000000-done",
+            "title": "Docs updated",
+            "kind": "artifact",
+            "received_at": "2026-11-12T07:00:01Z",
+            "acknowledged_at": "2026-11-12T08:20:00Z"
+          }
+        ]
+      }
+    ],
+    "snoozed": 1,
+    "late_outcomes": [],
+    "order_updates": [
+      {
+        "id": "head:order:01JCX8Z0000000000000000000",
+        "title": "Update the docs for tasks",
+        "count": 1,
+        "latest": {
+          "protocol": "pbcp/1",
+          "kind": "artifact",
+          "to_person": "m",
+          "producer": "coding-agent",
+          "body": "Opened PR 65.",
+          "emitted_at": "2026-11-12T07:00:00Z",
+          "state": "open",
+          "change_seq": 44,
+          "received_at": "2026-11-12T07:00:01Z",
+          "changed_at": "2026-11-12T07:00:01Z",
+          "delivery": "log",
+          "rendered_html": "<p>Opened PR 65.</p>",
+          "lead": "Opened PR 65.",
+          "lead_source": "body",
+          "rendered_lead": "Opened PR 65.",
+          "day": "2026-11-12",
+          "effective_sensitivity": "normal",
+          "id": "coding-agent:run:01JCX8Z0000000000000000000-done",
+          "title": "Docs updated",
+          "thread": "head:order:01JCX8Z0000000000000000000",
+          "references": [
+            "head:order:01JCX8Z0000000000000000000"
+          ],
+          "orders.claim_seq": 2,
+          "orders.result": "done",
+          "order_outcome": "applied",
+          "acknowledged_at": "2026-11-12T08:20:00Z"
+        }
+      }
+    ],
+    "lapsed_orders": [],
+    "new": [
+      "mail:inbox:anna-1",
+      "bank:task:transfer-2026-11-12",
+      "coding-agent:run:01JCX8Z0000000000000000000-done"
+    ]
+  }
+}

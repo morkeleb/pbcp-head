@@ -1,0 +1,7 @@
+# clay:generated:start
+.clay merge=clay-generator
+app/(ui)/local/commands.generated.ts linguist-generated=true
+app/(ui)/local/model.generated.ts linguist-generated=true
+lib/api/schemas.generated.ts linguist-generated=true
+test/model/roundtrip.test.ts linguist-generated=true
+# clay:generated:end

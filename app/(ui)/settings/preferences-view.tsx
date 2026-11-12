@@ -107,10 +107,10 @@ function OnThisDevice() {
   const [busy, setBusy] = useState<string | null>(null);
   const [none, setNone] = useState(false);
   const read = useCallback(async () => {
-    const cursor = await getMeta<number>('cursor');
+    const cursor = await getMeta('cursor');
     setNone(cursor === null);
-    setDays((await getMeta<number>('retention')) ?? RETENTION_DEFAULT);
-    setArchive((await getMeta<boolean>('archive')) === true);
+    setDays((await getMeta('retention')) ?? RETENTION_DEFAULT);
+    setArchive((await getMeta('archive')) === true);
     setSize(await storeSize());
   }, []);
   useEffect(() => void read(), [read]);

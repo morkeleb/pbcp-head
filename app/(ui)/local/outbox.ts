@@ -20,19 +20,14 @@
 
 import { api } from '../client';
 import type { MeCard } from '../components';
+import type { Outcome } from './commands.generated';
 import { OUTBOX, withStore } from './db';
 import { getCard, notify, onStore, owner, pending, putCards, type OutboxRow } from './store';
 
 const BACKOFF_MS = [1_000, 10_000, 60_000, 300_000];
 
-/** What became of a command, for the control that made it. */
-export type Outcome =
-  | { kind: 'sent'; card: MeCard }
-  | { kind: 'conflict'; card: MeCard; message?: string }
-  | { kind: 'needs-person' }
-  | { kind: 'refused'; status: number; message: string }
-  /** Not sent yet (offline, or behind a row that waits): the card stays settled on the device. */
-  | { kind: 'waiting' };
+/** What became of a command, for the control that made it: the model's (model/model.json `Outcome`). */
+export type { Outcome };
 
 /** A line the card shows about what happened to the person's action out of sight (409, 403, a refusal). */
 export interface Notice {

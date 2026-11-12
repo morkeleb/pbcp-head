@@ -18,6 +18,7 @@ import { api } from '../client';
 import type { MeCard } from '../components';
 import { addDays } from '../brief/days';
 import { drain } from './outbox';
+import type { Brief, Floors } from './model.generated';
 import { allCards, evictBefore, getMeta, notify, putCards, setMeta } from './store';
 
 export const RETENTION_DEFAULT = 90;
@@ -25,11 +26,8 @@ const WINDOW_DAYS = 7;
 /** Days ahead the brief can show (two weeks); the first pull includes them. */
 const AHEAD_DAYS = 14;
 
-export interface Floors {
-  all: Sensitivity | null;
-  producers: Record<string, Sensitivity>;
-  labels: Record<string, Sensitivity>;
-}
+/** The owner's floors as the device keeps them (RFC 0.9 §9): the model's. */
+export type { Floors };
 
 export interface SyncState {
   /** The first pull is running: how many days are on the device, of how many. */
@@ -104,18 +102,18 @@ async function withLock(fn: () => Promise<boolean>): Promise<boolean> {
 
 async function syncOnce(): Promise<boolean> {
   // No store (a private window, storage refused or evicted mid-session): nothing to sync into; the page reads the head.
-  if ((await getMeta<unknown>('probe')) === null && !(await setMeta('probe', true))) return false;
+  if ((await getMeta('probe')) === null && !(await setMeta('probe', true))) return false;
   const stamp = await api<{ seq: number; date: string; settings_seq: number }>('/api/me/seq', { network: true }).catch(() => null);
   if (!stamp || stamp.status !== 200) return false;
   const { seq, date, settings_seq } = stamp.body;
-  const cursor = await getMeta<number>('cursor');
-  const retention = (await getMeta<number>('retention')) ?? RETENTION_DEFAULT;
-  const archive = (await getMeta<boolean>('archive')) === true;
+  const cursor = await getMeta('cursor');
+  const retention = (await getMeta('retention')) ?? RETENTION_DEFAULT;
+  const archive = (await getMeta('archive')) === true;
   // The edge of the device's copy: retention, or with the archive whatever it holds (downloadArchive).
   const kept = addDays(date, -retention);
-  const oldest = archive ? ((await getMeta<string>('oldest_day')) ?? kept) : kept;
+  const oldest = archive ? ((await getMeta('oldest_day')) ?? kept) : kept;
 
-  if ((await getMeta<number>('settings_seq')) !== settings_seq) {
+  if ((await getMeta('settings_seq')) !== settings_seq) {
     if (!(await refreshFloors(settings_seq))) return false;
   }
 
@@ -134,7 +132,7 @@ async function syncOnce(): Promise<boolean> {
   }
   // The changes since the cursor (or since the first pull began): every state, applied latest-wins. A card older than
   // retention is kept only when it is already on the device.
-  const from = (await getMeta<number>('cursor')) ?? seq;
+  const from = (await getMeta('cursor')) ?? seq;
   if (seq > from || cursor === null) {
     const stored = new Set(((await allCards()) ?? []).map((c) => c.id));
     const r = await pull(`after=${from}`, (c) => archive || (c.day ?? "") >= oldest || stored.has(c.id));
@@ -142,7 +140,7 @@ async function syncOnce(): Promise<boolean> {
     await setMeta('cursor', Math.max(seq, r.max));
   }
   // The brief the head composed (its paragraph, folds and lists): kept with the cards, read first on the next open.
-  const brief = await getMeta<{ seq: number; date: string }>('brief');
+  const brief = await getMeta('brief');
   if (!brief || brief.seq !== seq || brief.date !== date) await refreshBrief();
   if (!archive) await evictBefore(oldest);
   await setMeta('synced_at', new Date().toISOString());
@@ -152,7 +150,7 @@ async function syncOnce(): Promise<boolean> {
 
 /** GET /api/me/brief, kept on the device as the brief's last composition, stamped with when it was read. */
 export async function refreshBrief(): Promise<boolean> {
-  const r = await api<{ seq: number; date: string }>('/api/me/brief', { network: true }).catch(() => null);
+  const r = await api<Brief>('/api/me/brief', { network: true }).catch(() => null);
   if (!r || r.status !== 200) return false;
   return setMeta('brief', { ...r.body, fetched_at: new Date().toISOString() });
 }
@@ -170,7 +168,7 @@ async function refreshFloors(settingsSeq: number): Promise<boolean> {
   const changed = cards.filter((c) => effectiveUnder(c, floors) !== c.effective_sensitivity).map((c) => ({ ...c, effective_sensitivity: effectiveUnder(c, floors) }));
   if (changed.length > 0) await putCards(changed, { force: true });
   // The brief's own copies of those cards follow.
-  const brief = await getMeta<Record<string, unknown>>('brief');
+  const brief = await getMeta('brief');
   if (brief) await setMeta('brief', recompute(brief, floors));
   await setMeta('settings_seq', settingsSeq);
   notify({ meta: 'floors' });
@@ -193,9 +191,9 @@ function recompute<T>(v: T, f: Floors): T {
 export async function setRetention(days: number): Promise<boolean> {
   const stamp = await api<{ date: string }>('/api/me/seq', { network: true }).catch(() => null);
   const date = stamp?.status === 200 ? stamp.body.date : today();
-  const before = (await getMeta<string>('oldest_day')) ?? date;
+  const before = (await getMeta('oldest_day')) ?? date;
   await setMeta('retention', days);
-  if ((await getMeta<boolean>('archive')) === true) return true;
+  if ((await getMeta('archive')) === true) return true;
   const edge = addDays(date, -days);
   if (edge < before) {
     if (!(await pull(`from=${edge}&to=${addDays(before, -1)}`))) return false;
@@ -212,7 +210,7 @@ export async function downloadArchive(onProgress?: (days: number, of: number) =>
   const b = await api<{ first_day: string | null; date: string }>('/api/me/brief', { network: true }).catch(() => null);
   if (!b || b.status !== 200) return false;
   const first = b.body.first_day ?? b.body.date;
-  const before = (await getMeta<string>('oldest_day')) ?? b.body.date;
+  const before = (await getMeta('oldest_day')) ?? b.body.date;
   try {
     await navigator.storage?.persist?.();
   } catch {
@@ -233,11 +231,11 @@ export async function downloadArchive(onProgress?: (days: number, of: number) =>
 /** Back to retention: the archive is dropped from the device (the head still has it). */
 export async function dropArchive(): Promise<void> {
   await setMeta('archive', false);
-  const retention = (await getMeta<number>('retention')) ?? RETENTION_DEFAULT;
+  const retention = (await getMeta('retention')) ?? RETENTION_DEFAULT;
   await setRetention(retention);
 }
 
 /** The floors the device holds, or none. */
-export const storedFloors = () => getMeta<Floors>('floors');
+export const storedFloors = () => getMeta('floors');
 
 export { today };

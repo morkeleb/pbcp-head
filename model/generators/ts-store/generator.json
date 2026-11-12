@@ -1,0 +1,10 @@
+{
+  "partials": [],
+  "formatters": [],
+  "steps": [
+    { "generate": "templates/model.generated.ts", "select": "$.model", "target": "app/(ui)/local/", "engine": "ts" },
+    { "generate": "templates/commands.generated.ts", "select": "$.model", "target": "app/(ui)/local/", "engine": "ts" },
+    { "generate": "templates/store.local.ts", "select": "$.model", "target": "app/(ui)/local/", "engine": "ts", "touch": true },
+    { "generate": "templates/roundtrip.test.ts", "select": "$.model", "target": "test/model/", "engine": "ts" }
+  ]
+}

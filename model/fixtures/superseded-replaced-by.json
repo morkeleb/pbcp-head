@@ -1,0 +1,35 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "decision",
+    "to_person": "m",
+    "producer": "mail",
+    "body": "",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "superseded",
+    "change_seq": 31,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "",
+    "lead": "",
+    "lead_source": "body",
+    "rendered_lead": "",
+    "day": "2026-11-11",
+    "effective_sensitivity": "normal",
+    "id": "mail:inbox:draft-1",
+    "title": "Reply to the school",
+    "decision": "edited",
+    "edited_proposal": "We will come at 10.",
+    "comment": "Shorter, please.",
+    "decided_at": "2026-11-11T18:00:00Z",
+    "replaced_by": {
+      "id": "mail:inbox:draft-2",
+      "title": "Reply to the school, second draft",
+      "kind": "decision",
+      "state": "open"
+    },
+    "message": "This card was replaced by “Reply to the school, second draft”."
+  }
+}

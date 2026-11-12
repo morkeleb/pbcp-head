@@ -1,0 +1,27 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "decision",
+    "to_person": "m",
+    "producer": "mail",
+    "body": "",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "decided",
+    "change_seq": 33,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "",
+    "lead": "",
+    "lead_source": "body",
+    "rendered_lead": "",
+    "day": "2026-11-12",
+    "effective_sensitivity": "normal",
+    "id": "mail:inbox:trip-1",
+    "title": "Book the trip",
+    "decision": "delegated",
+    "delegated_to": "partner@example.org",
+    "decided_at": "2026-11-12T07:30:00Z"
+  }
+}

@@ -1,0 +1,298 @@
+{
+  "entity": "Brief",
+  "value": {
+    "date": "2026-11-12",
+    "timezone": "UTC",
+    "seq": 66,
+    "last_visit": {
+      "seq": 0,
+      "at": null
+    },
+    "first_day": null,
+    "daily": null,
+    "daily_paragraph": {
+      "text": "6 decisions: 6 the mail reader proposes archiving: Order receipt, Weekly newsletter, Parking notice, Gym offer, Shipping update and Survey.",
+      "html": "6 decisions: 6 the mail reader proposes archiving: …",
+      "so_far": true,
+      "parts": {
+        "decisions": [
+          {
+            "id": "mail:inbox:archive-1",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-1\">Order receipt</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Order receipt",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          },
+          {
+            "id": "mail:inbox:archive-2",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-2\">Weekly newsletter</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Weekly newsletter",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          },
+          {
+            "id": "mail:inbox:archive-3",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-3\">Parking notice</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Parking notice",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          },
+          {
+            "id": "mail:inbox:archive-4",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-4\">Gym offer</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Gym offer",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          },
+          {
+            "id": "mail:inbox:archive-5",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-5\">Shipping update</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Shipping update",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          },
+          {
+            "id": "mail:inbox:archive-6",
+            "labels": [],
+            "text": "<a href=\"/card/mail:inbox:archive-6\">Survey</a>",
+            "producer": "mail",
+            "kind": "decision",
+            "title": "Survey",
+            "sensitivity": "normal",
+            "effective_sensitivity": "normal"
+          }
+        ],
+        "folds": [
+          {
+            "producer": "mail",
+            "name": "the mail reader",
+            "action": "archive",
+            "action_label": "Archive",
+            "ids": [
+              "mail:inbox:archive-1",
+              "mail:inbox:archive-2",
+              "mail:inbox:archive-3",
+              "mail:inbox:archive-4",
+              "mail:inbox:archive-5",
+              "mail:inbox:archive-6"
+            ]
+          }
+        ],
+        "snoozed": [
+          [
+            "newsletters"
+          ]
+        ]
+      }
+    },
+    "tomorrow": {
+      "date": "2026-11-13",
+      "cards": []
+    },
+    "decisions": [
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 61,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-1",
+        "title": "Order receipt",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      },
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 62,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-2",
+        "title": "Weekly newsletter",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      },
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 63,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-3",
+        "title": "Parking notice",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      },
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 64,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-4",
+        "title": "Gym offer",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      },
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 65,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-5",
+        "title": "Shipping update",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      },
+      {
+        "protocol": "pbcp/1",
+        "kind": "decision",
+        "to_person": "m",
+        "producer": "mail",
+        "body": "",
+        "emitted_at": "2026-11-12T07:00:00Z",
+        "state": "open",
+        "change_seq": 66,
+        "received_at": "2026-11-12T07:00:01Z",
+        "changed_at": "2026-11-12T07:00:01Z",
+        "delivery": "brief",
+        "rendered_html": "",
+        "lead": "",
+        "lead_source": "body",
+        "rendered_lead": "",
+        "day": "2026-11-12",
+        "effective_sensitivity": "normal",
+        "id": "mail:inbox:archive-6",
+        "title": "Survey",
+        "actions": [
+          {
+            "id": "archive",
+            "label": "Archive",
+            "default": true
+          },
+          "keep"
+        ]
+      }
+    ],
+    "tasks": [],
+    "threads": [],
+    "snoozed": 1,
+    "late_outcomes": [],
+    "order_updates": [],
+    "lapsed_orders": [],
+    "new": [
+      "mail:inbox:archive-1",
+      "mail:inbox:archive-2",
+      "mail:inbox:archive-3",
+      "mail:inbox:archive-4",
+      "mail:inbox:archive-5",
+      "mail:inbox:archive-6"
+    ]
+  }
+}

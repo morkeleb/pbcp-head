@@ -43,7 +43,7 @@ export function useBrief() {
   const [near, setNear] = useState<Map<string, MeCard[]>>(new Map());
   const loadNear = useCallback(async (today: string, tz: string, network = false) => {
     // The store has every day of the window once it has synced.
-    const local = (await getMeta<number>('cursor')) !== null ? await cardsByDay(today, addDays(today, AHEAD)) : null;
+    const local = (await getMeta('cursor')) !== null ? await cardsByDay(today, addDays(today, AHEAD)) : null;
     const cards: MeCard[] = local ?? [];
     for (let after: number | null = local ? null : 0; after !== null; ) {
       const r: { status: number; body: { cards: MeCard[]; next: number | null } } = await api(`/api/me/cards?from=${today}&to=${addDays(today, AHEAD)}&limit=200${after ? `&after=${after}` : ''}`, { network }).catch(() => ({ status: 0, body: { cards: [], next: null } }));
@@ -66,7 +66,7 @@ export function useBrief() {
   const settled = useRef(new Map<string, MeCard>());
   /** The brief the head last composed, from the store, its cards the device's; null when the device has none. */
   const fromStore = useCallback(async (): Promise<(BriefResponse & { fetched_at?: string }) | null> => {
-    const b = await getMeta<BriefResponse & { fetched_at?: string }>('brief');
+    const b = await getMeta('brief');
     return b ? project(b) : null;
   }, []);
   const loadFromHead = useCallback(async () => {
@@ -130,8 +130,8 @@ export function useBrief() {
    */
   const loadDay = useCallback(async (date: string, network = false): Promise<boolean> => {
     // Within retention (or with the archive), the day is on the device.
-    const oldest = await getMeta<string>('oldest_day');
-    if (oldest !== null && date >= oldest && (await getMeta<number>('cursor')) !== null) {
+    const oldest = await getMeta('oldest_day');
+    if (oldest !== null && date >= oldest && (await getMeta('cursor')) !== null) {
       const local = await cardsByDay(date);
       if (local) {
         setPast((m) => new Map(m).set(date, local.sort(byTime)));
@@ -166,7 +166,7 @@ export function useBrief() {
       try {
         // The sync asks the counter first, and pulls only when it moved (local/feed.ts). Without a store, the counter alone.
         const synced = storeBroken() ? false : await sync();
-        const r = synced ? { status: 200, body: (await getMeta<{ seq: number; date: string }>('brief'))! } : await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
+        const r = synced ? { status: 200, body: (await getMeta('brief'))! } : await api<{ seq: number; date: string }>('/api/me/seq', { network: true });
         if (synced) setCachedAt(null);
         const b = current.current;
         if (r.status === 200 && r.body && b && (r.body.seq !== b.seq || r.body.date !== b.date)) {

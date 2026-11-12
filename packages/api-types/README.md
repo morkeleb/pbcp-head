@@ -2,17 +2,18 @@
 
 The head's human API (`/api/me/` and `GET /`) as an OpenAPI 3.1 document, `openapi.json`. It is the contract clients generate from: `packages/owner-mcp` (`pnpm api-types`), and a native app when one starts (`docs/mobile-prd.md`). It is generated; don't edit it.
 
-- **Source:** the Zod schemas in `lib/api/schemas.ts`. The routes parse their request bodies with them, and the card shape is `@pbcp/core`'s.
+- **Source:** the model, `model/model.json`, generated into the Zod schemas in `lib/api/schemas.generated.ts` (re-exported by `lib/api/schemas.ts`). The routes parse their request bodies with them, and the card shape is `@pbcp/core`'s, by reference.
 - **Not in the document:** sign-in (`/api/auth/*`) and the producer protocol routes (RFC §7).
 
 ## Regenerating
 
-After changing `lib/api/schemas.ts` or `lib/api/openapi.ts`:
+After changing `model/model.json` or `lib/api/openapi.ts`:
 
 ```sh
-pnpm api:generate                          # openapi.json
-(cd packages/owner-mcp && pnpm api-types)  # the MCP package's types from it
+pnpm generate   # the schemas from the model, then openapi.json, then the MCP package's types from it
 ```
+
+`pnpm generate --check` (first in `pnpm test`) fails when any of them is stale.
 
 Commit `openapi.json`, so a change to the API shows up in review as a diff. `test/api-types.test.ts` fails when `openapi.json` no longer matches the schemas, or an `/api/me` route has no entry.
 

@@ -39,6 +39,7 @@ Not here yet, and known: the operator holding no key at all (step two of at-rest
 - **No marketing, no product names** beyond what the RFC's examples use.
 - The signed-out front door (`/` for a browser) is the one page that may use product language; the no-marketing rule applies to code, docs and every other page.
 - TypeScript strict, Next.js App Router, Drizzle, Postgres, vitest. `docker-compose.yml` brings up Postgres for local work and CI.
+- **Shapes live in `model/`.** The owner API's schemas and the client store's types are generated from `model/model.json` by `pnpm generate`; a generated file (`*.generated.ts`, the round-trip test) is never edited (model/README.md).
 
 ## Licence
 
