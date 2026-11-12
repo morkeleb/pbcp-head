@@ -94,7 +94,7 @@ export function CardView() {
     const local = await getCard(id);
     if (local) {
       setDetail((d) => d ?? ({ timezone: undefined, card: local, predecessors: [], successors: [], references: [], thread: [], decisions: [] } as unknown as Detail));
-      setCachedAt((await getMeta<string>('synced_at')) ?? null);
+      setCachedAt((await getMeta('synced_at')) ?? null);
     }
     const r = await api<Detail>(path!, { network });
     if (r.status !== 200) {

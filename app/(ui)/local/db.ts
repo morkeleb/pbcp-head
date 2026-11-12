@@ -6,10 +6,11 @@
 // store Safari evicted, a quota error or a blocked upgrade all come back as `null`, and the app runs from the network
 // alone, as it did before there was a store. The first sync simply runs again next time.
 
-const VERSION = 1;
-export const CARDS = 'cards';
-export const META = 'meta';
-export const OUTBOX = 'outbox';
+import { CARDS, META, OUTBOX, STORE_VERSION, STORES } from './model.generated';
+import { EXTRA_INDEXES } from './store.local';
+
+// The object stores, their keys and indexes and the schema version are the model's (model/model.json `store`).
+export { CARDS, META, OUTBOX };
 
 let opening: { owner: string; db: Promise<IDBDatabase | null> } | null = null;
 
@@ -36,20 +37,18 @@ function open(owner: string): Promise<IDBDatabase | null> {
   const db = new Promise<IDBDatabase | null>((resolve) => {
     let req: IDBOpenDBRequest;
     try {
-      req = factory.open(`pbcp-${owner}`, VERSION);
+      req = factory.open(`pbcp-${owner}`, STORE_VERSION);
     } catch {
       broken = true;
       return resolve(null);
     }
     req.onupgradeneeded = () => {
       const d = req.result;
-      if (!d.objectStoreNames.contains(CARDS)) {
-        const cards = d.createObjectStore(CARDS, { keyPath: 'id' });
-        cards.createIndex('day', 'day');
-        cards.createIndex('change_seq', 'change_seq');
+      for (const s of STORES) {
+        if (d.objectStoreNames.contains(s.name)) continue;
+        const store = d.createObjectStore(s.name, { keyPath: s.keyPath, ...(s.autoIncrement ? { autoIncrement: true } : {}) });
+        for (const i of [...s.indexes, ...(EXTRA_INDEXES[s.name] ?? [])]) store.createIndex(i.name, i.keyPath);
       }
-      if (!d.objectStoreNames.contains(META)) d.createObjectStore(META, { keyPath: 'key' });
-      if (!d.objectStoreNames.contains(OUTBOX)) d.createObjectStore(OUTBOX, { keyPath: 'seq', autoIncrement: true });
     };
     req.onsuccess = () => {
       const d = req.result;

@@ -1,0 +1,66 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "artifact",
+    "to_person": "m",
+    "producer": "head",
+    "body": "1 decision: Reply to Anna.",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 50,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "<p>1 decision: Reply to Anna.</p>",
+    "lead": "1 decision: Reply to Anna.",
+    "lead_source": "body",
+    "rendered_lead": "1 decision: Reply to Anna.",
+    "day": "2026-11-12",
+    "effective_sensitivity": "normal",
+    "id": "head:daily:2026-11-12",
+    "title": "Thursday 12 November",
+    "supersedes": "head:daily:2026-11-11",
+    "paragraph": {
+      "decisions": [
+        {
+          "id": "mail:inbox:anna-1",
+          "labels": [
+            "invoices",
+            "family"
+          ],
+          "text": "<a href=\"/card/mail:inbox:anna-1\">Reply to Anna</a>",
+          "producer": "mail",
+          "kind": "decision",
+          "title": "Reply to Anna",
+          "sensitivity": "private",
+          "effective_sensitivity": "private"
+        }
+      ],
+      "snoozed": [],
+      "tasks": [
+        {
+          "id": "bank:task:transfer-2026-11-12",
+          "labels": [],
+          "text": "<a href=\"/card/bank:task:transfer-2026-11-12\">Approve the transfer to the landlord</a>",
+          "producer": "bank",
+          "kind": "task",
+          "title": "Approve the transfer to the landlord",
+          "sensitivity": "confirm",
+          "effective_sensitivity": "confirm",
+          "overdue": false
+        }
+      ],
+      "decided": [],
+      "orders": [],
+      "mattered": [],
+      "rest": [
+        {
+          "producer": "github",
+          "labels": []
+        }
+      ]
+    },
+    "spoken_paragraph": "1 private decision. Tasks: 1 due."
+  }
+}

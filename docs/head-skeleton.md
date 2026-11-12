@@ -23,6 +23,7 @@ head/
 │   └── ios/                   (deferred) SwiftUI; its client generated on demand from the head's OpenAPI
 ├── packages/
 │   └── api-types/             OpenAPI from the Zod schemas: the contract clients generate from
+├── model/                     the shared model (Clay): shapes, generators, fixtures — see "Model"
 └── docker-compose.yml         Postgres for self-hosters
 ```
 
@@ -129,6 +130,10 @@ Auth: bearer token → sha256 → `producer_tokens` lookup, root attached to the
 5. `GET /` reports `render.mermaid: ["core", "extended"]` so producers can check what this head draws.
 
 This is also why the "dashboard" needs no feature of its own: the Brief renders artifact cards, and a card with a `gantt`, a `pie` and an `xychart-beta` is a dashboard. Pinning favourite cards to the top is a head preference, not a protocol concern.
+
+### Model
+
+The shapes the head and its clients share live in `model/model.json`, one Clay model; `model/README.md` lists its entities, its format and the fixtures. `pnpm generate` writes `lib/api/schemas.generated.ts` (the Zod schemas of every `/api/me` body, from which `lib/api/openapi.ts` builds `packages/api-types/openapi.json` as before) and the web store's types in `app/(ui)/local/` (`model.generated.ts`, `commands.generated.ts`); `pnpm generate --check`, first in `pnpm test`, fails on a stale one. The model imports core's card by reference and never redefines a protocol field; it carries shapes and invariants, never behaviour. `model/fixtures/` is the contract across languages: `test/model/roundtrip.test.ts` decodes each sample, stores it, reads it back and encodes it to the same JSON, and a client in another language pins `model/` and does the same.
 
 ## Build order and the open-source / hosted split
 

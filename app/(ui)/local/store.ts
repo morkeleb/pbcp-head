@@ -8,26 +8,12 @@
 // and an evicted store rebuilds from the feed (feed.ts). Nothing here talks to the head.
 
 import { loadTokens } from '../client';
-import type { MeCard } from '../components';
+import type { Command } from './commands.generated';
 import { CARDS, done, dropStore, META, OUTBOX, withStore } from './db';
+import type { MeCard, Meta, MetaKey, OutboxRow } from './model.generated';
 
-/** A command not yet sent (outbox.ts), as the store lays it over a card. */
-export interface OutboxRow {
-  seq?: number;
-  client_id: string;
-  card_id: string;
-  action: 'decide' | 'ack' | 'snooze' | 'unsnooze';
-  body: Record<string, unknown>;
-  /** The card's change_seq when the person acted on it. */
-  seen_seq: number;
-  at: string;
-  /** `needs-person`: the head asked for a passkey step-up (403 reauthentication_required); it and every row behind it wait. */
-  status: 'pending' | 'needs-person';
-  tries: number;
-  /** The card as it was before (to put it back if the head refuses). */
-  title: string;
-}
-
+/** A command not yet sent (outbox.ts), as the store lays it over a card: the model's (model/model.json). */
+export type { OutboxRow };
 export const owner = (): string | null => loadTokens()?.head ?? null;
 
 // --- change notifications, this tab and the others ---------------------------------------------------------------
@@ -57,14 +43,14 @@ export function onStore(l: Listener): () => void {
 
 // --- meta ----------------------------------------------------------------------------------------------------------
 
-export async function getMeta<T>(key: string): Promise<T | null> {
+export async function getMeta<K extends MetaKey>(key: K): Promise<Meta[K] | null> {
   const o = owner();
   if (!o) return null;
   const row = await withStore(o, [META], 'readonly', (t) => done(t.objectStore(META).get(key)));
-  return (row as { value?: T } | null | undefined)?.value ?? null;
+  return (row as { value?: Meta[K] } | null | undefined)?.value ?? null;
 }
 
-export async function setMeta(key: string, value: unknown): Promise<boolean> {
+export async function setMeta<K extends MetaKey>(key: K, value: Meta[K]): Promise<boolean> {
   const o = owner();
   if (!o) return false;
   const ok = await withStore(o, [META], 'readwrite', (t) => {
@@ -149,7 +135,7 @@ export async function pending(): Promise<OutboxRow[]> {
 
 /** What a command does to a card on the device, at once, before the head has it: the card settles as it would online. */
 export function apply(c: MeCard, row: Pick<OutboxRow, 'action' | 'body' | 'at'>): MeCard {
-  const b = row.body as { decision?: string; edited_proposal?: string; comment?: string; until?: string; preset?: string };
+  const b = row.body as Partial<Extract<Command, { action: 'decide' }>['body']> & { until?: string | null; preset?: string };
   switch (row.action) {
     case 'decide':
       return { ...c, state: 'decided', decision: b.decision!, decided_at: row.at, ...(b.edited_proposal ? { edited_proposal: b.edited_proposal } : {}), ...(b.comment ? { comment: b.comment } : {}) };

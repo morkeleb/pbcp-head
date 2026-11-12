@@ -19,24 +19,10 @@ import { api, cardHref, OfflineError, OFFLINE_REASON, useLiveChanges, useOnline,
 import { NOT_SENT, useDeferred, useLocale, type MeCard } from '../components';
 import { requestStepUp } from '../step-up';
 import { getMeta, setMeta } from '../local/store';
+import type { OrderList } from '../local/model.generated';
 
-export interface Order extends MeCard {
-  to_producer: string;
-  exec_state: 'open' | 'claimed' | 'done' | 'failed' | 'cancelled';
-  claimed_by?: string;
-  claim_expires_at?: string;
-  claim_seq?: number;
-  /** The lease as the owner sees it (head-private, A.2). */
-  lease?: { claimed_at: string | null; renewals: number; lapsed_at: string | null };
-  progress: {
-    count: number;
-    latest: MeCard | null;
-    /** Every progress card, newest first (A.3). */
-    notes?: Array<{ id: string; title: string; received_at: string }>;
-    /** The latest outcome card, in full. */
-    outcome?: MeCard | null;
-  };
-}
+/** An order with its lease and progress, as GET /api/me/orders serves it: the model's `OrderWithProgress` (RFC A.2, A.3). */
+export type Order = OrderList['orders'][number];
 
 /**
  * The lease as one line (A.2): who holds it, since when, until when and how often it was renewed; or that the order
@@ -60,7 +46,7 @@ export function leaseLine(o: Pick<Order, 'exec_state' | 'claimed_by' | 'claim_ex
 }
 
 const ACTIVE = ['open', 'claimed'];
-const isActive = (o: Pick<Order, 'exec_state' | 'state'>) => ACTIVE.includes(o.exec_state) && o.state === 'open';
+const isActive = (o: Pick<Order, 'exec_state' | 'state'>) => o.exec_state !== undefined && ACTIVE.includes(o.exec_state) && o.state === 'open';
 
 export function OrdersView() {
   const [orders, setOrders] = useState<Order[] | null>(null);
@@ -71,12 +57,12 @@ export function OrdersView() {
   const [asOf, setAsOf] = useState<string | null>(null);
   // Local first (docs/local-first.md): the list as last read, kept on the device and shown at once; then the head's.
   const fetchOrders = useCallback(async (network: boolean) => {
-    const kept = await getMeta<{ orders: Order[]; timezone: string; fetched_at: string }>('orders');
+    const kept = await getMeta('orders');
     if (kept) {
       setOrders((o) => o ?? kept.orders);
       setTimezone((t) => t ?? kept.timezone);
     }
-    const r = await api<{ orders: Order[]; timezone: string }>('/api/me/orders', { network });
+    const r = await api<OrderList>('/api/me/orders', { network });
     if (r.status !== 200) {
       if (kept) return setAsOf(kept.fetched_at);
       return setError(`Could not load orders (${r.status}).`);

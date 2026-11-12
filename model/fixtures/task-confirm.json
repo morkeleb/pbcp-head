@@ -1,0 +1,36 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "task",
+    "to_person": "m",
+    "producer": "bank",
+    "body": "Rent for December.",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 20,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "immediate",
+    "rendered_html": "<p>Rent for December.</p>",
+    "lead": "Rent for December.",
+    "lead_source": "body",
+    "rendered_lead": "Rent for December.",
+    "day": "2026-11-12",
+    "effective_sensitivity": "confirm",
+    "id": "bank:task:transfer-2026-11-12",
+    "title": "Approve the transfer to the landlord",
+    "urgency": "immediate",
+    "sensitivity": "confirm",
+    "about": "2026-11-12",
+    "at": "2026-11-12T09:00:00Z",
+    "until": "2026-11-12T09:30:00Z",
+    "references": [
+      "mail:inbox:landlord-3"
+    ],
+    "actions": [
+      "tomorrow"
+    ],
+    "snoozed_until": "2026-11-12T08:00:00Z"
+  }
+}

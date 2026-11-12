@@ -1,0 +1,24 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "decision",
+    "to_person": "m",
+    "producer": "mail",
+    "body": "",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 1,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "",
+    "lead": "",
+    "lead_source": "body",
+    "rendered_lead": "",
+    "day": "2026-11-12",
+    "effective_sensitivity": "normal",
+    "id": "mail:inbox:minimal",
+    "title": "A card with every optional field absent"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "gitattributes": true,
+  "automerge": true,
+  "models": [
+    {
+      "path": "model/model.json",
+      "output": ".",
+      "generated_files": {
+        "app/(ui)/local/model.generated.ts": {
+          "md5": "93eda2a7b68a36efecd6863e3f7a25ab",
+          "date": "2026-11-12T21:38:38.478Z"
+        },
+        "lib/api/schemas.generated.ts": {
+          "md5": "92449e37869a0eef92304e10673e8b29",
+          "date": "2026-11-12T21:37:50.590Z"
+        },
+        "app/(ui)/local/commands.generated.ts": {
+          "md5": "dbb1a4c5b7ff8fb17bf9d17c07b679b0",
+          "date": "2026-11-12T21:37:50.615Z"
+        },
+        "test/model/roundtrip.test.ts": {
+          "md5": "12de351a31ceafc2251f2b78441f6d49",
+          "date": "2026-11-12T21:37:50.827Z"
+        }
+      },
+      "input_hash": "1893f319a29cd62a0902f48bfe82dbf4",
+      "last_generated": "2026-11-12T21:38:38.478Z"
+    }
+  ]
+}

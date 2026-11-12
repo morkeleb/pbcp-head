@@ -7,7 +7,7 @@ export default defineConfig({
     projects: [
       {
         // At rest: tests that open sealed rows in this process use the head under test's master key.
-        test: { name: 'unit', include: ['test/*.test.ts', 'lib/**/*.test.ts'], env: { HEAD_MASTER_KEY: TEST_HEAD_MASTER_KEY } },
+        test: { name: 'unit', include: ['test/*.test.ts', 'test/model/**/*.test.ts', 'lib/**/*.test.ts'], env: { HEAD_MASTER_KEY: TEST_HEAD_MASTER_KEY } },
       },
       {
         // Postgres-backed. test/db talks to pbcp_test directly; test/http and test/conformance go through a running

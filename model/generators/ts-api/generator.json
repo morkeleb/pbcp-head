@@ -1,0 +1,8 @@
+{
+  "partials": [],
+  "formatters": [],
+  "preChecks": [{ "run": "../checks/model-keys.ts" }],
+  "steps": [
+    { "generate": "templates/schemas.generated.ts", "select": "$.model", "target": "lib/api/", "engine": "ts" }
+  ]
+}

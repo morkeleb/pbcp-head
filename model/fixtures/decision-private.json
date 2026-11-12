@@ -1,0 +1,54 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "decision",
+    "to_person": "m",
+    "producer": "mail",
+    "body": "Anna asks about the invoice.\n\n## Proposed reply\n\nIt is due on the 20th.",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 12,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "<p>Anna asks about the invoice.</p><h2>Proposed reply</h2><p>It is due on the 20th.</p>",
+    "lead": "She asks when the invoice is due.",
+    "lead_source": "summary",
+    "rendered_lead": "She asks when the invoice is due.",
+    "day": "2026-11-12",
+    "effective_sensitivity": "private",
+    "id": "mail:inbox:anna-1",
+    "title": "Reply to Anna",
+    "summary": "She asks when the invoice is due.",
+    "urgency": "brief",
+    "sensitivity": "private",
+    "thread": "t-anna",
+    "labels": [
+      "invoices",
+      "family"
+    ],
+    "actions": [
+      {
+        "id": "send",
+        "label": "Send",
+        "default": true
+      },
+      "edit",
+      "dismiss"
+    ],
+    "source": {
+      "url": "https://mail.example/t/anna",
+      "label": "Gmail"
+    },
+    "seen_at": "2026-11-12T07:05:00Z",
+    "rendered_actions": {
+      "send": "<p>Send it.</p>"
+    },
+    "first_visual": {
+      "kind": "image",
+      "src": "/api/me/img?u=https%3A%2F%2Fmail.example%2Fa.png",
+      "caption": "The invoice"
+    }
+  }
+}

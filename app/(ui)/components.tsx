@@ -2,9 +2,10 @@
 
 import { ArrowUpRight } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import type { ParagraphParts } from '../../lib/brief/paragraph';
 import { requestStepUp } from './step-up';
 import { command, discard, hasOutbox, noticeFor, onNotices, resume } from './local/outbox';
+import { COMMAND_ROUTES } from './local/commands.generated';
+import type { MeCard } from './local/model.generated';
 import { apply as applyCommand, type OutboxRow } from './local/store';
 import { api, OfflineError, useOnline, when } from './client';
 import { cn } from '@/lib/utils';
@@ -13,75 +14,8 @@ import { cn } from '@/lib/utils';
 
 export type ActionEntry = string | { id: string; label?: string; body?: string; default?: boolean };
 
-export interface MeCard {
-  id: string;
-  kind: 'decision' | 'artifact' | 'signal' | 'task' | 'order';
-  producer: string;
-  title: string;
-  body: string;
-  thread?: string;
-  urgency?: string;
-  /** §4.2: where the card landed, `urgency` under the producer's ceiling (§9). */
-  delivery?: 'immediate' | 'brief' | 'log';
-  /** §8: ids of related cards, any producer. */
-  references?: string[];
-  actions?: ActionEntry[];
-  source?: { url: string; label?: string };
-  state: 'open' | 'decided' | 'superseded';
-  change_seq: number;
-  received_at: string;
-  seen_at?: string;
-  acknowledged_at?: string;
-  snoozed_until?: string;
-  decision?: string;
-  edited_proposal?: string;
-  comment?: string;
-  decided_at?: string;
-  delegated_to?: string;
-  rendered_html: string;
-  rendered_actions?: Record<string, string>;
-  first_visual?: { kind: 'diagram' | 'image'; src: string; caption: string };
-  order_outcome?: 'applied' | 'stale';
-  to_producer?: string;
-  exec_state?: 'open' | 'claimed' | 'done' | 'failed' | 'cancelled';
-  claimed_by?: string;
-  claim_expires_at?: string;
-  claim_seq?: number;
-  /** On an outcome (A.3): the claim it reports on, and how that run ended. */
-  'orders.claim_seq'?: number;
-  'orders.result'?: 'done' | 'failed';
-  /** RFC 0.6 §4.1: one or two plain-text sentences from the producer; the card's lead when present. */
-  summary?: string;
-  /** RFC 0.6 §3.1, core's leadOf: the summary, or the body's first paragraph as markdown. */
-  lead?: string;
-  lead_source?: 'summary' | 'body';
-  /** The lead as safe inline HTML, rendered by the head (a summary escaped and cut at 280 characters). */
-  rendered_lead?: string;
-  /** RFC 0.9 §4.1: how carefully the producer asked the card to be handled, as sent. */
-  sensitivity?: 'normal' | 'private' | 'confirm';
-  /**
-   * RFC 0.9 §9: the card's sensitivity raised by the owner's floors. Inside the signed-in brief a private card shows in
-   * full like any other; a `confirm` card's decision asks for the passkey first (step-up.tsx).
-   */
-  effective_sensitivity?: 'normal' | 'private' | 'confirm';
-  /** RFC 0.7 §4.1: the producer's categories, in its order; shown on the card and filtered by. */
-  labels?: string[];
-  /** RFC 0.7 §4.1: the local day the card concerns. */
-  about?: string;
-  /** RFC 0.8 §4.1: when the card's subject happens or begins, and when it ends. */
-  at?: string;
-  until?: string;
-  /** §8 the card's day, from the head: `about`, else the day of `at`, else the day it was received, in the head's timezone. */
-  day?: string;
-  /** On a superseded card: the newest card of its successor chain (§8); it takes no decision. */
-  replaced_by?: { id: string; title: string; kind?: MeCard['kind']; state: 'open' | 'decided' | 'superseded'; decision?: string };
-  /** On a 409 from the decision route: what happened, in words. */
-  message?: string;
-  /** In the brief's Tasks section: under a label the owner set to fold as a count (RFC 0.9 §9), listed under Routine. */
-  routine?: true;
-  /** On a `head:daily` card: its paragraph in parts, for the label filter. */
-  paragraph?: ParagraphParts;
-}
+/** The card as /api/me serves it and the device stores it: the model's (model/model.json), generated from the API's schema. */
+export type { MeCard };
 
 // --- offline ---------------------------------------------------------------------------
 
@@ -139,7 +73,7 @@ export function useCanAct(): boolean {
 export async function sendCommand(card: Pick<MeCard, 'id' | 'title'> & Partial<MeCard>, action: OutboxRow['action'], body: Record<string, unknown> = {}): Promise<{ status: number; body: any }> {
   const o = await command(card, action, body);
   if (o === null) {
-    const path = `/api/me/cards/${encodeURIComponent(card.id)}/${{ decide: 'decision', ack: 'ack', snooze: 'snooze', unsnooze: 'unsnooze' }[action]}`;
+    const path = `/api/me/cards/${encodeURIComponent(card.id)}/${COMMAND_ROUTES[action]}`;
     return api(path, { method: 'POST', ...(action === 'ack' || action === 'unsnooze' ? {} : { body }) });
   }
   switch (o.kind) {

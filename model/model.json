@@ -1,0 +1,669 @@
+{
+  "name": "pbcp-head",
+  "generators": ["generators/ts-api/generator.json", "generators/ts-store/generator.json"],
+  "model": {
+    "imports": [
+      { "name": "ProducerCard", "import": "ProducerCardSchema", "from": "@pbcp/core", "kind": "schema", "doc": "RFC §4.1: the producer-owned card, read from core by reference, never copied" },
+      { "name": "HeadFields", "import": "HeadFieldsSchema", "from": "@pbcp/core", "kind": "schema", "doc": "RFC §4.2 and A.1: the head-owned fields" },
+      { "name": "Decision", "import": "DecisionSchema", "from": "@pbcp/core", "kind": "schema", "doc": "RFC §7.3: the decision body" },
+      { "name": "HeadDescriptionCore", "import": "HeadDescriptionSchema", "from": "@pbcp/core", "kind": "schema", "doc": "RFC §7.5" },
+      { "name": "KINDS", "import": "KINDS", "from": "@pbcp/core", "kind": "const", "doc": "RFC §4.1 `kind`" },
+      { "name": "STATES", "import": "STATES", "from": "@pbcp/core", "kind": "const", "doc": "RFC §4.2 `state`" },
+      { "name": "URGENCIES", "import": "URGENCIES", "from": "@pbcp/core", "kind": "const", "doc": "RFC §4.1 `urgency`, §9" },
+      { "name": "SENSITIVITIES", "import": "SENSITIVITIES", "from": "@pbcp/core", "kind": "const", "doc": "RFC 0.9 §4.1 `sensitivity`" },
+      { "name": "PAIRING_CODE_SHAPE", "import": "PAIRING_CODE_SHAPE", "from": "lib/pairing-code", "kind": "const", "doc": "The pairing code's shape, in words" }
+    ],
+    "scalars": [
+      { "name": "Timestamp", "type": "string", "describe": "RFC 3339, UTC (`2026-10-07T09:00:00Z`)" },
+      { "name": "Zone", "type": "string", "describe": "An IANA timezone, e.g. `Europe/Copenhagen`" },
+      { "name": "Seq", "type": "integer", "nonnegative": true }
+    ],
+    "enums": [
+      { "name": "Sensitivity", "from": "SENSITIVITIES", "doc": "RFC 0.9 §4.1 `sensitivity`" },
+      { "name": "FoldPolicy", "values": ["list", "count"], "doc": "RFC 0.9 §9 \"Folding\"" },
+      { "name": "CardKind", "from": "KINDS", "plus": ["order"], "doc": "RFC §4.1 `kind`, with the orders extension's `order` (A.1)" },
+      { "name": "CardState", "from": "STATES", "doc": "RFC §4.2 `state`" },
+      { "name": "Urgency", "from": "URGENCIES", "doc": "RFC §4.1 `urgency`, §9 `delivery`" },
+      { "name": "SnoozePreset", "values": ["tonight", "tomorrow", "next-week"], "export": "SNOOZE_PRESETS", "doc": "Snooze presets, in the effective timezone (mobile PRD gesture model: tonight, tomorrow's brief, next week)" },
+      { "name": "OutboxAction", "values": ["decide", "ack", "snooze", "unsnooze"], "layer": "store", "doc": "docs/local-first.md \"The outbox\": what a row asks the head to do" },
+      { "name": "OutboxStatus", "values": ["pending", "needs-person"], "layer": "store", "doc": "`needs-person`: the head asked for a passkey step-up (403 reauthentication_required, RFC 0.9 §4.1, §7.4); it and every row behind it wait" }
+    ],
+    "types": [
+      {
+        "name": "ErrorBody", "registry": "responses", "id": "Error", "description": "Every refusal from /api/me, and from GET /: RFC §7.4’s error body.",
+        "fields": [
+          { "name": "error", "type": "string", "describe": "A stable code: `invalid_request`, `unauthorized`, `not_found`, `too_large`, `invalid_snooze`, … (RFC §7.4 and the head’s own)" },
+          { "name": "message", "type": "string", "describe": "For people; its wording may change" },
+          { "name": "window_seconds", "type": "integer", "positive": true, "optional": true, "describe": "On 403 `reauthentication_required`: how long an identification counts; identify yourself and decide within it", "doc": "RFC 0.9 §4.1 `confirm`, §7.4" }
+        ]
+      },
+      {
+        "name": "Card", "registry": "responses", "description": "A card as the protocol defines it (RFC §4): the producer’s fields, the head’s (`state`, `change_seq`, `delivery`, …) and, on an order, the orders extension’s. Producers may add fields of their own, which are kept.",
+        "extends": "ProducerCard",
+        "fields": [
+          { "name": "kind", "type": "ref", "ref": "CardKind", "doc": "RFC §4.1, A.1" },
+          { "name": "to_person", "type": "string", "min": 1, "optional": true, "describe": "The person the card is for; absent on an order, which is addressed to a producer with `to_producer` (A.1)", "doc": "RFC §4.1, §10, A.1" },
+          { "spread": "HeadFields" },
+          { "name": "orders.claim_seq", "type": "integer", "positive": true, "optional": true, "describe": "On an executor’s outcome card: the claim it reports on (A.3)", "doc": "RFC A.3" },
+          { "name": "orders.result", "type": "enum", "values": ["done", "failed"], "optional": true, "describe": "On an executor’s outcome card: how the run ended (A.3)", "doc": "RFC A.3" }
+        ]
+      },
+      {
+        "name": "Visual", "registry": "responses",
+        "fields": [
+          { "name": "kind", "type": "enum", "values": ["diagram", "image"] },
+          { "name": "src", "type": "string", "describe": "A head URL: /api/me/svg/{hash} or /api/me/img?…" },
+          { "name": "caption", "type": "string" }
+        ]
+      },
+      {
+        "name": "ParagraphEntry", "export": false,
+        "fields": [
+          { "name": "id", "type": "string", "describe": "The card the entry is" },
+          { "name": "labels", "type": "array", "of": { "type": "string" }, "describe": "Its labels (§4.1), for filtering" },
+          { "name": "text", "type": "string", "describe": "Safe inline HTML: \"<title> — <lead>\", the title linked to the card" },
+          { "name": "producer", "type": "string", "optional": true, "describe": "The card’s producer root" },
+          { "name": "kind", "type": "string", "optional": true, "describe": "The card’s kind" },
+          { "name": "title", "type": "string", "optional": true, "describe": "The card’s title, as plain text" },
+          { "name": "sensitivity", "type": "ref", "ref": "Sensitivity", "optional": true, "describe": "RFC 0.9 §4.1: the card’s `sensitivity` as its producer sent it (`normal` when it sent none)", "doc": "RFC 0.9 §4.1" },
+          { "name": "effective_sensitivity", "type": "ref", "ref": "Sensitivity", "optional": true, "describe": "RFC 0.9 §9: the card’s sensitivity raised by the owner’s floors, as of this response. Outside the signed-in session, count a `private` or `confirm` entry; never say its text", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "ParagraphParts", "registry": "responses", "description": "A daily brief in parts, so a view can keep only the entries of chosen labels and write the same sentences, one paragraph each: \"N decisions: <entry>; ….\" (or \"Nothing waiting for you.\"), \"Yesterday you decided: …\", \"What mattered yesterday: …\", \"And N updates from …\"",
+        "fields": [
+          { "name": "decisions", "type": "array", "of": { "type": "ref", "ref": "ParagraphEntry" }, "describe": "Open decisions that are not snoozed, every one named (RFC 0.9 §8): \"<title> — <lead>\" for one with no default action or sent `immediate`, the title alone for one in a fold", "doc": "RFC 0.9 §8" },
+          {
+            "name": "folds", "type": "array", "optional": true, "doc": "RFC 0.9 §8",
+            "describe": "RFC 0.9 §8: decisions folded under their producer’s shared default action, \"6 the mail reader proposes archiving: <title>, …\". A fold offers no control: each card is decided on its own card",
+            "of": {
+              "type": "object", "name": "ParagraphFold",
+              "fields": [
+                { "name": "producer", "type": "string", "describe": "The producer’s root" },
+                { "name": "name", "type": "string", "describe": "How the brief names it: its display name, or the root" },
+                { "name": "action", "type": "string", "describe": "The default action’s id the cards share" },
+                { "name": "action_label", "type": "string", "describe": "Its label from the card (the id when the card gives none)" },
+                { "name": "ids", "type": "array", "of": { "type": "string" }, "describe": "The folded cards, entries of `decisions`, in order" }
+              ]
+            }
+          },
+          { "name": "snoozed", "type": "array", "of": { "type": "array", "of": { "type": "string" } }, "describe": "The labels of each snoozed decision: counted, never listed (§8)", "doc": "RFC §8" },
+          {
+            "name": "tasks", "type": "array", "optional": true, "doc": "RFC 0.9 §8, §9",
+            "describe": "Open tasks due on the day or before, by when they are due (RFC 0.9 §8): counted in the paragraph, \"Tasks: 23 due, 21 overdue and 5 routine.\"; the Tasks section names them",
+            "of": {
+              "type": "object", "extends": "ParagraphEntry",
+              "fields": [
+                { "name": "overdue", "type": "boolean", "describe": "Past its `at`, or past the end of its `about` day (§4.5): derived when the brief was folded", "doc": "RFC 0.9 §4.5" },
+                { "name": "routine", "type": "literal", "value": true, "optional": true, "describe": "Under a label the owner set to fold as a count (RFC 0.9 §9): counted apart", "doc": "RFC 0.9 §9" }
+              ]
+            }
+          },
+          { "name": "decided", "type": "array", "of": { "type": "ref", "ref": "ParagraphEntry" }, "optional": true, "describe": "Decisions made the day before: \"<title> — decided <value>\" (\"<title> — done\" for a task)" },
+          { "name": "orders", "type": "array", "of": { "type": "ref", "ref": "ParagraphEntry" }, "optional": true, "describe": "Orders whose outcome arrived the day before: \"<order title> — done: <outcome lead>\" (A.3)", "doc": "RFC A.3" },
+          { "name": "mattered", "type": "array", "of": { "type": "ref", "ref": "ParagraphEntry" }, "optional": true, "describe": "The day before’s signals delivered immediate or brief, and brief artifacts from producers that sent at most three cards; newest first. The paragraph names six, then \"and N more\"" },
+          { "name": "rest", "type": "array", "of": { "type": "object", "fields": [{ "name": "producer", "type": "string" }, { "name": "labels", "type": "array", "of": { "type": "string" } }] }, "optional": true, "describe": "Every other thread of the day before, counted by producer: \"And 9 updates from mail, goalpath and hermes.\"" },
+          { "name": "yesterday", "type": "array", "of": { "type": "ref", "ref": "ParagraphEntry" }, "optional": true, "describe": "Folds before 6 only: the previous day’s threads, one list" }
+        ]
+      },
+      {
+        "name": "MeCard", "registry": "responses", "description": "A card as the owner’s devices show it: the protocol card plus what the head rendered.",
+        "extends": "Card",
+        "fields": [
+          {
+            "name": "replaced_by", "type": "object", "optional": true, "doc": "RFC §8",
+            "describe": "On a superseded card: the newest card of its successor chain (§8). A superseded card takes no decision: show this instead of its actions. On a 409 from the decision route, `message` says the same in words.",
+            "fields": [
+              { "name": "id", "type": "string" },
+              { "name": "title", "type": "string" },
+              { "name": "kind", "type": "ref", "ref": "CardKind" },
+              { "name": "state", "type": "ref", "ref": "CardState" },
+              { "name": "decision", "type": "string", "optional": true }
+            ]
+          },
+          { "name": "message", "type": "string", "optional": true, "describe": "On a 409 from the decision route for a superseded card: “This card was replaced by …”", "doc": "RFC §7.3" },
+          { "name": "rendered_html", "type": "string", "describe": "The body rendered on receipt and sanitised (RFC §3.1). Show this; never render `body` yourself.", "doc": "RFC §3.1" },
+          { "name": "lead", "type": "string", "describe": "The card’s lead (RFC 0.6 §3.1, core’s `leadOf`): its `summary` when it has one, otherwise the body’s first paragraph as markdown. Empty when the body has none.", "doc": "RFC §3.1" },
+          { "name": "lead_source", "type": "enum", "values": ["summary", "body"], "describe": "Where the lead came from: `summary` is plain text, never markdown; `body` is inline markdown", "doc": "RFC §3.1" },
+          { "name": "rendered_lead", "type": "string", "describe": "The lead as safe inline HTML, rendered by the head: a summary escaped and cut at 280 characters, a body lead rendered inline. Show this beside the title; never render `lead` yourself.", "doc": "RFC §3.1" },
+          { "name": "rendered_actions", "type": "record", "of": { "type": "string" }, "optional": true, "describe": "Rendered bodies of choice options (§4.4), by action id", "doc": "RFC §4.4" },
+          { "name": "first_visual", "type": "ref", "ref": "Visual", "optional": true, "describe": "The first diagram or image in the body, for a thumbnail", "doc": "RFC §3.1" },
+          { "name": "order_outcome", "type": "enum", "values": ["applied", "stale"], "optional": true, "describe": "On an outcome card: whether it moved its order, or came late or from an earlier claim", "doc": "RFC A.3" },
+          { "name": "day", "type": "string", "describe": "The card’s day (§8), YYYY-MM-DD: its `about`, else the day of `received_at` in the head’s timezone when it was stored", "doc": "RFC §8" },
+          { "name": "paragraph", "type": "ref", "ref": "ParagraphParts", "optional": true, "describe": "On a `head:daily` card: its paragraph in parts", "doc": "RFC §8" },
+          { "name": "spoken_paragraph", "type": "string", "optional": true, "describe": "On a `head:daily` card with parts: the paragraph in plain text for a surface outside the signed-in session (an assistant, a voice client), private and confirm entries counted, never named (RFC 0.9 §4.1)", "doc": "RFC 0.9 §4.1" },
+          { "name": "effective_sensitivity", "type": "ref", "ref": "Sensitivity", "describe": "RFC 0.9 §9: the card’s `sensitivity` raised by the owner’s floors (per producer, per label, for every card), as of this response. The card’s own `sensitivity` stays as the producer sent it. `private`: keep its lead and body off notifications and assistants; `confirm`: also, deciding needs the person to identify themselves again (403 `reauthentication_required`)", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "CardSummary", "registry": "responses",
+        "fields": [
+          { "name": "id", "type": "string" },
+          { "name": "title", "type": "string" },
+          { "name": "kind", "type": "ref", "ref": "CardKind" },
+          { "name": "producer", "type": "string" },
+          { "name": "state", "type": "ref", "ref": "CardState" },
+          { "name": "received_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "decision", "type": "string", "optional": true },
+          { "name": "exec_state", "type": "ref", "ref": "HeadFields", "member": "exec_state", "doc": "RFC A.1" },
+          { "name": "order_outcome", "type": "enum", "values": ["applied", "stale"], "optional": true }
+        ]
+      },
+      {
+        "name": "OrderLease", "export": false, "describe": "The lease as the owner sees it: head-private, never synced", "doc": "RFC A.2",
+        "fields": [
+          { "name": "claimed_at", "type": "string", "nullable": true, "describe": "When the current claim began" },
+          { "name": "renewals", "type": "integer", "nonnegative": true, "describe": "How many times its holder has renewed the current claim" },
+          { "name": "lapsed_at", "type": "string", "nullable": true, "describe": "When the last lease lapsed with no outcome (A.2), until the order is claimed again" }
+        ]
+      },
+      {
+        "name": "CardDetail", "registry": "responses",
+        "fields": [
+          { "name": "timezone", "type": "ref", "ref": "Zone" },
+          { "name": "card", "type": "object", "extends": "MeCard", "fields": [{ "name": "lease", "type": "ref", "ref": "OrderLease", "optional": true, "describe": "On an order: its lease as the owner sees it" }] },
+          { "name": "predecessors", "type": "array", "of": { "type": "ref", "ref": "MeCard" }, "describe": "The cards this one supersedes, oldest first" },
+          { "name": "successors", "type": "array", "of": { "type": "ref", "ref": "CardSummary" }, "describe": "The cards that supersede it, in order" },
+          { "name": "references", "type": "array", "of": { "type": "object", "fields": [{ "name": "id", "type": "string" }, { "name": "card", "type": "ref", "ref": "CardSummary", "nullable": true, "describe": "Null when this head holds no such card" }] } },
+          { "name": "thread", "type": "array", "of": { "type": "ref", "ref": "CardSummary" }, "describe": "Every card of its thread, newest last; for an order, the order first" },
+          {
+            "name": "decisions", "type": "array", "describe": "The decision log entries for this card, oldest first (§4.4)",
+            "of": {
+              "type": "object",
+              "fields": [
+                { "name": "decision", "type": "string" },
+                { "name": "decided_at", "type": "ref", "ref": "Timestamp" },
+                { "name": "edited_proposal", "type": "string", "optional": true },
+                { "name": "comment", "type": "string", "optional": true },
+                { "name": "delegated_to", "type": "string", "optional": true },
+                { "name": "by", "type": "string", "describe": "The device that recorded it, by name" }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "CardList", "registry": "responses",
+        "fields": [
+          { "name": "cards", "type": "array", "of": { "type": "ref", "ref": "MeCard" } },
+          { "name": "next", "type": "ref", "ref": "Seq", "nullable": true, "describe": "Pass as `after` for the next page; null on the last" },
+          { "name": "timezone", "type": "ref", "ref": "Zone" },
+          { "name": "before", "type": "string", "nullable": true, "optional": true, "describe": "With `from`: the latest local day before `from` that has a card, YYYY-MM-DD; null when there is none" }
+        ]
+      },
+      {
+        "name": "LastVisit", "registry": "responses",
+        "fields": [
+          { "name": "seq", "type": "ref", "ref": "Seq" },
+          { "name": "at", "type": "ref", "ref": "Timestamp", "nullable": true }
+        ]
+      },
+      {
+        "name": "Fold", "registry": "responses", "description": "One producer’s thread today, folded to its newest card (§8).",
+        "fields": [
+          { "name": "producer", "type": "string" },
+          { "name": "thread", "type": "string", "nullable": true },
+          { "name": "count", "type": "integer", "positive": true },
+          { "name": "latest", "type": "ref", "ref": "MeCard" },
+          { "name": "cards", "type": "array", "of": { "type": "object", "fields": [{ "name": "id", "type": "string" }, { "name": "title", "type": "string" }, { "name": "kind", "type": "string" }, { "name": "received_at", "type": "ref", "ref": "Timestamp" }, { "name": "acknowledged_at", "type": "ref", "ref": "Timestamp", "optional": true }] } }
+        ]
+      },
+      {
+        "name": "Brief", "registry": "responses",
+        "fields": [
+          { "name": "date", "type": "string", "describe": "Today, YYYY-MM-DD in `timezone`" },
+          { "name": "timezone", "type": "ref", "ref": "Zone", "describe": "The effective timezone (see X-Timezone)" },
+          { "name": "seq", "type": "ref", "ref": "Seq", "describe": "The head’s change counter now; post it to /api/me/visit when the owner leaves" },
+          { "name": "last_visit", "type": "ref", "ref": "LastVisit" },
+          { "name": "first_day", "type": "string", "nullable": true, "describe": "The local day of the head’s oldest card, YYYY-MM-DD; how far back the timeline goes" },
+          { "name": "daily", "type": "ref", "ref": "MeCard", "nullable": true, "describe": "The latest `head:daily` card" },
+          {
+            "name": "daily_paragraph", "type": "object", "nullable": true, "describe": "The brief today opens with (\"Nothing waiting for you.\" on a quiet day)",
+            "fields": [
+              { "name": "text", "type": "string", "optional": true, "describe": "With `spoken=1`: the paragraph in plain text, private and confirm entries counted, never named (RFC 0.9 §4.1); `html` is then the same text, escaped", "doc": "RFC 0.9 §4.1" },
+              { "name": "html", "type": "string", "describe": "Safe inline HTML, the parts’ sentences as one run of prose: \"N decisions: <title> — <lead>; …. Yesterday you decided: …. What mattered yesterday: …. And N updates from ….\" with each title linked to its card; a lead is left out when empty or the same as the title (RFC §8)", "doc": "RFC §8" },
+              { "name": "so_far", "type": "boolean", "describe": "True until today’s `head:daily` card exists: the same fold, made now" },
+              { "name": "parts", "type": "ref", "ref": "ParagraphParts" }
+            ]
+          },
+          {
+            "name": "tomorrow", "type": "object", "describe": "What is already set for tomorrow",
+            "fields": [
+              { "name": "date", "type": "string", "describe": "YYYY-MM-DD in `timezone`" },
+              { "name": "cards", "type": "array", "of": { "type": "ref", "ref": "MeCard" }, "describe": "Open cards snoozed until tomorrow, and cards about tomorrow (`thread: day-<date>`)" }
+            ]
+          },
+          { "name": "decisions", "type": "array", "of": { "type": "ref", "ref": "MeCard" }, "describe": "Open decisions, newest first, snoozed ones left out" },
+          {
+            "name": "tasks", "type": "array", "doc": "RFC 0.9 §4.1, §4.5, §8",
+            "describe": "Tasks (RFC 0.9 §4.1, §4.5, §8), by when they are due, earliest first: every open task that is not snoozed and whose day is today or earlier (an open task past its `at`, or past the end of its `about` day, is overdue: derived, never a field), and the tasks closed today: decided, or superseded by the producer’s record of what came of them (`replaced_by`), shown done for the rest of the day",
+            "of": {
+              "type": "object", "extends": "MeCard",
+              "fields": [
+                { "name": "overdue", "type": "literal", "value": true, "optional": true, "describe": "An open task past its `at`, or past the end of its `about` day, as of this response (§4.5): presentation only, never written to the card", "doc": "RFC 0.9 §4.5" },
+                { "name": "routine", "type": "literal", "value": true, "optional": true, "describe": "The task carries a label the owner set to fold as a count (RFC 0.9 §9): listed in a collapsed Routine group, counted apart in the paragraph", "doc": "RFC 0.9 §9" }
+              ]
+            }
+          },
+          { "name": "threads", "type": "array", "of": { "type": "ref", "ref": "Fold" }, "describe": "Today’s artifacts and signals, folded by thread; immediate first", "doc": "RFC §8" },
+          { "name": "snoozed", "type": "integer", "nonnegative": true },
+          { "name": "late_outcomes", "type": "array", "of": { "type": "ref", "ref": "MeCard" }, "describe": "Order outcomes that came late or from an earlier claim (A.3)", "doc": "RFC A.3" },
+          {
+            "name": "order_updates", "type": "array", "describe": "Open orders with progress or an outcome since the last visit (A.3), newest first: one row each", "doc": "RFC A.3",
+            "of": {
+              "type": "object",
+              "fields": [
+                { "name": "id", "type": "string", "describe": "The order" },
+                { "name": "title", "type": "string" },
+                { "name": "count", "type": "integer", "positive": true, "describe": "Its progress and outcome cards since the last visit" },
+                { "name": "latest", "type": "ref", "ref": "MeCard", "describe": "The newest of them" }
+              ]
+            }
+          },
+          { "name": "lapsed_orders", "type": "array", "of": { "type": "ref", "ref": "MeCard" }, "describe": "Orders whose lease lapsed with no outcome (A.2)", "doc": "RFC A.2" },
+          { "name": "new", "type": "array", "of": { "type": "string" }, "describe": "Ids changed since the last visit" }
+        ]
+      },
+      {
+        "name": "BriefStamp", "registry": "responses",
+        "fields": [
+          { "name": "seq", "type": "ref", "ref": "Seq", "describe": "The highest change_seq the head has assigned: it moves with every card stored and every decision", "doc": "RFC §4.2 `change_seq`" },
+          { "name": "date", "type": "string", "describe": "The head’s local date, YYYY-MM-DD: the brief’s `date` changes with it at midnight" },
+          { "name": "settings_seq", "type": "integer", "nonnegative": true, "describe": "Moves with every change to the owner’s sensitivity floors (RFC 0.9 §9). A floor changes no card, so the change feed cannot carry it: when this moves, refetch the floors (GET /api/me/settings) and recompute stored cards’ effective sensitivity", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      { "name": "Visit", "alias": "LastVisit" },
+      {
+        "name": "OrderWithProgress", "registry": "responses", "extends": "MeCard",
+        "fields": [
+          { "name": "lease", "type": "ref", "ref": "OrderLease", "doc": "RFC A.2" },
+          {
+            "name": "progress", "type": "object", "doc": "RFC A.3",
+            "fields": [
+              { "name": "count", "type": "integer", "nonnegative": true },
+              { "name": "latest", "type": "ref", "ref": "MeCard", "nullable": true },
+              { "name": "notes", "type": "array", "of": { "type": "object", "fields": [{ "name": "id", "type": "string" }, { "name": "title", "type": "string" }, { "name": "received_at", "type": "string" }] }, "describe": "Every progress card of the thread, newest first (A.3)" },
+              { "name": "outcome", "type": "ref", "ref": "MeCard", "nullable": true, "describe": "The latest outcome card, in full" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "OrderList", "registry": "responses",
+        "fields": [
+          { "name": "timezone", "type": "ref", "ref": "Zone" },
+          { "name": "orders", "type": "array", "of": { "type": "ref", "ref": "OrderWithProgress" } }
+        ]
+      },
+      {
+        "name": "OrderRequest", "registry": "requests", "doc": "RFC A.1",
+        "fields": [
+          { "name": "to_producer", "type": "string", "describe": "A producer root, or `*` for any executor (A.1)" },
+          { "name": "title", "type": "string" },
+          { "name": "body", "type": "string", "optional": true },
+          { "name": "urgency", "type": "ref", "ref": "Urgency", "optional": true }
+        ]
+      },
+      { "name": "DecisionRequest", "registry": "requests", "is": "Decision", "doc": "RFC §7.3" },
+      {
+        "name": "SnoozeRequest", "registry": "requests", "doc": "RFC §4.2 `snoozed_until`",
+        "union": [
+          { "fields": [{ "name": "until", "type": "string", "nullable": true, "describe": "UTC only (`…Z`), later than now; an offset such as `+02:00` is refused with 400 `invalid_snooze`. Null unsnoozes." }] },
+          { "fields": [{ "name": "preset", "type": "ref", "ref": "SnoozePreset", "describe": "In the effective timezone: tonight 18:00, tomorrow 05:30, next week 05:30" }] }
+        ]
+      },
+      {
+        "name": "VisitRequest", "registry": "requests",
+        "fields": [{ "name": "seq", "type": "ref", "ref": "Seq", "nullable": true, "optional": true, "describe": "Default: the head’s counter now" }]
+      },
+      {
+        "name": "Me", "registry": "responses",
+        "fields": [
+          { "name": "head", "type": "string", "describe": "The head id: the owner’s person id, which producers address as `to_person`", "doc": "RFC §10" },
+          { "name": "display_name", "type": "string", "nullable": true },
+          { "name": "device_id", "type": "string" },
+          { "name": "timezone", "type": "ref", "ref": "Zone", "describe": "The effective timezone" },
+          { "name": "last_visit", "type": "ref", "ref": "LastVisit" }
+        ]
+      },
+      {
+        "name": "Settings", "registry": "responses",
+        "fields": [
+          { "name": "head", "type": "string", "describe": "The stable head id (`to_person`); it never changes", "doc": "RFC §10" },
+          { "name": "display_name", "type": "string", "nullable": true, "describe": "How the owner is shown; not used by the protocol" },
+          { "name": "timezone", "type": "ref", "ref": "Zone", "describe": "The effective timezone: the override if set, else the device most recently seen with X-Timezone, else UTC" },
+          { "name": "timezone_source", "type": "enum", "values": ["override", "device", "default"] },
+          { "name": "timezone_override", "type": "ref", "ref": "Zone", "nullable": true },
+          { "name": "device_timezone", "type": "object", "nullable": true, "describe": "The most recent zone a device sent", "fields": [{ "name": "device_id", "type": "string" }, { "name": "timezone", "type": "ref", "ref": "Zone" }, { "name": "seen_at", "type": "ref", "ref": "Timestamp" }] },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "describe": "The owner’s floor for every card (RFC 0.9 §9), or null", "doc": "RFC 0.9 §9" },
+          { "name": "sensitivity_floors", "type": "object", "describe": "Every floor per producer root and per label (§9), for a device that computes effective sensitivity itself", "doc": "RFC 0.9 §9", "fields": [{ "name": "producers", "type": "record", "of": { "type": "ref", "ref": "Sensitivity" } }, { "name": "labels", "type": "record", "of": { "type": "ref", "ref": "Sensitivity" } }] },
+          { "name": "fold_policies", "type": "object", "describe": "The labels the owner set to fold as a count in the brief (RFC 0.9 §9 \"Folding\"); every other label is `list`, so a device folds as the head does", "doc": "RFC 0.9 §9", "fields": [{ "name": "labels", "type": "record", "of": { "type": "literal", "value": "count" } }] },
+          { "name": "settings_seq", "type": "integer", "nonnegative": true, "describe": "As in GET /api/me/seq: moves with every floor or fold policy change", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "SettingsPatch", "registry": "requests",
+        "fields": [
+          { "name": "timezone", "type": "ref", "ref": "Zone", "nullable": true, "optional": true, "describe": "Sets the override, which wins over the devices; null clears it" },
+          { "name": "display_name", "type": "string", "nullable": true, "optional": true, "describe": "One line, 1–100 characters; null clears it" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "optional": true, "describe": "The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "Producer", "registry": "responses",
+        "fields": [
+          { "name": "root", "type": "string", "doc": "RFC §5" },
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "doc": "RFC §9" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "describe": "The owner’s sensitivity floor on it (RFC 0.9 §9), or null", "doc": "RFC 0.9 §9" },
+          { "name": "executor", "type": "boolean", "doc": "RFC A.1" },
+          { "name": "revoked", "type": "boolean" },
+          { "name": "tokens", "type": "array", "of": { "type": "object", "fields": [{ "name": "instance", "type": "string", "nullable": true }, { "name": "ceiling", "type": "ref", "ref": "Urgency" }, { "name": "executor", "type": "boolean" }, { "name": "created_at", "type": "ref", "ref": "Timestamp" }, { "name": "revoked_at", "type": "ref", "ref": "Timestamp", "optional": true }] } },
+          { "name": "last_card_at", "type": "ref", "ref": "Timestamp", "nullable": true }
+        ]
+      },
+      {
+        "name": "ProducerList", "registry": "responses",
+        "fields": [{ "name": "producers", "type": "array", "of": { "type": "ref", "ref": "Producer" } }]
+      },
+      {
+        "name": "ProducerPatch", "registry": "requests",
+        "fields": [
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "optional": true, "describe": "Applies to content stored from now on (§9)", "doc": "RFC §9" },
+          { "name": "revoked", "type": "literal", "value": true, "optional": true, "describe": "Revokes every token of the root; mint a new one to bring it back" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "optional": true, "describe": "The owner’s sensitivity floor on the producer (RFC 0.9 §9): raises the effective sensitivity of its cards, already stored or not; null clears it", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "Label", "registry": "responses",
+        "fields": [
+          { "name": "label", "type": "string", "doc": "RFC §4.1 `labels`" },
+          { "name": "cards", "type": "integer", "nonnegative": true, "describe": "How many of the head’s cards carry it" },
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "nullable": true, "describe": "The owner’s ceiling on it (§9), or null", "doc": "RFC §9" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "describe": "The owner’s sensitivity floor on it (RFC 0.9 §9), or null", "doc": "RFC 0.9 §9" },
+          { "name": "fold_policy", "type": "ref", "ref": "FoldPolicy", "describe": "How the brief folds its cards (RFC 0.9 §9 \"Folding\"): `list`, the default, or `count`: its tasks counted as routine in the paragraph and grouped apart in the Tasks section", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "LabelList", "registry": "responses",
+        "fields": [{ "name": "labels", "type": "array", "of": { "type": "ref", "ref": "Label" } }]
+      },
+      {
+        "name": "LabelPatch", "registry": "requests",
+        "atLeastOne": { "fields": ["ceiling", "sensitivity_floor", "fold_policy"], "message": "give ceiling, sensitivity_floor or fold_policy" },
+        "fields": [
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "nullable": true, "optional": true, "describe": "Lowers the delivery of cards carrying the label, stored from now on; null clears it (§9)", "doc": "RFC §9" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "optional": true, "describe": "The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it", "doc": "RFC 0.9 §9" },
+          { "name": "fold_policy", "type": "ref", "ref": "FoldPolicy", "optional": true, "describe": "How the brief folds the label’s cards (RFC 0.9 §9 \"Folding\"): `list` (the default) or `count`; changes no card", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "Device", "registry": "responses",
+        "fields": [
+          { "name": "id", "type": "string" },
+          { "name": "name", "type": "string", "nullable": true },
+          { "name": "platform", "type": "enum", "values": ["web", "ios", "android", "mcp"], "describe": "`mcp`: an assistant connected through OAuth (/api/mcp)" },
+          { "name": "created_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "last_seen_at", "type": "ref", "ref": "Timestamp", "nullable": true },
+          { "name": "timezone", "type": "ref", "ref": "Zone", "nullable": true, "describe": "The zone it last sent in X-Timezone" },
+          { "name": "timezone_seen_at", "type": "ref", "ref": "Timestamp", "nullable": true },
+          { "name": "current", "type": "boolean", "describe": "The device making this request" },
+          {
+            "name": "daily_notification", "type": "object", "describe": "The daily “brief is ready” notification (Settings → Devices)",
+            "fields": [
+              { "name": "enabled", "type": "boolean" },
+              { "name": "time", "type": "string", "describe": "HH:MM, a quarter hour, in the device’s timezone (default 07:00)" },
+              { "name": "subscribed", "type": "boolean", "describe": "The device has a Web Push subscription the head can send to" }
+            ]
+          },
+          {
+            "name": "urgent_notification", "type": "object", "describe": "A push for each card stored with delivery immediate (§9), off by default", "doc": "RFC §9",
+            "fields": [
+              { "name": "enabled", "type": "boolean" },
+              { "name": "subscribed", "type": "boolean", "describe": "The device has a Web Push subscription the head can send to" }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "DevicePatch", "registry": "requests",
+        "fields": [
+          {
+            "name": "daily_notification", "type": "object", "optional": true,
+            "fields": [
+              { "name": "enabled", "type": "boolean", "optional": true },
+              { "name": "time", "type": "string", "pattern": "^([01]\\d|2[0-3]):(00|15|30|45)$", "optional": true, "describe": "HH:MM on a quarter hour" }
+            ]
+          },
+          { "name": "urgent_notification", "type": "object", "optional": true, "fields": [{ "name": "enabled", "type": "boolean" }] }
+        ]
+      },
+      {
+        "name": "PushSubscription", "registry": "requests",
+        "fields": [
+          { "name": "endpoint", "type": "string", "describe": "The push service URL (https)" },
+          { "name": "expirationTime", "type": "number", "nullable": true, "optional": true },
+          { "name": "keys", "type": "object", "fields": [{ "name": "p256dh", "type": "string" }, { "name": "auth", "type": "string" }] }
+        ]
+      },
+      {
+        "name": "InviteBody", "registry": "requests",
+        "fields": [{ "name": "email", "type": "string", "describe": "An email address, at most 254 characters (400 `invalid_email`)" }]
+      },
+      {
+        "name": "InviteAccepted", "registry": "responses",
+        "fields": [{ "name": "requested", "type": "literal", "value": true }]
+      },
+      {
+        "name": "InviteList", "registry": "responses",
+        "fields": [{ "name": "requests", "type": "array", "of": { "type": "object", "fields": [{ "name": "id", "type": "string" }, { "name": "email", "type": "string" }, { "name": "created_at", "type": "ref", "ref": "Timestamp" }, { "name": "user_agent", "type": "string", "nullable": true }] } }]
+      },
+      {
+        "name": "PushKey", "registry": "responses",
+        "fields": [{ "name": "public_key", "type": "string", "describe": "The VAPID public key, base64url: the applicationServerKey" }]
+      },
+      {
+        "name": "DeviceList", "registry": "responses",
+        "fields": [{ "name": "devices", "type": "array", "of": { "type": "ref", "ref": "Device" } }]
+      },
+      {
+        "name": "HeadFacts", "registry": "responses", "description": "The describe document’s facts (§7.5) and where producers submit", "doc": "RFC §7.5",
+        "fields": [
+          { "name": "owner", "type": "string", "describe": "The owner’s person id: every card’s `to_person` (§10)", "doc": "RFC §10" },
+          { "name": "url", "type": "string", "describe": "The head URL a producer is given: the origin plus /api" },
+          { "name": "protocol", "type": "string" },
+          { "name": "extensions", "type": "array", "of": { "type": "string" } },
+          { "name": "render", "type": "object", "fields": [{ "name": "mermaid", "type": "array", "of": { "type": "string" } }] }
+        ]
+      },
+      {
+        "name": "ProducerToken", "registry": "responses",
+        "fields": [
+          { "name": "id", "type": "string", "describe": "The token’s id here: a prefix of its stored hash, never the token" },
+          { "name": "root", "type": "string", "doc": "RFC §5" },
+          { "name": "name", "type": "string", "nullable": true, "describe": "The name shown in Settings, 1–60 characters: renamed there, or the name a paired producer gave. Null: shown as the root" },
+          { "name": "instance", "type": "string", "nullable": true },
+          { "name": "executor", "type": "boolean", "doc": "RFC A.1" },
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "doc": "RFC §9" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "describe": "The owner’s sensitivity floor on its producer (RFC 0.9 §9: per root), or null", "doc": "RFC 0.9 §9" },
+          { "name": "created_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "last_used_at", "type": "ref", "ref": "Timestamp", "nullable": true, "describe": "The last request it authenticated, to the minute" },
+          { "name": "paired", "type": "object", "nullable": true, "describe": "When the producer minted this token itself with a pairing code: the name it gave, its address, when", "fields": [{ "name": "name", "type": "string", "nullable": true }, { "name": "address", "type": "string", "nullable": true }, { "name": "at", "type": "ref", "ref": "Timestamp" }] }
+        ]
+      },
+      {
+        "name": "ProducerTokenList", "registry": "responses",
+        "fields": [{ "name": "producers", "type": "array", "of": { "type": "ref", "ref": "ProducerToken" } }]
+      },
+      {
+        "name": "MintTokenRequest", "registry": "requests",
+        "fields": [
+          { "name": "root", "type": "string", "describe": "The producer root (§5): letters, digits and -; not `head`; not already held by a live token", "doc": "RFC §5" },
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "optional": true, "describe": "Default `brief` (§9)", "doc": "RFC §9" },
+          { "name": "executor", "type": "boolean", "optional": true, "describe": "May claim orders to `*` (A.1)", "doc": "RFC A.1" },
+          { "name": "instance", "type": "string", "optional": true, "describe": "A second installation of the same connector" }
+        ]
+      },
+      {
+        "name": "MintedToken", "registry": "responses",
+        "fields": [
+          { "name": "token", "type": "string", "describe": "The producer token. Shown once: the head keeps only its hash" },
+          { "name": "producer", "type": "ref", "ref": "ProducerToken" }
+        ]
+      },
+      {
+        "name": "TokenPatch", "registry": "requests",
+        "atLeastOne": { "fields": ["ceiling", "name", "sensitivity_floor"], "message": "give ceiling, name, sensitivity_floor, or any of them" },
+        "fields": [
+          { "name": "ceiling", "type": "ref", "ref": "Urgency", "optional": true, "describe": "The producer’s ceiling (§9): every live token of its root; cards stored from now on", "doc": "RFC §9" },
+          { "name": "name", "type": "string", "optional": true, "describe": "The name shown in Settings: 1–60 characters, trimmed (400 `invalid_name`). The root never changes" },
+          { "name": "sensitivity_floor", "type": "ref", "ref": "Sensitivity", "nullable": true, "optional": true, "describe": "The floor on its producer (every token of its root). The owner’s floor (RFC 0.9 §9): raises the effective sensitivity of every card it covers, already stored or not, never lowers a card’s own; null clears it", "doc": "RFC 0.9 §9" }
+        ]
+      },
+      {
+        "name": "PairingCode", "registry": "responses",
+        "fields": [
+          { "name": "id", "type": "string", "describe": "Names the code to cancel it; not the code" },
+          { "name": "created_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "expires_at", "type": "ref", "ref": "Timestamp" }
+        ]
+      },
+      {
+        "name": "PairingCodeList", "registry": "responses",
+        "fields": [{ "name": "codes", "type": "array", "of": { "type": "ref", "ref": "PairingCode" }, "describe": "Codes not yet used, cancelled or expired" }]
+      },
+      {
+        "name": "NewPairingCode", "registry": "responses", "extends": "PairingCode",
+        "fields": [
+          { "name": "code", "type": "string", "describe": "The code: ${PAIRING_CODE_SHAPE}, e.g. K7Q-4MX. In this answer only" },
+          { "name": "api", "type": "string", "describe": "Where the agent pairs: POST {api}/pair" },
+          { "name": "say", "type": "string", "describe": "The sentence to give the agent: \"Pair with <api>, code <code>.\"" }
+        ]
+      },
+      {
+        "name": "PairRequest", "registry": "requests",
+        "fields": [
+          { "name": "code", "type": "string", "describe": "The code the owner gave you: ${PAIRING_CODE_SHAPE}. Case does not matter" },
+          { "name": "root", "type": "string", "describe": "The root you choose (RFC §5): letters, digits and -; every card id you send starts with it", "doc": "RFC §5" },
+          { "name": "name", "type": "string", "optional": true, "describe": "What you are, for the owner’s record" }
+        ]
+      },
+      {
+        "name": "Paired", "registry": "responses",
+        "fields": [
+          { "name": "token", "type": "string", "describe": "Your producer token. Shown once: the head keeps only its hash" },
+          { "name": "api", "type": "string", "describe": "The base URL of the producer operations (§7.5)", "doc": "RFC §7.5" },
+          { "name": "owner", "type": "string", "describe": "The owner’s person id: every card’s to_person (§10)", "doc": "RFC §10" },
+          { "name": "root", "type": "string", "doc": "RFC §5" }
+        ]
+      },
+      {
+        "name": "Enrolment", "registry": "responses",
+        "fields": [
+          { "name": "url", "type": "string", "describe": "Opens the sign-in page ready to register a passkey on this head" },
+          { "name": "expires_at", "type": "ref", "ref": "Timestamp" }
+        ]
+      },
+      {
+        "name": "ConnectSnippets", "registry": "responses",
+        "fields": [
+          { "name": "api", "type": "string", "describe": "The base URL of the producer operations (§7.5 `api`)", "doc": "RFC §7.5" },
+          { "name": "owner", "type": "string" },
+          { "name": "token", "type": "string", "describe": "The placeholder in `config` and `curl`: replace it with a token just minted" },
+          { "name": "config", "type": "object", "describe": "`producerConfig` (@pbcp/client): the three values every producer needs", "fields": [{ "name": "PBCP_HEAD_URL", "type": "string" }, { "name": "PBCP_TO_PERSON", "type": "string" }, { "name": "PBCP_TOKEN", "type": "string" }] },
+          { "name": "curl", "type": "string", "describe": "`curlSnippet` (@pbcp/client): a curl that PUTs a card" },
+          { "name": "curl_root", "type": "string", "describe": "The root of the curl’s card: its token must be bound to it (§12)", "doc": "RFC §12" },
+          { "name": "connectors", "type": "array", "of": { "type": "object", "fields": [{ "name": "name", "type": "string" }, { "name": "url", "type": "string", "describe": "Its README’s Setup section in the protocol repository" }] } }
+        ]
+      },
+      { "name": "HeadDescription", "registry": "responses", "description": "RFC §7.5", "is": "HeadDescriptionCore", "doc": "RFC §7.5" },
+      {
+        "name": "StepUpOptions", "export": true, "doc": "RFC 0.9 §4.5 \"Identifying again\"; POST /api/auth/passkey/step-up/options (sign-in routes are not in the OpenAPI document)",
+        "fields": [
+          { "name": "state", "type": "string", "describe": "Signed challenge state: send it back with the assertion" },
+          { "name": "options", "type": "unknown", "describe": "WebAuthn PublicKeyCredentialRequestOptionsJSON, for navigator.credentials.get or ASAuthorization" }
+        ]
+      },
+      {
+        "name": "StepUpRequest", "export": true, "doc": "RFC 0.9 §4.5; POST /api/auth/passkey/step-up",
+        "fields": [
+          { "name": "state", "type": "string" },
+          { "name": "response", "type": "unknown", "describe": "WebAuthn AuthenticationResponseJSON" }
+        ]
+      },
+      {
+        "name": "StepUpResult", "export": true, "doc": "RFC 0.9 §4.1 `confirm`: the session is re-identified for `window_seconds`",
+        "fields": [
+          { "name": "reauthenticated_at", "type": "ref", "ref": "Timestamp" },
+          { "name": "window_seconds", "type": "integer", "positive": true, "describe": "REAUTH_WINDOW_SECONDS: decide a `confirm` card within it" }
+        ]
+      },
+      {
+        "name": "Floors", "layer": "store", "doc": "RFC 0.9 §9: the owner's floors as the device keeps them, to recompute `effective_sensitivity` with core's `effectiveSensitivity`",
+        "fields": [
+          { "name": "all", "type": "ref", "ref": "Sensitivity", "nullable": true },
+          { "name": "producers", "type": "record", "of": { "type": "ref", "ref": "Sensitivity" } },
+          { "name": "labels", "type": "record", "of": { "type": "ref", "ref": "Sensitivity" } }
+        ]
+      },
+      {
+        "name": "OutboxRow", "layer": "store", "doc": "docs/local-first.md \"The outbox\": a command not yet sent, as the store lays it over a card",
+        "fields": [
+          { "name": "seq", "type": "integer", "optional": true, "describe": "The row's key, given by the store (autoIncrement)" },
+          { "name": "client_id", "type": "string" },
+          { "name": "card_id", "type": "string" },
+          { "name": "action", "type": "ref", "ref": "OutboxAction" },
+          { "name": "body", "type": "record", "of": { "type": "unknown" }, "describe": "The command's body (Command in commands.generated.ts), as sent to the route" },
+          { "name": "seen_seq", "type": "integer", "describe": "The card's change_seq when the person acted on it", "doc": "RFC §4.2 `change_seq`" },
+          { "name": "at", "type": "string" },
+          { "name": "status", "type": "ref", "ref": "OutboxStatus", "describe": "`needs-person`: the head asked for a passkey step-up (403 reauthentication_required); it and every row behind it wait", "doc": "RFC 0.9 §4.1, §7.4" },
+          { "name": "tries", "type": "integer" },
+          { "name": "title", "type": "string", "describe": "The card as it was before (to put it back if the head refuses)" }
+        ]
+      },
+      {
+        "name": "Meta", "layer": "store", "doc": "docs/local-first.md \"The parts\": the meta rows, by key",
+        "fields": [
+          { "name": "cursor", "type": "integer", "describe": "The highest change_seq applied: the feed's `after`", "doc": "RFC §4.2 `change_seq`" },
+          { "name": "settings_seq", "type": "integer", "describe": "As in GET /api/me/seq: refetch the floors when it moves", "doc": "RFC 0.9 §9" },
+          { "name": "floors", "type": "ref", "ref": "Floors" },
+          { "name": "fold_policies", "type": "record", "of": { "type": "literal", "value": "count" }, "describe": "The labels the owner set to fold as a count", "doc": "RFC 0.9 §9" },
+          { "name": "retention", "type": "integer", "describe": "Days kept on the device (90 by default)" },
+          { "name": "archive", "type": "boolean", "describe": "The owner chose \"Download the archive\": nothing is evicted" },
+          { "name": "oldest_day", "type": "string", "describe": "The oldest day on the device, YYYY-MM-DD" },
+          { "name": "brief", "type": "object", "extends": "Brief", "describe": "The brief the head last composed", "fields": [{ "name": "fetched_at", "type": "string", "optional": true }] },
+          { "name": "orders", "type": "object", "extends": "OrderList", "describe": "The orders list as last fetched", "fields": [{ "name": "fetched_at", "type": "string" }] },
+          { "name": "synced_at", "type": "string", "describe": "When the device last heard from the head" },
+          { "name": "probe", "type": "boolean", "describe": "Written once to learn whether the store can be written at all" }
+        ]
+      },
+      {
+        "name": "Command", "layer": "store", "doc": "docs/local-first.md \"The outbox\": what an outbox row asks of the head, by action",
+        "union": [
+          { "fields": [{ "name": "action", "type": "literal", "value": "decide" }, { "name": "body", "type": "ref", "ref": "DecisionRequest" }], "route": "POST /api/me/cards/{id}/decision" },
+          { "fields": [{ "name": "action", "type": "literal", "value": "ack" }, { "name": "body", "type": "record", "of": { "type": "unknown" } }], "route": "POST /api/me/cards/{id}/ack" },
+          { "fields": [{ "name": "action", "type": "literal", "value": "snooze" }, { "name": "body", "type": "ref", "ref": "SnoozeRequest" }], "route": "POST /api/me/cards/{id}/snooze" },
+          { "fields": [{ "name": "action", "type": "literal", "value": "unsnooze" }, { "name": "body", "type": "record", "of": { "type": "unknown" } }], "route": "POST /api/me/cards/{id}/unsnooze" }
+        ]
+      },
+      {
+        "name": "Outcome", "layer": "store", "doc": "docs/local-first.md \"The outbox\": what became of a command",
+        "union": [
+          { "fields": [{ "name": "kind", "type": "literal", "value": "sent" }, { "name": "card", "type": "ref", "ref": "MeCard" }], "describe": "2xx: the head's card replaces the device's" },
+          { "fields": [{ "name": "kind", "type": "literal", "value": "conflict" }, { "name": "card", "type": "ref", "ref": "MeCard" }, { "name": "message", "type": "string", "optional": true }], "describe": "409: decided or replaced elsewhere; the head's state wins" },
+          { "fields": [{ "name": "kind", "type": "literal", "value": "needs-person" }], "describe": "403 reauthentication_required: the row waits for the passkey" },
+          { "fields": [{ "name": "kind", "type": "literal", "value": "refused" }, { "name": "status", "type": "integer" }, { "name": "message", "type": "string" }], "describe": "Any other 4xx: the row is dropped" },
+          { "fields": [{ "name": "kind", "type": "literal", "value": "waiting" }], "describe": "Not sent yet (offline, or behind a row that waits): the card stays settled on the device" }
+        ]
+      }
+    ],
+    "store": {
+      "version": 1,
+      "doc": "docs/local-first.md: one database per owner, `pbcp-<head>`",
+      "objectStores": [
+        { "const": "CARDS", "name": "cards", "keyPath": "id", "holds": "MeCard", "indexes": [{ "name": "day", "keyPath": "day" }, { "name": "change_seq", "keyPath": "change_seq" }] },
+        { "const": "META", "name": "meta", "keyPath": "key", "holds": "Meta" },
+        { "const": "OUTBOX", "name": "outbox", "keyPath": "seq", "autoIncrement": true, "holds": "OutboxRow" }
+      ]
+    }
+  }
+}

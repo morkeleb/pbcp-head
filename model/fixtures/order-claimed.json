@@ -1,0 +1,28 @@
+{
+  "entity": "MeCard",
+  "value": {
+    "protocol": "pbcp/1",
+    "kind": "order",
+    "producer": "head",
+    "body": "Update the docs for tasks.",
+    "emitted_at": "2026-11-12T07:00:00Z",
+    "state": "open",
+    "change_seq": 40,
+    "received_at": "2026-11-12T07:00:01Z",
+    "changed_at": "2026-11-12T07:00:01Z",
+    "delivery": "brief",
+    "rendered_html": "<p>Update the docs for tasks.</p>",
+    "lead": "Update the docs for tasks.",
+    "lead_source": "body",
+    "rendered_lead": "Update the docs for tasks.",
+    "day": "2026-11-12",
+    "effective_sensitivity": "normal",
+    "id": "head:order:01JCX8Z0000000000000000000",
+    "title": "Update the docs for tasks",
+    "to_producer": "coding-agent",
+    "exec_state": "claimed",
+    "claimed_by": "coding-agent",
+    "claim_expires_at": "2026-11-12T08:10:00Z",
+    "claim_seq": 2
+  }
+}
