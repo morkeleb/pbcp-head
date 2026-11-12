@@ -36,7 +36,7 @@ export async function requestInvite(db: Db, body: { email?: unknown }, userAgent
     .onConflictDoNothing(); // the unique index on lower(email)
 }
 
-/** A request's address in clear: opened from its content, or (rows before encryption) as stored. */
+/** A request's address in clear: opened from its content, or as stored when it was recorded before the deployment had a head (the backfill seals it). */
 function emailOf(r: typeof inviteRequests.$inferSelect, head: string | null, key: Buffer | null): string {
   const c = r.content as { email?: string } | null;
   if (!c?.email) return r.email;

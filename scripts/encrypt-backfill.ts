@@ -1,9 +1,9 @@
-// pnpm encrypt-backfill [--verify] — seals card content still in its plaintext form (docs/deploy.md "At rest").
+// pnpm encrypt-backfill [--verify] — seals what is still in clear (docs/deploy.md "At rest"). Since migration 0024
+// dropped the plaintext columns, that is only invite addresses recorded before the deployment had a head; the cards,
+// decision log and diagrams were sealed by deploy 1.
 //
-// Resumable and idempotent: rows already sealed are passed over, so a run that stops is run again. Exits at once when
-// nothing is left, so production builds run it right after `pnpm db:migrate` at no cost once it has done its work. It
-// drops nothing: the plaintext columns stay until the drop-columns migration, which waits for `--verify` to report zero.
-// `--verify` changes nothing and exits 1 while any row is still plaintext.
+// Idempotent, and exits at once when nothing is left, so production builds run it right after `pnpm db:migrate` at no
+// cost. `--verify` changes nothing and exits 1 while any row is outside its sealed form.
 import { parseArgs } from 'node:util';
 import { openDb } from '../db/client';
 import { backfill, remaining } from '../lib/at-rest';

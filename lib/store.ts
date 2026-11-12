@@ -9,7 +9,7 @@ import { cards, changeCounter } from '../db/schema';
 import { iso } from './clock';
 import { CryptoError } from './crypto';
 import { dataKey, keyring } from './keys';
-import { openCardRow, sealDoc, sealField } from './vault';
+import { openCardRow, sealDoc, sealField, type OpenCardRow, type OpenFields } from './vault';
 import { instant, localDate } from './time';
 import { effectiveTimezone } from './timezone';
 
@@ -52,14 +52,10 @@ export async function load(tx: Tx | Db, headId: string, id: string, opts: { forU
  * Rows of `cards` with their sealed content opened (lib/vault.ts), one unwrap per head. A row that does not authenticate
  * (tampered, or sealed under another key) is left out with a logged error: it fails closed, and the rest is served.
  */
-export async function openRows(tx: Tx | Db, rows: Row[]): Promise<Row[]> {
+export async function openRows(tx: Tx | Db, rows: Row[]): Promise<OpenCardRow[]> {
   const ring = keyring(tx);
-  const out: Row[] = [];
+  const out: OpenCardRow[] = [];
   for (const row of rows) {
-    if (!row.content) {
-      out.push(row);
-      continue;
-    }
     try {
       out.push(openCardRow(row, await ring(row.headId)));
     } catch (e) {
@@ -125,8 +121,7 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   // snooze) keeps the day it was given, so a decision made after the owner travelled does not move the card.
   const doc = producerPart(stored);
   const placed = await localDay(tx, headId, stored.at !== undefined ? instant(stored.at) : head.receivedAt);
-  // At rest (lib/vault.ts): the content sealed under the head's data key, the metadata in clear. Only the new form is
-  // written; a row's plaintext columns from before encryption are left for the drop-columns migration.
+  // At rest (lib/vault.ts): the content sealed under the head's data key, the metadata in clear.
   const key = (await dataKey(tx, headId, { create: true }))!;
   const sealed = sealDoc(key, headId, stored.id, doc);
   const content: Record<string, unknown> = {
@@ -138,8 +133,8 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
     ...(stored.edited_proposal !== undefined ? { edited: sealField(key, headId, stored.id, 'edited', stored.edited_proposal) } : {}),
   };
   const gone = [...(stored.comment === undefined ? ['comment'] : []), ...(stored.edited_proposal === undefined ? ['edited'] : [])];
-  // The same content as stored: compared by its keyed digest, or (a row from before encryption) as it was.
-  const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and (${cards.content}->>'mac' = ${sealed.mac} or (${cards.content} is null and ${cards.producerDoc} = ${JSON.stringify(doc)}::jsonb))`;
+  // The same content as stored: compared by its keyed digest.
+  const kept = sql`${cards.receivedAt} = ${head.receivedAt.toISOString()}::timestamptz and ${cards.content}->>'mac' = ${sealed.mac}`;
   const merged = sql`(coalesce(${cards.content}, '{}'::jsonb)${sql.raw(gone.map((k) => ` - '${k}'`).join(''))}) || ${JSON.stringify(content)}::jsonb`;
   const clearDecided = opts.decidedDoc !== undefined ? sealDoc(key, headId, stored.id, opts.decidedDoc).clear : undefined;
   const updated = await tx
@@ -195,9 +190,6 @@ function headColumns(c: Card) {
     acknowledgedAt: date(c.acknowledged_at),
     snoozedUntil: date(c.snoozed_until),
     decision: c.decision ?? null,
-    // Sealed in `content` (persist); never written in clear.
-    editedProposal: null,
-    comment: null,
     decidedAt: date(c.decided_at),
     delegatedTo: c.delegated_to ?? null,
     toProducer: c.to_producer ?? null,
@@ -209,7 +201,7 @@ function headColumns(c: Card) {
 }
 
 /** The protocol representation: producer fields as accepted, then the head-owned fields that are set. Unset fields are absent, never null. */
-export function toCard(row: Row): Card {
+export function toCard(row: Row & Partial<OpenFields>): Card {
   const out: Record<string, unknown> = {
     ...(row.producerDoc as ProducerCard),
     state: row.state,

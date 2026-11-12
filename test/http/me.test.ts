@@ -395,7 +395,7 @@ describe('POST /api/me/cards/{id}/snooze', () => {
 describe('GET /api/me/svg/{hash}', () => {
   it('serves a diagram with the size its viewBox gives, so a viewer can start from it', async () => {
     const hash = 'a'.repeat(64);
-    await testDb().insert(diagrams).values({ hash, type: 'gantt', svg: '<svg id="d" width="100%" viewBox="0 0 784 196" style="max-width: 784px;" xmlns="http://www.w3.org/2000/svg"><g/></svg>' }).onConflictDoNothing();
+    await testDb().insert(diagrams).values({ hash, type: 'gantt', content: { public: true, svg: '<svg id="d" width="100%" viewBox="0 0 784 196" style="max-width: 784px;" xmlns="http://www.w3.org/2000/svg"><g/></svg>' } }).onConflictDoNothing();
     const r = await fetch(`${headUrl()}/api/me/svg/${hash}`);
     const svg = await r.text();
     expect(svg).toMatch(/^<svg width="784" height="196" id="d" viewBox="0 0 784 196"/);
@@ -407,7 +407,7 @@ describe('GET /api/me/svg/{hash}?theme=dark', () => {
   const svg = (fill: string) => `<svg id="d" width="100%" viewBox="0 0 100 50" style="max-width: 100px;" xmlns="http://www.w3.org/2000/svg"><rect fill="${fill}"/></svg>`;
   it('serves the drawing for a dark page, or the light one on white (briefly cached) until it exists', async () => {
     const [both, light] = ['b'.repeat(64), 'c'.repeat(64)];
-    await testDb().insert(diagrams).values([{ hash: both, type: 'pie', svg: svg('black'), svgDark: svg('white') }, { hash: light, type: 'pie', svg: svg('black') }]);
+    await testDb().insert(diagrams).values([{ hash: both, type: 'pie', content: { public: true, svg: svg('black'), svgDark: svg('white') } }, { hash: light, type: 'pie', content: { public: true, svg: svg('black') } }]);
     const get = async (hash: string, q = '') => {
       const r = await fetch(`${headUrl()}/api/me/svg/${hash}${q}`);
       return { body: await r.text(), cache: r.headers.get('cache-control'), theme: r.headers.get('x-pbcp-theme') };

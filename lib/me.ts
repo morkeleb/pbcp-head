@@ -16,14 +16,14 @@ import { renderCard, renderSource, type RenderMeta } from './render';
 import type { Visual } from './render/markdown';
 import { openRows, replacedBy, toCard, type Successor } from './store';
 import { dataKey } from './keys';
-import { openLogRow } from './vault';
+import { openLogRow, type OpenCardRow } from './vault';
 import { effectiveTimezone } from './timezone';
 import { addDays, byTime, dayRange, isDate, localDate } from './time';
 import { byDue, isOverdue } from './brief/tasks';
 import { formatTime } from './push/daily';
 import { annotateParts, countLabels, effectiveOf, loadPolicy, type Sensitivity, type SensitivityPolicy } from './sensitivity';
 
-type Row = typeof cards.$inferSelect;
+type Row = OpenCardRow;
 
 export type MeCard = Card & {
   rendered_html: string;
@@ -543,7 +543,7 @@ export async function cardWithThread(db: Db, headId: string, id: string) {
   // The decision log for this card (§4.4, §11.3: every decision, and the card it was made on), oldest first, with the
   // device that recorded it by name.
   const log = await db
-    .select({ seq: decisionLog.seq, decision: decisionLog.decision, decidedAt: decisionLog.decidedAt, editedProposal: decisionLog.editedProposal, comment: decisionLog.comment, content: decisionLog.content, delegatedTo: decisionLog.delegatedTo, actor: decisionLog.actor, device: devices.name, platform: devices.platform })
+    .select({ seq: decisionLog.seq, decision: decisionLog.decision, decidedAt: decisionLog.decidedAt, content: decisionLog.content, delegatedTo: decisionLog.delegatedTo, actor: decisionLog.actor, device: devices.name, platform: devices.platform })
     .from(decisionLog)
     .leftJoin(devices, eq(devices.id, decisionLog.actor))
     .where(and(eq(decisionLog.headId, headId), eq(decisionLog.cardId, row.id)))

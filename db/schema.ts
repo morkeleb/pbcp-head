@@ -100,7 +100,9 @@ export const cards = pgTable(
     id: text('id').notNull(),
     producer: text('producer').notNull(), // denormalised from the id's root
     namespace: text('namespace').notNull(), // the id's second segment
-    producerDoc: jsonb('producer_doc').notNull(), // the ProducerCard exactly as accepted; equality is computed on this
+    // The clear part of the ProducerCard as accepted (lib/vault.ts CLEAR_FIELDS); the rest is sealed in `content`, and
+    // equality (§5) is computed on the whole document's keyed digest there.
+    producerDoc: jsonb('producer_doc').notNull(),
     urgency: text('urgency'), // the producer's urgency as sent (null when absent), denormalised from producer_doc
     delivery: text('delivery').notNull(), // §4.2, §9: urgency clamped to the producer's ceiling when the content was stored
     state: text('state').notNull(), // open | decided | superseded
@@ -114,18 +116,15 @@ export const cards = pgTable(
     acknowledgedAt: tstz('acknowledged_at'),
     snoozedUntil: tstz('snoozed_until'),
     decision: text('decision'),
-    editedProposal: text('edited_proposal'),
-    comment: text('comment'),
     decidedAt: tstz('decided_at'),
     delegatedTo: text('delegated_to'),
-    decidedDoc: jsonb('decided_doc'), // producer_doc frozen at decision time (§4.4: the head MUST retain that version)
-    // Rendered on receipt, server-side (§3.1). Not protocol fields: never synced, never bump change_seq.
-    renderedHtml: text('rendered_html'), // the body as safe HTML
-    renderedActions: jsonb('rendered_actions'), // { [action id]: html } for choice options with a markdown body (§4.4)
-    renderedMeta: jsonb('rendered_meta'), // { firstVisual, fences: [{ type, class }] }
-    renderedFrom: text('rendered_from'), // hash of what was rendered (pipeline version, body, option bodies); stale when it differs
-    // On a `head:daily` card: its paragraph in parts (lib/brief/paragraph.ts), so a view can filter the entries by label.
-    renderedParagraph: jsonb('rendered_paragraph'),
+    // The clear part of producer_doc frozen at decision time (§4.4: the head MUST retain that version); the rest is
+    // sealed in `content.decided`.
+    decidedDoc: jsonb('decided_doc'),
+    // Rendered on receipt, server-side (§3.1), and sealed in `content` (html, actions, meta; a `head:daily` card's
+    // paragraph in parts). Not protocol fields: never synced, never bump change_seq. This is what was rendered from
+    // (pipeline version, body, option bodies), in clear: stale when it differs.
+    renderedFrom: text('rendered_from'),
     // Orders extension (A.1). Head-owned fields of an order card; wildcard_eligible is the head-private
     // snapshot of executors eligible when a `*` order was minted, never returned to anyone.
     toProducer: text('to_producer'),
@@ -144,9 +143,8 @@ export const cards = pgTable(
     leaseRenewals: integer('lease_renewals').notNull().default(0),
     leaseLapsedAt: tstz('lease_lapsed_at'),
     // At rest (lib/vault.ts): the card's content, sealed under the head's data key, one JSON per row so there is one place
-    // to forget: { v, mac, doc, decided?, html?, actions?, meta?, paragraph?, comment?, edited? }. `producer_doc` then
-    // holds only the clear metadata (ids, kind, thread, times, …). Rows written before it keep their plaintext columns
-    // until the drop-columns migration; readers prefer `content`.
+    // to forget: { v, mac, doc, decided?, html?, actions?, meta?, paragraph?, comment?, edited? }. `producer_doc` holds
+    // only the clear metadata (ids, kind, thread, times, …). Every row has it (migration 0024 refuses to run otherwise).
     content: jsonb('content'),
   },
   (t) => [
@@ -203,8 +201,6 @@ export const decisionLog = pgTable(
     headId: text('head_id').notNull().references(() => heads.id),
     cardId: text('card_id').notNull(),
     decision: text('decision').notNull(),
-    editedProposal: text('edited_proposal'),
-    comment: text('comment'),
     delegatedTo: text('delegated_to'),
     decidedAt: tstz('decided_at').notNull(),
     decidedDoc: jsonb('decided_doc').notNull(),
@@ -279,14 +275,10 @@ export const devices = pgTable(
 export const diagrams = pgTable('diagrams', {
   hash: text('hash').primaryKey(),
   type: text('type').notNull(),
-  svg: text('svg'),
-  error: text('error'),
-  // The same fence drawn in mermaid's dark theme, for a dark page (null until drawn; a refusal is kept like `error`).
-  svgDark: text('svg_dark'),
-  errorDark: text('error_dark'),
   createdAt: tstz('created_at').notNull().defaultNow(),
-  // At rest (lib/vault.ts): { svg?, svgDark?, error?, errorDark? } sealed under the head's data key (the row's hash is then
-  // scoped to the head), or { public: true, … } in clear for the front door's demo, which is public by design.
+  // The drawing (lib/vault.ts): { svg?, svgDark?, error?, errorDark? } sealed under the head's data key (the row's hash
+  // is scoped to the head), or { public: true, … } in clear for the front door's demo, which is public by design. The
+  // dark drawing is the same fence in mermaid's dark theme, absent until drawn; a refusal is kept like `error`.
   content: jsonb('content'),
 });
 

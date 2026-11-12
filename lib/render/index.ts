@@ -73,15 +73,7 @@ export function cachedDiagrams(db: Db, headId: string | null = null) {
   return async (source: string): Promise<DiagramOutcome> => {
     const fenceHash = sha256(source);
     const hash = scopedHash(headId, fenceHash);
-    let hit = await readDiagram(db, headId, hash);
-    // A head's drawing from before the cache was per head: kept, sealed, rather than drawn again.
-    if (!hit && headId !== null) {
-      const old = await readDiagram(db, null, fenceHash);
-      if (old && (old.svg !== null || old.error !== null)) {
-        await writeDiagram(db, headId, hash, diagramType(source), old);
-        hit = old;
-      }
-    }
+    const hit = await readDiagram(db, headId, hash);
     if (hit) {
       // Drawn before dark drawings existed, or a dark drawing that failed for want of a browser: draw it now.
       if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(db, headId, hash, source, fenceHash);

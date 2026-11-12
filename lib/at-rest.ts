@@ -1,33 +1,19 @@
-// The operator's side of encryption at rest (docs/deploy.md "At rest"): the backfill that seals rows still in their
-// plaintext form, its --verify count, rewrapping every head's data key under a new master key, deleting a head by its
-// key first (crypto-shredding), and printing one card. Scripts in scripts/ are thin wrappers around these.
+// The operator's side of encryption at rest (docs/deploy.md "At rest"): the --verify count, the backfill's one remaining
+// job (invite addresses kept in clear before encryption, replaced by their digest), rewrapping every head's data key
+// under a new master key, deleting a head by its key first (crypto-shredding), and printing one card. Scripts in
+// scripts/ are thin wrappers around these. Sealing cards, the decision log and diagrams from their plaintext columns was
+// deploy 1's work; migration 0024 dropped those columns once every row was sealed.
 
-import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, notLike, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   cards, changeCounter, decisionLog, devices, diagrams, heads, identities, inviteRequests, labelCeilings, oauthCodes, pairingCodes,
   producerTokens, sensitivityFloors,
 } from '../db/schema';
-import { MasterKeyWrap, masterWrap, seal } from './crypto';
+import { digest, MasterKeyWrap, masterWrap, seal } from './crypto';
 import { defaultHead } from './heads';
 import { dataKey } from './keys';
 import { openRows, toCard } from './store';
-import { cardNeedsSealing, openCardRow, sealCardRow, sealDiagram, sealLog } from './vault';
-
-const BATCH = 200;
-
-/** Rows a query can tell are not yet sealed; `cardNeedsSealing` decides each one exactly. */
-const cardCandidates = sql`(${cards.content} is null or not (${cards.content} ? 'doc') or not (${cards.content} ? 'mac')
-  or (${cards.renderedHtml} is not null and not (${cards.content} ? 'html'))
-  or (${cards.renderedActions} is not null and not (${cards.content} ? 'actions'))
-  or (${cards.renderedMeta} is not null and not (${cards.content} ? 'meta'))
-  or (${cards.renderedParagraph} is not null and not (${cards.content} ? 'paragraph'))
-  or (${cards.comment} is not null and not (${cards.content} ? 'comment'))
-  or (${cards.editedProposal} is not null and not (${cards.content} ? 'edited'))
-  or (${cards.decidedDoc} is not null and not (${cards.content} ? 'decided')))`;
-
-/** Diagram rows drawn before the cache was per head: plaintext, not yet copied to the heads that use them. */
-const oldDiagram = sql`(${diagrams.content} is null and (${diagrams.svg} is not null or ${diagrams.error} is not null or ${diagrams.svgDark} is not null or ${diagrams.errorDark} is not null))`;
 
 export interface Remaining {
   cards: number;
@@ -36,89 +22,48 @@ export interface Remaining {
   invite_requests: number;
 }
 
-/** How many rows still hold content only in plaintext (`pnpm encrypt-backfill --verify`). Zero everywhere: the drop-columns migration may run. */
+/** An invite request whose address is in clear: not sealed, or sealed beside its address rather than its digest. */
+const plainInvite = or(isNull(inviteRequests.content), notLike(inviteRequests.email, 'd:%'));
+
+/**
+ * How many rows hold content outside its sealed form (`pnpm encrypt-backfill --verify`). Cards, decision-log rows and
+ * diagrams without content cannot occur after migration 0024 (it refuses to run while any could); they are counted so a
+ * row written around the head is still caught.
+ */
 export async function remaining(db: Db): Promise<Remaining> {
-  let cardCount = 0;
-  for (let after = ''; ; ) {
-    const rows = await db.select().from(cards).where(and(cardCandidates, gt(sql`${cards.headId} || '/' || ${cards.id}`, after))).orderBy(asc(sql`${cards.headId} || '/' || ${cards.id}`)).limit(BATCH);
-    cardCount += rows.filter(cardNeedsSealing).length;
-    if (rows.length < BATCH) break;
-    after = `${rows.at(-1)!.headId}/${rows.at(-1)!.id}`;
-  }
   const count = async (q: Promise<Array<{ n: number }>>) => (await q)[0]?.n ?? 0;
+  const n = sql<number>`count(*)::int`;
   return {
-    cards: cardCount,
-    decision_log: await count(db.select({ n: sql<number>`count(*)::int` }).from(decisionLog).where(isNull(decisionLog.content))),
-    diagrams: await count(db.select({ n: sql<number>`count(*)::int` }).from(diagrams).where(oldDiagram)),
-    invite_requests: await count(db.select({ n: sql<number>`count(*)::int` }).from(inviteRequests).where(isNull(inviteRequests.content))),
+    cards: await count(db.select({ n }).from(cards).where(sql`${cards.content} is null or not (${cards.content} ? 'doc') or not (${cards.content} ? 'mac')`)),
+    decision_log: await count(db.select({ n }).from(decisionLog).where(isNull(decisionLog.content))),
+    diagrams: await count(db.select({ n }).from(diagrams).where(isNull(diagrams.content))),
+    invite_requests: await count(db.select({ n }).from(inviteRequests).where(plainInvite)),
   };
 }
 
 const total = (r: Remaining) => r.cards + r.decision_log + r.diagrams + r.invite_requests;
 
 /**
- * Seals every row still in its plaintext form, in batches, resumable and idempotent: a row already sealed is passed over,
- * so a run that stops is run again. Plaintext columns are left as they are: nothing is dropped here (the drop-columns
- * migration, after --verify reports zero on production, is the point of no return). Exits at once when nothing is left.
+ * Seals what is still in clear, idempotently: invite requests recorded before the deployment had a head (or before
+ * encryption) get their address sealed under the deployment head's key and replaced by its keyed digest, as
+ * lib/invites.ts writes them. Exits at once when nothing is left.
  */
 export async function backfill(db: Db, progress: (line: string) => void = () => undefined): Promise<Remaining> {
   const before = await remaining(db);
   if (total(before) === 0) return before;
-  progress(`to seal: ${before.cards} cards, ${before.decision_log} decision-log rows, ${before.diagrams} diagrams, ${before.invite_requests} invite requests`);
-
-  // Cards, a batch at a time, each row in its own small update; diagrams the head's cards draw are noted on the way.
-  const used = new Map<string, Set<string>>(); // head → old diagram hashes its cards show
-  let sealed = 0;
-  for (let after = ''; ; ) {
-    const rows = await db.select().from(cards).where(gt(sql`${cards.headId} || '/' || ${cards.id}`, after)).orderBy(asc(sql`${cards.headId} || '/' || ${cards.id}`)).limit(BATCH);
-    for (const row of rows) {
-      const key = (await dataKey(db, row.headId, { create: true }))!;
-      if (cardNeedsSealing(row)) {
-        await db.update(cards).set({ content: sealCardRow(row, key) }).where(and(eq(cards.headId, row.headId), eq(cards.id, row.id)));
-        sealed++;
-      }
-      const html = openCardRow({ ...row, content: row.content }, key).renderedHtml ?? row.renderedHtml ?? '';
-      for (const m of html.matchAll(/\/api\/me\/svg\/([0-9a-f]{64})(?!\?h=)/g)) used.set(row.headId, (used.get(row.headId) ?? new Set()).add(m[1]!));
-    }
-    if (rows.length > 0) progress(`cards: ${sealed} sealed of ${before.cards}`);
-    if (rows.length < BATCH) break;
-    after = `${rows.at(-1)!.headId}/${rows.at(-1)!.id}`;
-  }
-
-  // The decision log.
-  for (;;) {
-    const rows = await db.select().from(decisionLog).where(isNull(decisionLog.content)).orderBy(asc(decisionLog.seq)).limit(BATCH);
-    for (const r of rows) {
-      const key = (await dataKey(db, r.headId, { create: true }))!;
-      const s = sealLog(key, r.headId, r.seq, { decidedDoc: r.decidedDoc as Record<string, unknown>, comment: r.comment, editedProposal: r.editedProposal });
-      await db.update(decisionLog).set({ content: s.content }).where(eq(decisionLog.seq, r.seq));
-    }
-    if (rows.length > 0) progress(`decision log: ${rows.length} sealed`);
-    if (rows.length < BATCH) break;
-  }
-
-  // Diagrams from before the cache was per head: copied, sealed, to each head whose cards show them; then marked done.
-  const { scopedHash } = await import('./render');
-  for (const [headId, hashes] of used) {
-    const key = (await dataKey(db, headId, { create: true }))!;
-    const olds = await db.select().from(diagrams).where(and(inArray(diagrams.hash, [...hashes]), oldDiagram));
-    for (const d of olds) {
-      await db
-        .insert(diagrams)
-        .values({ hash: scopedHash(headId, d.hash), type: d.type, content: sealDiagram(key, headId, scopedHash(headId, d.hash), d) })
-        .onConflictDoNothing();
-    }
-  }
-  const marked = await db.update(diagrams).set({ content: { migrated: true } }).where(oldDiagram).returning({ hash: diagrams.hash });
-  if (marked.length) progress(`diagrams: ${marked.length} copied to their heads, sealed`);
-
-  // Invite requests: under the deployment head's key.
   const head = await defaultHead(db);
-  if (head) {
+  if (head && before.invite_requests > 0) {
     const key = (await dataKey(db, head, { create: true }))!;
-    const rows = await db.select().from(inviteRequests).where(isNull(inviteRequests.content));
-    for (const r of rows) await db.update(inviteRequests).set({ content: { email: seal(key, head, 'invite_requests.email', String(r.id), r.email) } }).where(eq(inviteRequests.id, r.id));
-    if (rows.length) progress(`invite requests: ${rows.length} sealed`);
+    const rows = await db.select().from(inviteRequests).where(plainInvite);
+    for (const r of rows) {
+      // Until it is replaced, the email column holds the address in clear; a row sealed by deploy 1 keeps its sealed copy.
+      const sealed = (r.content as { email?: string } | null)?.email ?? seal(key, head, 'invite_requests.email', String(r.id), r.email);
+      await db
+        .update(inviteRequests)
+        .set({ email: `d:${digest(key, 'invite.email', r.email.toLowerCase())}`, content: { email: sealed } })
+        .where(eq(inviteRequests.id, r.id));
+    }
+    progress(`invite requests: ${rows.length} sealed`);
   }
   return remaining(db);
 }
