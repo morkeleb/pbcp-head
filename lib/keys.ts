@@ -29,18 +29,6 @@ export async function dataKey(db: Db | Tx, headId: string, { create = false }: {
   return dataKey(db, headId);
 }
 
-/** A per-call cache: one unwrap per head for the duration of one operation (a request), then dropped with it. */
-export function keyring(db: Db | Tx) {
-  const keys = new Map<string, Promise<Buffer | null>>();
-  return (headId: string, opts: { create?: boolean } = {}) => {
-    const hit = keys.get(headId);
-    if (hit && !opts.create) return hit;
-    const k = dataKey(db, headId, opts);
-    keys.set(headId, k);
-    return k;
-  };
-}
-
 /**
  * Refuses to start when any head has a data key and HEAD_MASTER_KEY is missing or malformed: a head that cannot read its
  * content fails the deploy loudly rather than serving errors (instrumentation.ts, and the backfill before the build).

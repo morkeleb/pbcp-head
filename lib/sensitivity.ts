@@ -14,6 +14,7 @@ import { cards, heads, sensitivityFloors } from '../db/schema';
 import type { ParagraphParts } from './brief/paragraph';
 import { HttpError } from './http';
 import { openRows, type Tx } from './store';
+import { asKeyring, type Keyring } from './keyring';
 
 export { SENSITIVITIES, type Sensitivity };
 
@@ -121,12 +122,14 @@ const PART_LISTS = ['decisions', 'tasks', 'decided', 'orders', 'mattered', 'yest
  * client can count private entries without their content (RFC 0.9 §4.1; docs/briefing-machine.md "Sensitivity"). An entry
  * whose card the head no longer holds is `normal`.
  */
-export async function annotateParts(db: Db, headId: string, parts: ParagraphParts, policy?: SensitivityPolicy): Promise<ParagraphParts> {
+export async function annotateParts(src: Db | Keyring<Db>, headId: string, parts: ParagraphParts, policy?: SensitivityPolicy): Promise<ParagraphParts> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const ids = [...new Set(PART_LISTS.flatMap((k) => (parts[k] ?? []).map((e) => e.id)))];
   if (ids.length === 0) return parts;
   const p = policy ?? (await loadPolicy(db, headId));
   // At rest: labels and titles are sealed; the rows are opened for this call (lib/store.ts openRows).
-  const rows = (await openRows(db, await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids))))).map((r) => ({ id: r.id, producer: r.producer, doc: r.producerDoc }));
+  const rows = (await openRows(ring, await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, ids))))).map((r) => ({ id: r.id, producer: r.producer, doc: r.producerDoc }));
   const of = new Map(
     rows.map((r) => {
       const doc = r.doc as { labels?: string[]; sensitivity?: Sensitivity; title?: string; kind?: string };

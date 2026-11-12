@@ -15,6 +15,7 @@ import { now } from './clock';
 import { decodeId } from './http';
 import type { Outcome } from './protocol';
 import { load, openRows, persist, toCard, writeTx, type Tx } from './store';
+import { keyring } from './keyring';
 
 /** A head-chosen upper bound on a lease (OPEN, Orders 10: "the upper bound is the head's"). One day. */
 export const MAX_LEASE_SECONDS = 24 * 60 * 60;
@@ -31,9 +32,10 @@ async function executors(tx: Tx, headId: string): Promise<string[]> {
 /** A.1: the owner gives an order; the head mints `head:order:<ulid>`, snapshotting wildcard eligibility. */
 export async function giveOrder(db: Db, headId: string, input: OrderInput): Promise<Card> {
   return writeTx(db, headId, async (tx) => {
+    const ring = keyring(tx);
     const at = now();
     const { order, eligible } = mintOrder(input, { ulid: ulid(Date.parse(at), randomBytes(10)), now: at, executors: await executors(tx, headId) });
-    return persist(tx, headId, order, { eligible });
+    return persist(ring, headId, order, { eligible });
   });
 }
 
@@ -62,11 +64,12 @@ export async function expireDueOrders(db: Db, headId: string): Promise<void> {
     .where(and(eq(cards.headId, headId), eq(cards.execState, 'claimed'), lte(cards.claimExpiresAt, new Date(at))));
   if (due.length === 0) return;
   await writeTx(db, headId, async (tx) => {
+    const ring = keyring(tx);
     for (const { id } of due) {
-      const o = await load(tx, headId, id, { forUpdate: true });
+      const o = await load(ring, headId, id, { forUpdate: true });
       if (!o || !isOrder(o.card)) continue;
       const r = expireIfDue(o.card as unknown as OrderCard, at);
-      for (const c of r.changed) await persist(tx, headId, c);
+      for (const c of r.changed) await persist(ring, headId, c);
       await recordLease(tx, headId, o.card as unknown as OrderCard, r.card, at);
     }
   });
@@ -82,7 +85,8 @@ export async function expireDueOrders(db: Db, headId: string): Promise<void> {
 export async function claimOrder(db: Db, producer: { headId: string; root: string }, rawId: string, body: unknown): Promise<Outcome> {
   const id = decodeId(rawId);
   const r = await writeTx(db, producer.headId, async (tx) => {
-    const stored = await load(tx, producer.headId, id, { forUpdate: true });
+    const ring = keyring(tx);
+    const stored = await load(ring, producer.headId, id, { forUpdate: true });
     if (!stored || !isOrder(stored.card) || !visibleTo(stored.card as unknown as OrderCard, producer.root, stored.eligible)) {
       throw new PbcpError('not_found', `no order ${id} for ${producer.root}`);
     }
@@ -91,7 +95,7 @@ export async function claimOrder(db: Db, producer: { headId: string; root: strin
     const at = now();
     const r = claim(stored.card as unknown as OrderCard, producer.root, lease, at);
     let card: Card = stored.card;
-    for (const c of r.changed) card = await persist(tx, producer.headId, c);
+    for (const c of r.changed) card = await persist(ring, producer.headId, c);
     // A claim on a lapsed lease expires it and claims afresh in one step; a refusal changes nothing to record.
     if (r.status === 200) await recordLease(tx, producer.headId, stored.card as unknown as OrderCard, r.card, at);
     return { status: r.status, card, refused: r.status === 200 ? undefined : r.code };
@@ -107,14 +111,15 @@ export async function claimOrder(db: Db, producer: { headId: string; root: strin
  * and the brief surfaces stale ones as late or duplicate results.
  */
 export async function applyOutcomeInTx(tx: Tx, headId: string, incoming: ProducerCard, target: string): Promise<void> {
-  const o = await load(tx, headId, target, { forUpdate: true });
+  const ring = keyring(tx);
+  const o = await load(ring, headId, target, { forUpdate: true });
   if (!o || !isOrder(o.card)) return;
   const at = now();
   const expiry = expireIfDue(o.card as unknown as OrderCard, at);
-  for (const c of expiry.changed) await persist(tx, headId, c);
+  for (const c of expiry.changed) await persist(ring, headId, c);
   await recordLease(tx, headId, o.card as unknown as OrderCard, expiry.card, at);
   const r = applyOutcome(expiry.card, incoming, at);
-  for (const c of r.changed) await persist(tx, headId, c);
+  for (const c of r.changed) await persist(ring, headId, c);
   await tx.update(cards).set({ outcome: r.stale ? 'stale' : 'applied' }).where(and(eq(cards.headId, headId), eq(cards.id, incoming.id)));
 }
 

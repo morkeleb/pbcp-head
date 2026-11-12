@@ -5,8 +5,8 @@
 
 import { actionId, type Card } from '@pbcp/core';
 import { and, eq, sql } from 'drizzle-orm';
-import { dataKey } from '../keys';
 import { openDiagram, sealDiagram, sealField } from '../vault';
+import { asKeyring, type Keyring } from '../keyring';
 import { createHash } from 'node:crypto';
 import type { Db } from '../../db/client';
 import { cards, diagrams } from '../../db/schema';
@@ -45,38 +45,44 @@ export const svgSrc = (headId: string | null) => (hash: string) => (headId === n
 
 type Drawn = { svg: string | null; svgDark: string | null; error: string | null; errorDark: string | null };
 
-async function readDiagram(db: Db, headId: string | null, hash: string): Promise<Drawn | null> {
+async function readDiagram(src: Db | Keyring<Db>, headId: string | null, hash: string): Promise<Drawn | null> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const [row] = await db.select().from(diagrams).where(eq(diagrams.hash, hash));
   if (!row) return null;
-  return openDiagram(row, headId === null ? null : await dataKey(db, headId), headId);
+  return openDiagram(row, headId === null ? null : await ring(headId), headId);
 }
 
-async function writeDiagram(db: Db, headId: string | null, hash: string, type: string, d: Partial<Drawn>, update = false): Promise<void> {
-  const key = headId === null ? null : await dataKey(db, headId, { create: true });
+async function writeDiagram(src: Db | Keyring<Db>, headId: string | null, hash: string, type: string, d: Partial<Drawn>, update = false): Promise<void> {
+  const ring = asKeyring(src);
+  const db = ring.db;
+  const key = headId === null ? null : await ring(headId, { create: true });
   const content = sealDiagram(key, headId, hash, d);
   if (update) await db.update(diagrams).set({ content: sql`coalesce(${diagrams.content}, '{}'::jsonb) || ${JSON.stringify(content)}::jsonb` }).where(eq(diagrams.hash, hash));
   else await db.insert(diagrams).values({ hash, type, content }).onConflictDoNothing();
 }
 
-async function drawDark(db: Db, headId: string | null, hash: string, source: string, fenceHash: string): Promise<void> {
+async function drawDark(src: Db | Keyring<Db>, headId: string | null, hash: string, source: string, fenceHash: string): Promise<void> {
+  const ring = asKeyring(src);
   try {
     const svgDark = sanitiseSvg(await drawSvg(source, `d${fenceHash.slice(0, 12)}`, 'dark'), { allowStyle: true });
-    await writeDiagram(db, headId, hash, '', { svgDark }, true);
+    await writeDiagram(ring, headId, hash, '', { svgDark }, true);
   } catch (e) {
-    if (e instanceof DiagramError) await writeDiagram(db, headId, hash, '', { errorDark: e.message }, true);
+    if (e instanceof DiagramError) await writeDiagram(ring, headId, hash, '', { errorDark: e.message }, true);
     else console.error(`drawing ${hash} for a dark page failed; it is retried on the next render`, e);
   }
 }
 
 /** The diagram dependency of the markdown renderer: cached per head, drawn on a miss, in both page themes. */
-export function cachedDiagrams(db: Db, headId: string | null = null) {
+export function cachedDiagrams(src: Db | Keyring<Db>, headId: string | null = null) {
+  const ring = asKeyring(src);
   return async (source: string): Promise<DiagramOutcome> => {
     const fenceHash = sha256(source);
     const hash = scopedHash(headId, fenceHash);
-    const hit = await readDiagram(db, headId, hash);
+    const hit = await readDiagram(ring, headId, hash);
     if (hit) {
       // Drawn before dark drawings existed, or a dark drawing that failed for want of a browser: draw it now.
-      if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(db, headId, hash, source, fenceHash);
+      if (hit.svg !== null && hit.svgDark === null && hit.errorDark === null) await drawDark(ring, headId, hash, source, fenceHash);
       return hit.svg !== null ? { status: 'render', hash } : { status: 'fallback', message: hit.error ?? 'diagram could not be drawn' };
     }
     g.__pbcpDraws = drawCount() + 1;
@@ -88,19 +94,21 @@ export function cachedDiagrams(db: Db, headId: string | null = null) {
       if (!(e instanceof DiagramError)) throw e; // infrastructure: do not cache, let the next read retry
       drawn = { error: e.message };
     }
-    await writeDiagram(db, headId, hash, diagramType(source), drawn);
-    if (drawn.svg) await drawDark(db, headId, hash, source, fenceHash);
+    await writeDiagram(ring, headId, hash, diagramType(source), drawn);
+    if (drawn.svg) await drawDark(ring, headId, hash, source, fenceHash);
     return drawn.svg ? { status: 'render', hash } : { status: 'fallback', message: drawn.error! };
   };
 }
 
 /** A diagram's drawings for the route, opened with the head's key (or the public ones). */
-export async function servedDiagram(db: Db, headId: string | null, hash: string): Promise<Drawn | null> {
-  return readDiagram(db, headId, hash);
+export async function servedDiagram(src: Db | Keyring<Db>, headId: string | null, hash: string): Promise<Drawn | null> {
+  const ring = asKeyring(src);
+  return readDiagram(ring, headId, hash);
 }
 
-export function renderBody(db: Db, body: string, headId: string | null = null): Promise<Rendered> {
-  return renderMarkdown(body, { diagram: cachedDiagrams(db, headId), imageSrc: proxiedImageSrc, svgSrc: svgSrc(headId) });
+export function renderBody(src: Db | Keyring<Db>, body: string, headId: string | null = null): Promise<Rendered> {
+  const ring = asKeyring(src);
+  return renderMarkdown(body, { diagram: cachedDiagrams(ring, headId), imageSrc: proxiedImageSrc, svgSrc: svgSrc(headId) });
 }
 
 export interface RenderMeta {
@@ -123,10 +131,12 @@ const optionBodies = (card: Card): Array<[string, string]> =>
 export const renderSource = (card: Card): string => sha256(JSON.stringify([RENDER_VERSION, card.body, optionBodies(card), card.summary ?? null]));
 
 /** Renders a card's body and option bodies and stores them beside it. */
-export async function renderCard(db: Db, headId: string, card: Card): Promise<CardRender> {
-  const { html, actions, meta } = await renderCardContent(db, card, headId);
+export async function renderCard(src: Db | Keyring<Db>, headId: string, card: Card): Promise<CardRender> {
+  const ring = asKeyring(src);
+  const db = ring.db;
+  const { html, actions, meta } = await renderCardContent(ring, card, headId);
   // At rest: the rendered output sealed into the card's content (lib/vault.ts); what it was rendered from stays clear.
-  const key = await dataKey(db, headId, { create: true });
+  const key = await ring(headId, { create: true });
   if (!key) return { html, actions, meta }; // the head is gone (deleted while this rendered): nothing to store
   const sealed = { html: sealField(key, headId, card.id, 'html', html), actions: sealField(key, headId, card.id, 'actions', actions), meta: sealField(key, headId, card.id, 'meta', meta) };
   await db
@@ -140,21 +150,24 @@ export async function renderCard(db: Db, headId: string, card: Card): Promise<Ca
  * A card's body, option bodies and lead through the pipeline, stored nowhere (the diagram cache aside): renderCard
  * keeps the result on the card's row; the front door's demo brief (lib/demo) shows it and keeps nothing.
  */
-export async function renderCardContent(db: Db, card: Card, headId: string | null = null): Promise<CardRender> {
-  const body = await renderBody(db, card.body, headId);
+export async function renderCardContent(src: Db | Keyring<Db>, card: Card, headId: string | null = null): Promise<CardRender> {
+  const ring = asKeyring(src);
+  const body = await renderBody(ring, card.body, headId);
   const actions: Record<string, string> = {};
-  for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(db, md, headId)).html;
-  const lead = await presentLead(card, async (md) => (await renderBody(db, md, headId)).html);
+  for (const [id, md] of optionBodies(card)) actions[id] = (await renderBody(ring, md, headId)).html;
+  const lead = await presentLead(card, async (md) => (await renderBody(ring, md, headId)).html);
   const meta: RenderMeta = { firstVisual: body.firstVisual, lead, fences: body.result.fences.map((f) => ({ type: f.type, class: f.class })) };
   return { html: body.html, actions, meta };
 }
 
 /** After a PUT commits: render unless this content is already rendered, and never let a failure reach the producer. */
-export async function renderAfterCommit(db: Db, headId: string, card: Card): Promise<void> {
+export async function renderAfterCommit(src: Db | Keyring<Db>, headId: string, card: Card): Promise<void> {
+  const ring = asKeyring(src);
+  const db = ring.db;
   try {
     const [row] = await db.select({ from: cards.renderedFrom }).from(cards).where(and(eq(cards.headId, headId), eq(cards.id, card.id)));
     if (row?.from === renderSource(card)) return;
-    await renderCard(db, headId, card);
+    await renderCard(ring, headId, card);
   } catch (e) {
     console.error(`rendering ${card.id} failed; it is retried on the next read`, e);
   }

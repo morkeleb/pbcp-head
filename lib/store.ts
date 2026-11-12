@@ -8,7 +8,7 @@ import type { Db } from '../db/client';
 import { cards, changeCounter } from '../db/schema';
 import { iso } from './clock';
 import { CryptoError } from './crypto';
-import { dataKey, keyring } from './keys';
+import { asKeyring, type Keyring } from './keyring';
 import { openCardRow, sealDoc, sealField, type OpenCardRow, type OpenFields } from './vault';
 import { instant, localDate } from './time';
 import { effectiveTimezone } from './timezone';
@@ -41,19 +41,23 @@ export async function nextSeq(tx: Tx, headId: string): Promise<number> {
   return row!.seq;
 }
 
-export async function load(tx: Tx | Db, headId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<Stored | null> {
+export async function load<D extends Tx | Db>(src: D | Keyring<D>, headId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<Stored | null> {
+  const ring = asKeyring(src);
+  const tx = ring.db;
   const q = tx.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, id)));
   const [row] = opts.forUpdate ? await q.for('update') : await q;
   // At rest: opened with the head's data key for this operation only (a tampered row fails the operation, closed).
-  return row ? { card: toCard(openCardRow(row, await dataKey(tx, headId))), eligible: row.wildcardEligible } : null;
+  return row ? { card: toCard(openCardRow(row, await ring(headId))), eligible: row.wildcardEligible } : null;
 }
 
 /**
- * Rows of `cards` with their sealed content opened (lib/vault.ts), one unwrap per head. A row that does not authenticate
- * (tampered, or sealed under another key) is left out with a logged error: it fails closed, and the rest is served.
+ * Rows of `cards` with their sealed content opened (lib/vault.ts), with the request's keyring (lib/keyring.ts): one
+ * unwrap per head per request. Given a database instead, a keyring is made for this call. A row that does not
+ * authenticate (tampered, or sealed under another key) is left out with a logged error: it fails closed, and the rest
+ * is served.
  */
-export async function openRows(tx: Tx | Db, rows: Row[]): Promise<OpenCardRow[]> {
-  const ring = keyring(tx);
+export async function openRows(src: Tx | Db | Keyring, rows: Row[]): Promise<OpenCardRow[]> {
+  const ring = asKeyring(src);
   const out: OpenCardRow[] = [];
   for (const row of rows) {
     try {
@@ -71,7 +75,9 @@ export async function openRows(tx: Tx | Db, rows: Row[]): Promise<OpenCardRow[]>
  * (supersession never crosses it), so the newest card the chain reached, whatever its state. Null when nothing names
  * this card in `supersedes`. A chain is linear (§8: only the current card can be superseded); a cycle stops it.
  */
-export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Card | null> {
+export async function newestSuccessor(src: Tx | Db | Keyring, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Card | null> {
+  const ring = asKeyring(src);
+  const tx = ring.db;
   let newest: Card | null = null;
   const seen = new Set([card.id]);
   for (let cur = card.id; ; ) {
@@ -82,7 +88,7 @@ export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Ca
       .limit(1);
     if (!next || seen.has(next.id)) return newest;
     seen.add(next.id);
-    const [opened] = await openRows(tx, [next]);
+    const [opened] = await openRows(ring, [next]);
     if (!opened) return newest;
     newest = toCard(opened);
     cur = next.id;
@@ -93,8 +99,9 @@ export async function newestSuccessor(tx: Tx | Db, headId: string, card: Pick<Ca
 export type Successor = { id: string; title: string; kind: Card['kind']; state: Card['state']; decision?: string };
 
 /** §8: a superseded card's newest successor, shaped as `replaced_by`; null when none is found. */
-export async function replacedBy(tx: Tx | Db, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Successor | null> {
-  const s = await newestSuccessor(tx, headId, card);
+export async function replacedBy(src: Tx | Db | Keyring, headId: string, card: Pick<Card, 'id' | 'producer'>): Promise<Successor | null> {
+  const ring = asKeyring(src);
+  const s = await newestSuccessor(ring, headId, card);
   return s ? { id: s.id, title: s.title, kind: s.kind, state: s.state, ...(s.decision ? { decision: s.decision } : {}) } : null;
 }
 
@@ -112,7 +119,9 @@ export interface PersistOptions {
  * returns it as stored. Callers pass `changed[]` in order, so a supersession gives the predecessor the
  * lower value and the successor the higher (§7.2).
  */
-export async function persist(tx: Tx, headId: string, card: Card | OrderCard, opts: PersistOptions = {}): Promise<Card> {
+export async function persist(src: Tx | Keyring<Tx>, headId: string, card: Card | OrderCard, opts: PersistOptions = {}): Promise<Card> {
+  const ring = asKeyring(src);
+  const tx = ring.db;
   const seq = await nextSeq(tx, headId);
   const stored = { ...card, change_seq: seq } as Card;
   const head = headColumns(stored);
@@ -122,7 +131,7 @@ export async function persist(tx: Tx, headId: string, card: Card | OrderCard, op
   const doc = producerPart(stored);
   const placed = await localDay(tx, headId, stored.at !== undefined ? instant(stored.at) : head.receivedAt);
   // At rest (lib/vault.ts): the content sealed under the head's data key, the metadata in clear.
-  const key = (await dataKey(tx, headId, { create: true }))!;
+  const key = (await ring(headId, { create: true }))!;
   const sealed = sealDoc(key, headId, stored.id, doc);
   const content: Record<string, unknown> = {
     v: 1,

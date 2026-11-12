@@ -15,6 +15,7 @@ import { effectiveTimezone } from '../timezone';
 import { composeParagraphs, type ParagraphParts } from '../brief/paragraph';
 import { annotateParts } from '../sensitivity';
 import { openRows } from '../store';
+import { keyring } from '../keyring';
 import { sendPush, type PushPayload, type SendResult } from './send';
 
 const RUN = 'daily-notification';
@@ -64,10 +65,11 @@ export function firstSentence(text: string): string {
  * the notification counts the decisions instead.
  */
 export async function dailyPayload(db: Db, headId: string, date: string): Promise<PushPayload> {
-  // At rest: the parts are sealed; the row is opened for this notification only.
-  const [daily] = await openRows(db, await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, `head:daily:${date}`))));
+  // At rest: the parts are sealed; the row is opened for this notification only, with one unwrap for the whole payload.
+  const ring = keyring(db);
+  const [daily] = await openRows(ring, await db.select().from(cards).where(and(eq(cards.headId, headId), eq(cards.id, `head:daily:${date}`))));
   const parts = daily?.renderedParagraph as ParagraphParts | null | undefined;
-  const sentence = parts ? firstSentence(composeParagraphs(await annotateParts(db, headId, parts), [], { spoken: true })[0] ?? '') : '';
+  const sentence = parts ? firstSentence(composeParagraphs(await annotateParts(ring, headId, parts), [], { spoken: true })[0] ?? '') : '';
   let body = sentence;
   if (!body) {
     const at = new Date(now());

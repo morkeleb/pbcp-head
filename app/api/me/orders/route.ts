@@ -7,6 +7,7 @@ import { db } from '../../../../db/client';
 import { OrderRequest, parseRequest } from '../../../../lib/api/schemas';
 import { json, readObject } from '../../../../lib/http';
 import { headSettings, orderProgress, presentCards, rowsFor } from '../../../../lib/me';
+import { keyring } from '../../../../lib/keyring';
 import { giveOrder, ordersFor } from '../../../../lib/orders';
 import { meHandler } from '../../../../lib/owner';
 import { renderAfterCommit } from '../../../../lib/render';
@@ -24,6 +25,7 @@ export const POST = meHandler({ assistant: true }, async (s, req) => {
   const b = parseRequest(OrderRequest, await readObject(req));
   const order = await giveOrder(db(), s.headId, { to_producer: b.to_producer, title: b.title.trim(), body: b.body ?? '', ...(b.urgency ? { urgency: b.urgency } : {}) });
   after(() => renderAfterCommit(db(), s.headId, order));
-  const [shown] = await presentCards(db(), await rowsFor(db(), s.headId, [order.id]));
+  const ring = keyring(db());
+  const [shown] = await presentCards(ring, await rowsFor(ring, s.headId, [order.id]));
   return json(shown, 201);
 });

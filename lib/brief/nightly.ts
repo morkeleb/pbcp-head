@@ -13,7 +13,7 @@ import { submitCard } from '../protocol';
 import { renderAfterCommit, renderBody } from '../render';
 import { ownOrigin } from '../render/markdown';
 import { load, openRows, toCard } from '../store';
-import { dataKey } from '../keys';
+import { asKeyring, type Keyring } from '../keyring';
 import { sealField } from '../vault';
 import { countLabels } from '../sensitivity';
 import { addDays, dayRange, localDate, localMinutes } from '../time';
@@ -30,31 +30,33 @@ const cardUrl = (id: string) => `${ownOrigin()}/card/${encodeURIComponent(id)}`;
  * What the brief for `date` folds (§8): every open decision, the cards whose day (§8) is the day before, and the
  * decisions the owner made on the day before (by `decided_at` in `timezone`), wherever their cards sit.
  */
-export async function gatherDaily(db: Db, headId: string, timezone: string, date: string) {
+export async function gatherDaily(src: Db | Keyring<Db>, headId: string, timezone: string, date: string) {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const open = await db
     .select()
     .from(cards)
     // Received by now: a head's clock can be set back (tests), and a brief never mentions a card from after it.
     .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), ne(cards.producer, 'head'), sql`${cards.producerDoc}->>'kind' = 'decision'`, lte(cards.receivedAt, new Date(now()))))
-    .orderBy(desc(cards.receivedAt)).then((rows) => openRows(db, rows));
+    .orderBy(desc(cards.receivedAt)).then((rows) => openRows(ring, rows));
   const yesterday = await db
     .select()
     .from(cards)
     // Received by now, as above: a card about yesterday that arrives after the brief is in no brief of it.
-    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), eq(cards.day, addDays(date, -1)), lte(cards.receivedAt, new Date(now())))).then((rows) => openRows(db, rows));
+    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), eq(cards.day, addDays(date, -1)), lte(cards.receivedAt, new Date(now())))).then((rows) => openRows(ring, rows));
   // RFC 0.9 §8: every open task whose day is the brief's or earlier; the fold leaves the snoozed ones out.
   const tasks = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'task'`, lte(cards.day, date), lte(cards.receivedAt, new Date(now())))).then((rows) => openRows(db, rows));
+    .where(and(eq(cards.headId, headId), eq(cards.state, 'open'), sql`${cards.producerDoc}->>'kind' = 'task'`, lte(cards.day, date), lte(cards.receivedAt, new Date(now())))).then((rows) => openRows(ring, rows));
   const [from, to] = dayRange(addDays(date, -1), timezone);
   const decided = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), isNotNull(cards.decision), gte(cards.decidedAt, from), lt(cards.decidedAt, to), lte(cards.decidedAt, new Date(now())))).then((rows) => openRows(db, rows));
+    .where(and(eq(cards.headId, headId), ne(cards.producer, 'head'), isNotNull(cards.decision), gte(cards.decidedAt, from), lt(cards.decidedAt, to), lte(cards.decidedAt, new Date(now())))).then((rows) => openRows(ring, rows));
   // A.3: the orders whose threads moved that day, so their cards are told as the order's.
   const orderIds = [...new Set(yesterday.map((r) => (r.producerDoc as { thread?: string }).thread).filter((t): t is string => !!t && t.startsWith('head:order:')))];
-  const orders = orderIds.length ? await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, orderIds), isNotNull(cards.toProducer))).then((rows) => openRows(db, rows)) : [];
+  const orders = orderIds.length ? await db.select().from(cards).where(and(eq(cards.headId, headId), inArray(cards.id, orderIds), isNotNull(cards.toProducer))).then((rows) => openRows(ring, rows)) : [];
   return { openDecisions: open.map(toCard), yesterday: yesterday.map(toCard), decidedYesterday: decided.map(toCard), orders: orders.map(toCard), tasks: tasks.map(toCard), timezone, names: await producerNames(db, headId), countLabels: await countLabels(db, headId) };
 }
 
@@ -68,29 +70,33 @@ export async function producerNames(db: Db, headId: string): Promise<Record<stri
  * The daily paragraph for `date` as it stands now, before the nightly card exists ("so far today"): the same fold, in
  * parts, each entry rendered to safe inline HTML (lib/brief/paragraph.ts composes them).
  */
-export async function dailyParagraphNow(db: Db, headId: string, timezone: string, date: string): Promise<ParagraphParts> {
-  return renderParts(db, paragraphParts(dailyLines({ ...(await gatherDaily(db, headId, timezone, date)), at: now(), date }), cardUrl), headId);
+export async function dailyParagraphNow(src: Db | Keyring<Db>, headId: string, timezone: string, date: string): Promise<ParagraphParts> {
+  const ring = asKeyring(src);
+  return renderParts(ring, paragraphParts(dailyLines({ ...(await gatherDaily(ring, headId, timezone, date)), at: now(), date }), cardUrl), headId);
 }
 
 /** Each entry's markdown rendered inline by the same pipeline and sanitiser as bodies. */
-export async function renderParts(db: Db, parts: ParagraphParts, headId: string | null = null): Promise<ParagraphParts> {
-  const inline = async (md: string) => (await renderBody(db, md, headId)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
+export async function renderParts(src: Db | Keyring<Db>, parts: ParagraphParts, headId: string | null = null): Promise<ParagraphParts> {
+  const ring = asKeyring(src);
+  const inline = async (md: string) => (await renderBody(ring, md, headId)).html.trim().replace(/^<p>([\s\S]*)<\/p>$/, '$1');
   const each = <E extends { text: string }>(es: E[] | undefined) => Promise.all((es ?? []).map(async (e) => ({ ...e, text: await inline(e.text) })));
   return { decisions: await each(parts.decisions), ...(parts.folds ? { folds: parts.folds } : {}), snoozed: parts.snoozed, tasks: await each(parts.tasks), decided: await each(parts.decided), orders: await each(parts.orders), mattered: await each(parts.mattered), rest: parts.rest ?? [] };
 }
 
 /** Mints `head:daily:<date>`; a quiet day's says "Nothing waiting for you." */
-export async function mintDailyCard(db: Db, headId: string, timezone: string, date: string) {
+export async function mintDailyCard(src: Db | Keyring<Db>, headId: string, timezone: string, date: string) {
+  const ring = asKeyring(src);
+  const db = ring.db;
   const emittedAt = now();
-  const gathered = await gatherDaily(db, headId, timezone, date);
+  const gathered = await gatherDaily(ring, headId, timezone, date);
   const card = foldDaily({ owner: headId, date, emittedAt, ...gathered, cardUrl });
   const r = await submitCard(db, { headId, root: 'head', ceiling: 'brief' }, JSON.stringify(card), encodeURIComponent(card.id));
-  await renderAfterCommit(db, headId, r.card);
+  await renderAfterCommit(ring, headId, r.card);
   // The paragraph in parts, beside the card's own rendering: head-owned display state, never synced, so a view can
   // show only the entries of the labels the owner filters by.
-  const parts = await renderParts(db, paragraphParts(dailyLines({ ...gathered, at: emittedAt, date }), cardUrl), headId);
+  const parts = await renderParts(ring, paragraphParts(dailyLines({ ...gathered, at: emittedAt, date }), cardUrl), headId);
   // At rest: the paragraph's parts sealed into the card's content (lib/vault.ts).
-  const key = (await dataKey(db, headId, { create: true }))!;
+  const key = (await ring(headId, { create: true }))!;
   await db
     .update(cards)
     .set({ content: sql`coalesce(${cards.content}, '{"v":1}'::jsonb) || ${JSON.stringify({ paragraph: sealField(key, headId, card.id, 'paragraph', parts) })}::jsonb` })
